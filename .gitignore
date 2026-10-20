@@ -9,4 +9,5 @@
 .cxx
 .tmp-aar
 app/libs/*
+app/build
 !app/libs/.gitkeep
