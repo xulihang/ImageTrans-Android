@@ -13,8 +13,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-import ai.onnxruntime.OnnxTensor;
-import ai.onnxruntime.OrtSession;
 
 /**
  * YOLO text-line detection (the extension's paddleocr/model.onnx, used by
@@ -35,17 +33,27 @@ final class PaddleTextLineDetector extends NativeInference {
     private static final float NMS_THRESHOLD = 0.45f;
     private static final int MANGA_CLASS = 5;
 
-    private OrtSession session;
+    private io.github.hzkitty.utils.OrtInferSession session;
 
-    PaddleTextLineDetector(Context context) {
+    /** {@code modelPath} comes from NativeInference.ensureModelFile. */
+    PaddleTextLineDetector(Context context, String modelPath) {
         super(context);
+        this.modelPath = modelPath;
     }
+
+    private String modelPath;
 
     synchronized void initialize() throws Exception {
         if (session != null) return;
         long start = System.currentTimeMillis();
         try {
-            session = createSession(MODEL);
+            // rapidocr4j's OrtInferSession only opens absolute file paths.
+            io.github.hzkitty.entity.OrtInferConfig config = new io.github.hzkitty.entity.OrtInferConfig();
+            config.setModelPath(modelPath);
+            // OrtInferSession keeps its session private and exposes only
+            // run(float[][][][]), which already takes the [1][3][640][640]
+            // input this detector builds.
+            session = new io.github.hzkitty.utils.OrtInferSession(appContext, config);
         } catch (Throwable throwable) {
             Log.e(TAG, "YOLO init failed", throwable);
             throw new Exception("文本行检测模型初始化失败: " + ImageUtils.humanError(throwable), throwable);
@@ -84,22 +92,11 @@ final class PaddleTextLineDetector extends NativeInference {
             data[2 * area + i] = (pixel & 0xFF) / 255f;
         }
 
-        final OnnxTensor tensor = OnnxTensor.createTensor(ENVIRONMENT,
-                java.nio.FloatBuffer.wrap(data), new long[]{1, 3, INPUT_SIZE, INPUT_SIZE});
-        final OrtSession.Result result;
-        try {
-            result = session.run(Collections.singletonMap(
-                    session.getInputNames().iterator().next(), tensor),
-                    Collections.singleton(session.getOutputNames().iterator().next()));
-        } finally {
-            tensor.close();
+        float[][][][] input = new float[1][3][INPUT_SIZE][INPUT_SIZE];
+        for (int c = 0; c < 3; c++) {
+            System.arraycopy(data, c * INPUT_SIZE * INPUT_SIZE, input[0][c], 0, INPUT_SIZE * INPUT_SIZE);
         }
-        float[][][][] raw;
-        try {
-            raw = (float[][][][]) result.get(0).getValue();
-        } finally {
-            result.close();
-        }
+        float[][][][] raw = (float[][][][]) session.run(input);
         List<float[]> boxes = postprocess(raw[0][0], ratio, dw, dh, srcWidth, srcHeight);
         Log.w(TAG, String.format("YOLO detections: %d, first bbox=%s", boxes.size(),
                 boxes.isEmpty() ? "-" : java.util.Arrays.toString(boxes.get(0))));

@@ -11,11 +11,8 @@ import org.opencv.core.Size;
 import org.opencv.imgproc.Imgproc;
 
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 
-import ai.onnxruntime.OnnxTensor;
-import ai.onnxruntime.OrtSession;
 
 /**
  * PP-OCRv6 text recognition (the extension's paddleocr/rec.onnx +
@@ -36,19 +33,30 @@ final class PaddleRecognizer extends NativeInference {
     private static final int MIN_ASPECT_TEXT = 320;
     private static final int SPECIAL_TOKENS = 5;
 
-    private OrtSession session;
+    private io.github.hzkitty.utils.OrtInferSession session;
     private String[] characters;
 
-    PaddleRecognizer(Context context) {
+    /** Model and dictionary paths come from NativeInference.ensureModelFile. */
+    PaddleRecognizer(Context context, String modelPath, String dictPath) {
         super(context);
+        this.modelPath = modelPath;
+        this.dictPath = dictPath;
     }
+
+    private String modelPath;
+    private String dictPath;
 
     synchronized void initialize() throws Exception {
         if (session != null) return;
         try {
-            Log.i(TAG, "loading " + MODEL + " from assets");
-            session = createSession(MODEL);
-            characters = parseDictionary(readAssetText(appContext, DICT));
+            // rapidocr4j's OrtInferSession only opens absolute file paths.
+            io.github.hzkitty.entity.OrtInferConfig config = new io.github.hzkitty.entity.OrtInferConfig();
+            config.setModelPath(modelPath);
+            session = new io.github.hzkitty.utils.OrtInferSession(appContext, config);
+            // One character per line, CRLF line endings in the file.
+            characters = parseDictionary(new String(
+                    java.nio.file.Files.readAllBytes(java.nio.file.Paths.get(dictPath)),
+                    java.nio.charset.StandardCharsets.UTF_8));
         } catch (Throwable throwable) {
             Log.e(TAG, "recognizer init failed", throwable);
             throw new Exception("识别模型初始化失败: " + ImageUtils.humanError(throwable), throwable);
@@ -145,15 +153,12 @@ final class PaddleRecognizer extends NativeInference {
         }
         resized.release();
 
-        try (OnnxTensor tensor = OnnxTensor.createTensor(ENVIRONMENT,
-                java.nio.FloatBuffer.wrap(data), new long[]{1, 3, height, width})) {
-            try (OrtSession.Result result = session.run(Collections.singletonMap(
-                    session.getInputNames().iterator().next(), tensor),
-                    Collections.singleton(session.getOutputNames().iterator().next()))) {
-                float[][][] output = (float[][][]) result.get(0).getValue();
-                return decode(output[0]);
-            }
+        float[][][][] input = new float[1][3][height][width];
+        for (int c = 0; c < 3; c++) {
+            System.arraycopy(data, c * area, input[0][c], 0, area);
         }
+        float[][][][] output = (float[][][][]) session.run(input);
+        return decode(output[0][0]);
     }
 
     private Recognized decode(float[][] probabilities) {
