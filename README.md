@@ -91,9 +91,10 @@ https://192.168.1.10:51043
 - 本地 OCR 模式：模型在 `app/src/main/assets/ocr/`，与浏览器扩展的 `paddleocr/` 一致。这些模型不提交到仓库，需要从扩展目录复制：
   - `PP-OCRv6_det_small.onnx`：DB 文本检测（默认语言）。
   - `rec.onnx` + `ppocrv6_dict.txt`：PP-OCRv6 识别，中、英、日效果最好。
+  - `ch_ppocr_mobile_v2.0_cls_infer.onnx`：rapidocr4j 初始化时会加载的方向分类模型（扩展的 `paddleocr/` 里没有，任取一份 PP-OCR 的 cls 模型即可，如 `ImageTrans/Objects/rapidocr/`）。
   - `model.onnx`：YOLO 文本行检测。源语言设为日语时与扩展一致，先用它检测文字行，再逐行用 `rec.onnx` 识别（竖排行会旋转 90° 后再识别）。
-  - rapidocr4j-android AAR 里的 PP-OCRv4 模型已不再使用，`app/libs/` 里的 AAR 可以是删掉模型（甚至只保留 `classes.jar`）的版本。
-- 本地模式的“仅识别”不翻译，只把识别出的文字按原位置绘回图片。
+  - 模型首次使用时解压到应用私有目录 `files/models/`，因为 rapidocr4j 只接受文件路径。
+- 本地模式的“仅识别”不翻译，通过 WebView 渲染器把原文按原位置绘回图片（与扩展一致，会按“原文背景处理”盖住原文）。
 
 ### 排版
 
