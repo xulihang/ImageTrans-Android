@@ -8,5 +8,5 @@
 .externalNativeBuild
 .cxx
 .tmp-aar
-app/build
-app/libs
+app/libs/*
+!app/libs/.gitkeep
