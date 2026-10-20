@@ -11,3 +11,5 @@
 app/libs/*
 app/build
 !app/libs/.gitkeep
+app/src/main/assets/ocr/
+!app/src/main/assets/ocr/.gitkeep

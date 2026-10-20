@@ -88,7 +88,11 @@ https://192.168.1.10:51043
 ### 语言
 
 - ImageTrans 服务器模式：语言对也可以由服务器上的项目配置决定；App 里设置非 `auto` 时会一并发送 `sourceLang` / `targetLang`。
-- 本地 OCR 模式：rapidocr4j 自带的是 **PP-OCRv4 中英模型**，中文、英文效果最好；日语、韩语等建议使用 ImageTrans 服务器模式。
+- 本地 OCR 模式：模型在 `app/src/main/assets/ocr/`，与浏览器扩展的 `paddleocr/` 一致。这些模型不提交到仓库，需要从扩展目录复制：
+  - `PP-OCRv6_det_small.onnx`：DB 文本检测（默认语言）。
+  - `rec.onnx` + `ppocrv6_dict.txt`：PP-OCRv6 识别，中、英、日效果最好。
+  - `model.onnx`：YOLO 文本行检测。源语言设为日语时与扩展一致，先用它检测文字行，再逐行用 `rec.onnx` 识别（竖排行会旋转 90° 后再识别）。
+  - rapidocr4j-android AAR 里的 PP-OCRv4 模型已不再使用，`app/libs/` 里的 AAR 可以是删掉模型（甚至只保留 `classes.jar`）的版本。
 - 本地模式的“仅识别”不翻译，只把识别出的文字按原位置绘回图片。
 
 ### 排版
@@ -105,7 +109,7 @@ border-radius: 10%;
 ## 已知限制 / 后续
 
 - 拍照翻译、截屏翻译未实现。
-- 本地 OCR 模型只有中英；后续可以通过 `OcrConfig.Rec.modelPath` / `recKeysPath` 接入 PP-OCRv6 或日语模型。
+- 本地 OCR 的语种范围受 PP-OCRv6 识别模型限制（中/英/日为主）；其他语言可通过 `OcrConfig.Rec.modelPath` / `recKeysPath` 接入对应语言的识别模型。
 - 超大长图在 WebView / Canvas 上有尺寸和内存限制，目前按最长边 3500px、总像素 1200 万做缩放。
 - 自签名证书目前依赖系统信任链；后续可以加“首次连接确认 + 证书指纹固定”的 TOFU 流程。
 - iOS 版本尚未开始；原生 OCR 侧可以复用相应的 ONNX Runtime + 前后处理方案。
