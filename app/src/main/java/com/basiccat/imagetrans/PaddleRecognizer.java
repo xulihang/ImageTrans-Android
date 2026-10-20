@@ -49,9 +49,8 @@ final class PaddleRecognizer extends NativeInference {
         try {
             OcrConfig config = new OcrConfig();
             config.Global.useDet = false;
-            // The classifier's 180-degree decision was less reliable than
-            // recognizing both vertical orientations and keeping the more
-            // confident reading (recognizeBest below).
+            // Same as the extension's recognize(): one orientation per line, no
+            // classifier.
             config.Global.useCls = false;
             config.Rec.modelPath = ensureModelFile(appContext, REC_MODEL);
             config.Rec.recKeysPath = ensureDictFile(appContext, REC_DICT);
@@ -64,38 +63,21 @@ final class PaddleRecognizer extends NativeInference {
     }
 
     /**
-     * Recognizes one line with rapidocr4j's recognizer and keeps the most
-     * confident orientation: rotated 90 degrees clockwise (vertical reading,
-     * top to bottom) and the same rotation flipped. Vertical strokes and thick
-     * manga lettering are read differently on each side, so trying both avoids
-     * keeping a garbled reading.
+     * Recognizes one line: a vertical line is rotated counter-clockwise and
+     * recognized once, as the extension's recognize() does with Et(img, -90).
      */
-    private RecResult recognizeBest(Bitmap crop, boolean vertical) throws Exception {
+    private RecResult recognizeLine(Bitmap crop, boolean vertical) throws Exception {
         if (!vertical) {
             return first(runRecognizer(crop));
         }
-        android.graphics.Matrix clockwiseMatrix = new android.graphics.Matrix();
-        clockwiseMatrix.postRotate(90);
-        Bitmap clockwise = Bitmap.createBitmap(crop, 0, 0, crop.getWidth(), crop.getHeight(),
-                clockwiseMatrix, true);
-        android.graphics.Matrix flippedMatrix = new android.graphics.Matrix();
-        flippedMatrix.postRotate(270);
-        Bitmap flipped = Bitmap.createBitmap(crop, 0, 0, crop.getWidth(), crop.getHeight(),
-                flippedMatrix, true);
-        RecResult best = null;
+        android.graphics.Matrix matrix = new android.graphics.Matrix();
+        matrix.postRotate(-90);
+        Bitmap upright = Bitmap.createBitmap(crop, 0, 0, crop.getWidth(), crop.getHeight(), matrix, true);
         try {
-            for (RecResult candidate : new RecResult[]{first(runRecognizer(clockwise)),
-                    first(runRecognizer(flipped))}) {
-                if (candidate != null && (best == null
-                        || candidate.getConfidence() > best.getConfidence())) {
-                    best = candidate;
-                }
-            }
+            return first(runRecognizer(upright));
         } finally {
-            clockwise.recycle();
-            flipped.recycle();
+            upright.recycle();
         }
-        return best;
     }
 
     /** The first recognition result, i.e. what doOCRYolo() reads. */
@@ -135,7 +117,7 @@ final class PaddleRecognizer extends NativeInference {
             String text;
             float score;
             try {
-                RecResult result = recognizeBest(crop, vertical);
+                RecResult result = recognizeLine(crop, vertical);
                 text = result == null ? "" : result.getText();
                 score = result == null ? 0f : result.getConfidence();
             } finally {
