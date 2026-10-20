@@ -1,0 +1,277 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:fillViewport="true">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="20dp">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/title_settings"
+            android:textColor="@color/text_primary"
+            android:textSize="26sp"
+            android:textStyle="bold" />
+
+        <TextView
+            style="@style/SectionTitle"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="翻译方式" />
+
+        <RadioGroup
+            android:id="@+id/modeGroup"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical">
+
+            <RadioButton
+                android:id="@+id/modeImagetrans"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="ImageTrans 服务器（推荐）"
+                android:textSize="15sp" />
+
+            <RadioButton
+                android:id="@+id/modeOpenai"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="本地 OCR + OpenAI 兼容 API"
+                android:textSize="15sp" />
+
+            <RadioButton
+                android:id="@+id/modeOriginal"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="仅识别，不翻译（调试）"
+                android:textSize="15sp" />
+        </RadioGroup>
+
+        <LinearLayout
+            android:id="@+id/serverSection"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical">
+
+            <TextView
+                style="@style/SectionTitle"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="ImageTrans 服务器" />
+
+            <TextView
+                style="@style/FieldLabel"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="服务器地址" />
+
+            <EditText
+                android:id="@+id/editServerUrl"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:hint="https://192.168.1.10:51043"
+                android:inputType="textUri"
+                android:singleLine="true" />
+
+            <TextView
+                style="@style/FieldLabel"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="项目名称（displayName，可留空）" />
+
+            <EditText
+                android:id="@+id/editDisplayName"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:hint="default"
+                android:inputType="text"
+                android:singleLine="true" />
+
+            <TextView
+                style="@style/FieldLabel"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="服务器密码（可留空）" />
+
+            <EditText
+                android:id="@+id/editPassword"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:hint="password"
+                android:inputType="textPassword"
+                android:singleLine="true" />
+
+            <TextView
+                style="@style/Note"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="手机访问电脑上的服务器时，请填写电脑的局域网地址，而不是 local.basiccat.org。若服务器使用自签名 HTTPS 证书，请先在系统设置中把证书安装为受信任证书；也可以使用 HTTP 地址。" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/openaiSection"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical">
+
+            <TextView
+                style="@style/SectionTitle"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="OpenAI 兼容 API" />
+
+            <TextView
+                style="@style/FieldLabel"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="API 地址" />
+
+            <EditText
+                android:id="@+id/editOpenAiUrl"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:hint="https://api.deepseek.com/v1"
+                android:inputType="textUri"
+                android:singleLine="true" />
+
+            <TextView
+                style="@style/FieldLabel"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="API Key" />
+
+            <EditText
+                android:id="@+id/editOpenAiKey"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:hint="sk-..."
+                android:inputType="textPassword"
+                android:singleLine="true" />
+
+            <TextView
+                style="@style/FieldLabel"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="模型名称" />
+
+            <EditText
+                android:id="@+id/editOpenAiModel"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:hint="deepseek-v4-flash"
+                android:inputType="text"
+                android:singleLine="true" />
+
+            <TextView
+                style="@style/Note"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="本地 OCR 使用 rapidocr4j 自带的中英模型，日语、韩语等语言建议使用 ImageTrans 服务器模式。" />
+        </LinearLayout>
+
+        <TextView
+            style="@style/SectionTitle"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="语言" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <Spinner
+                android:id="@+id/spinnerSource"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:paddingStart="8dp"
+                android:paddingEnd="8dp"
+                android:text="→"
+                android:textColor="@color/text_secondary"
+                android:textSize="18sp" />
+
+            <Spinner
+                android:id="@+id/spinnerTarget"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1" />
+        </LinearLayout>
+
+        <TextView
+            style="@style/SectionTitle"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="排版渲染" />
+
+        <TextView
+            style="@style/FieldLabel"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="文本框 CSS" />
+
+        <EditText
+            android:id="@+id/editRenderCss"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="top|start"
+            android:hint="text-align: center; border-radius: 10%;"
+            android:inputType="textMultiLine"
+            android:minLines="3"
+            android:padding="8dp" />
+
+        <TextView
+            style="@style/FieldLabel"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="最小字号（px）" />
+
+        <EditText
+            android:id="@+id/editMinFontSize"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="14"
+            android:inputType="number"
+            android:singleLine="true" />
+
+        <TextView
+            style="@style/FieldLabel"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="原文背景处理" />
+
+        <Spinner
+            android:id="@+id/spinnerRepairMode"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content" />
+
+        <TextView
+            style="@style/Note"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="CSS 支持 text-align、font-family、font-weight、color、background-color、border-radius、writing-mode: vertical-rl、direction: rtl、text-shadow 等，与浏览器扩展的设置一致。" />
+
+        <Button
+            android:id="@+id/btnSave"
+            style="@style/PrimaryButton"
+            android:layout_width="match_parent"
+            android:layout_height="56dp"
+            android:layout_marginTop="28dp"
+            android:text="保存设置" />
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="24dp" />
+
+    </LinearLayout>
+</ScrollView>

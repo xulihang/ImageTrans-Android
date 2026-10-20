@@ -1,0 +1,22 @@
+pluginManagement {
+    repositories {
+        google()
+        mavenCentral()
+        gradlePluginPortal()
+    }
+}
+
+dependencyResolutionManagement {
+    repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+    repositories {
+        // Local AARs: rapidocr4j-android, OpenCV and ONNX Runtime.
+        flatDir {
+            dirs = [new File(rootDir, 'app/libs')]
+        }
+        google()
+        mavenCentral()
+    }
+}
+
+rootProject.name = "ImageTrans"
+include ':app'

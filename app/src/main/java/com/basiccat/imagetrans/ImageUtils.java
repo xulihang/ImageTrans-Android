@@ -1,0 +1,209 @@
+package com.basiccat.imagetrans;
+
+import android.content.ContentResolver;
+import android.content.ContentValues;
+import android.content.Context;
+import android.content.Intent;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
+import android.graphics.Matrix;
+import android.media.ExifInterface;
+import android.net.Uri;
+import android.os.Build;
+import android.provider.MediaStore;
+import android.util.Base64;
+import android.widget.Toast;
+
+import java.io.ByteArrayOutputStream;
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.text.SimpleDateFormat;
+import java.util.Date;
+import java.util.Locale;
+
+public final class ImageUtils {
+    private static final int MAX_DIMENSION = 3500;
+    private static final long MAX_PIXELS = 12_000_000L;
+    private static final int MAX_SAMPLE = 8;
+
+    private ImageUtils() {
+    }
+
+    public static Bitmap decodeBitmap(Context context, Uri uri, int maxDimension) throws Exception {
+        ContentResolver resolver = context.getContentResolver();
+
+        BitmapFactory.Options bounds = new BitmapFactory.Options();
+        bounds.inJustDecodeBounds = true;
+        try (InputStream in = resolver.openInputStream(uri)) {
+            BitmapFactory.decodeStream(in, null, bounds);
+        }
+        if (bounds.outWidth <= 0 || bounds.outHeight <= 0) {
+            throw new Exception("无法读取图片尺寸");
+        }
+
+        int sample = 1;
+        int longSide = Math.max(bounds.outWidth, bounds.outHeight);
+        while (longSide / (sample * 2) >= maxDimension && sample < MAX_SAMPLE) {
+            sample *= 2;
+        }
+
+        BitmapFactory.Options options = new BitmapFactory.Options();
+        options.inSampleSize = sample;
+        options.inPreferredConfig = Bitmap.Config.ARGB_8888;
+        Bitmap bitmap;
+        try (InputStream in = resolver.openInputStream(uri)) {
+            bitmap = BitmapFactory.decodeStream(in, null, options);
+        }
+        if (bitmap == null) {
+            throw new Exception("无法解码图片");
+        }
+
+        int orientation = readOrientation(context, uri);
+        if (orientation != ExifInterface.ORIENTATION_NORMAL) {
+            bitmap = applyOrientation(bitmap, orientation);
+        }
+
+        int width = bitmap.getWidth();
+        int height = bitmap.getHeight();
+        int longest = Math.max(width, height);
+        float scale = 1f;
+        if (longest > maxDimension) {
+            scale = (float) maxDimension / (float) longest;
+        }
+        long pixels = (long) width * (long) height;
+        if (pixels > MAX_PIXELS) {
+            float pixelScale = (float) Math.sqrt((double) MAX_PIXELS / (double) pixels);
+            scale = Math.min(scale, pixelScale);
+        }
+        if (scale < 1f) {
+            int newWidth = Math.max(1, Math.round(width * scale));
+            int newHeight = Math.max(1, Math.round(height * scale));
+            Bitmap scaled = Bitmap.createScaledBitmap(bitmap, newWidth, newHeight, true);
+            if (scaled != bitmap) {
+                bitmap.recycle();
+            }
+            bitmap = scaled;
+        }
+        return bitmap;
+    }
+
+    public static Bitmap decodeBitmap(Context context, Uri uri) throws Exception {
+        return decodeBitmap(context, uri, MAX_DIMENSION);
+    }
+
+    private static int readOrientation(Context context, Uri uri) {
+        try (InputStream in = context.getContentResolver().openInputStream(uri)) {
+            if (in == null) return ExifInterface.ORIENTATION_NORMAL;
+            ExifInterface exif = new ExifInterface(in);
+            return exif.getAttributeInt(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL);
+        } catch (Exception e) {
+            return ExifInterface.ORIENTATION_NORMAL;
+        }
+    }
+
+    private static Bitmap applyOrientation(Bitmap bitmap, int orientation) {
+        Matrix matrix = new Matrix();
+        switch (orientation) {
+            case ExifInterface.ORIENTATION_ROTATE_90:
+                matrix.postRotate(90);
+                break;
+            case ExifInterface.ORIENTATION_ROTATE_180:
+                matrix.postRotate(180);
+                break;
+            case ExifInterface.ORIENTATION_ROTATE_270:
+                matrix.postRotate(270);
+                break;
+            case ExifInterface.ORIENTATION_FLIP_HORIZONTAL:
+                matrix.postScale(-1, 1);
+                break;
+            case ExifInterface.ORIENTATION_FLIP_VERTICAL:
+                matrix.postScale(1, -1);
+                break;
+            case ExifInterface.ORIENTATION_TRANSPOSE:
+                matrix.postRotate(90);
+                matrix.postScale(-1, 1);
+                break;
+            case ExifInterface.ORIENTATION_TRANSVERSE:
+                matrix.postRotate(270);
+                matrix.postScale(-1, 1);
+                break;
+            default:
+                return bitmap;
+        }
+        Bitmap rotated = Bitmap.createBitmap(bitmap, 0, 0, bitmap.getWidth(), bitmap.getHeight(), matrix, true);
+        if (rotated != bitmap) {
+            bitmap.recycle();
+        }
+        return rotated;
+    }
+
+    public static String bitmapToDataUrl(Bitmap bitmap) {
+        // Always send JPEG to the OCR/translation backend. It keeps the base64
+        // payload small enough for the WebView bridge and for the server form.
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        bitmap.compress(Bitmap.CompressFormat.JPEG, 90, out);
+        return "data:image/jpeg;base64," + Base64.encodeToString(out.toByteArray(), Base64.NO_WRAP);
+    }
+
+    public static Bitmap dataUrlToBitmap(String dataUrl) {
+        if (dataUrl == null) return null;
+        int comma = dataUrl.indexOf(',');
+        String base64 = comma >= 0 ? dataUrl.substring(comma + 1) : dataUrl;
+        try {
+            byte[] bytes = Base64.decode(base64, Base64.DEFAULT);
+            return BitmapFactory.decodeByteArray(bytes, 0, bytes.length);
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    public static Uri saveToGallery(Context context, Bitmap bitmap) {
+        String name = "imagetrans_" + new SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(new Date()) + ".png";
+        ContentValues values = new ContentValues();
+        values.put(MediaStore.Images.Media.DISPLAY_NAME, name);
+        values.put(MediaStore.Images.Media.MIME_TYPE, "image/png");
+        values.put(MediaStore.Images.Media.RELATIVE_PATH, "Pictures/ImageTrans");
+        values.put(MediaStore.Images.Media.IS_PENDING, 1);
+
+        Uri collection = MediaStore.Images.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY);
+        Uri uri = context.getContentResolver().insert(collection, values);
+        if (uri == null) {
+            return null;
+        }
+        try (OutputStream out = context.getContentResolver().openOutputStream(uri)) {
+            if (out == null) return null;
+            bitmap.compress(Bitmap.CompressFormat.PNG, 100, out);
+        } catch (Exception e) {
+            return null;
+        }
+        ContentValues done = new ContentValues();
+        done.put(MediaStore.Images.Media.IS_PENDING, 0);
+        context.getContentResolver().update(uri, done, null, null);
+        return uri;
+    }
+
+    public static void shareImage(Context context, Uri uri) {
+        Intent intent = new Intent(Intent.ACTION_SEND);
+        intent.setType("image/png");
+        intent.putExtra(Intent.EXTRA_STREAM, uri);
+        intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+        context.startActivity(Intent.createChooser(intent, "分享翻译结果"));
+    }
+
+    public static void toast(Context context, String message) {
+        Toast.makeText(context, message, Toast.LENGTH_SHORT).show();
+    }
+
+    public static String humanError(Throwable throwable) {
+        if (throwable == null) return "未知错误";
+        String message = throwable.getMessage();
+        if (message == null || message.trim().isEmpty()) {
+            return throwable.getClass().getSimpleName();
+        }
+        return message;
+    }
+
+    public static boolean isAtLeastQ() {
+        return Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q;
+    }
+}

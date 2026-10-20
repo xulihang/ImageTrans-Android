@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">ImageTrans</string>
+    <string name="title_translate">图片翻译</string>
+    <string name="title_settings">设置</string>
+    <string name="main_title">ImageTrans</string>
+    <string name="main_subtitle">图片文字识别与翻译</string>
+    <string name="main_description">选择一张图片，使用本地 OCR 或 ImageTrans 服务器识别文字并翻译。排版仍由 WebView 使用扩展的渲染逻辑完成。</string>
+    <string name="main_pick_image">选择图片翻译</string>
+    <string name="main_settings">设置</string>
+    <string name="main_footer">本地 OCR：rapidocr4j · 渲染：WebView</string>
+    <string name="translate_loading">正在处理…</string>
+    <string name="translate_toggle_original">查看原文</string>
+    <string name="translate_toggle_translation">查看译文</string>
+    <string name="translate_save">保存</string>
+    <string name="translate_share">分享</string>
+    <string name="translate_saved">已保存到相册</string>
+    <string name="translate_save_failed">保存失败</string>
+</resources>
