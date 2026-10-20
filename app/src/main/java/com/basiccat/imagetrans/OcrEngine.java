@@ -34,6 +34,7 @@ public final class OcrEngine extends NativeInference {
     private static final String REC_MODEL = NativeInference.MODEL_DIR + "rec.onnx";
     private static final String REC_DICT = NativeInference.MODEL_DIR + "ppocrv6_dict.txt";
     private static final String YOLO_MODEL = NativeInference.MODEL_DIR + "model.onnx";
+    private static final String CLS_MODEL = NativeInference.MODEL_DIR + "ch_ppocr_mobile_v2.0_cls_infer.onnx";
 
     private static volatile OcrEngine instance;
 
@@ -78,9 +79,11 @@ public final class OcrEngine extends NativeInference {
             // characters, followed by space and then blank at index 0, matching
             // the extension (special tokens: blank, joiner, space, BOS, EOS).
             config.Rec.recKeysPath = NativeInference.ensureDictFile(appContext, REC_DICT);
-            // rapidocr4j creates the direction classifier whenever useCls is on,
-            // and the PP-OCRv6 pipeline does not use it.
-            config.Global.useCls = false;
+            // DB detection keeps the direction classifier on: rapidocr4j turns
+            // 180-degree lines upright before recognition, which the combined
+            // DB pipeline needs for the detection order it produces.
+            config.Global.useCls = true;
+            config.Cls.modelPath = ensureModelFile(appContext, CLS_MODEL);
             rapidOCR = RapidOCR.create(appContext, config);
         } catch (Throwable throwable) {
             throw new Exception("OCR 引擎初始化失败: " + ImageUtils.humanError(throwable), throwable);

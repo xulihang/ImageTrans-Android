@@ -49,6 +49,9 @@ final class PaddleRecognizer extends NativeInference {
         try {
             OcrConfig config = new OcrConfig();
             config.Global.useDet = false;
+            // The classifier's 180-degree decision was less reliable than
+            // recognizing both vertical orientations and keeping the more
+            // confident reading (recognizeBest below).
             config.Global.useCls = false;
             config.Rec.modelPath = ensureModelFile(appContext, REC_MODEL);
             config.Rec.recKeysPath = ensureDictFile(appContext, REC_DICT);
@@ -62,17 +65,15 @@ final class PaddleRecognizer extends NativeInference {
 
     /**
      * Recognizes one line with rapidocr4j's recognizer and keeps the most
-     * confident orientation: as cropped, rotated 90 degrees clockwise (vertical
-     * reading, top to bottom) and the same rotation flipped. Vertical strokes
-     * and thick manga lettering are read differently on each side, so trying
-     * both avoids keeping a garbled reading.
+     * confident orientation: rotated 90 degrees clockwise (vertical reading,
+     * top to bottom) and the same rotation flipped. Vertical strokes and thick
+     * manga lettering are read differently on each side, so trying both avoids
+     * keeping a garbled reading.
      */
     private RecResult recognizeBest(Bitmap crop, boolean vertical) throws Exception {
         if (!vertical) {
             return first(runRecognizer(crop));
         }
-        // A vertical line is stored upright in its 90-degree rotation, so the
-        // unrotated reading is mostly noise and is not a candidate.
         android.graphics.Matrix clockwiseMatrix = new android.graphics.Matrix();
         clockwiseMatrix.postRotate(90);
         Bitmap clockwise = Bitmap.createBitmap(crop, 0, 0, crop.getWidth(), crop.getHeight(),
