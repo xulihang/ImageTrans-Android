@@ -44,8 +44,8 @@ public final class TextBoxMerger {
             if (item.height > item.width) tallCount++;
         }
         final boolean isVertical = tallCount > items.size() / 2;
-        final boolean isRTL = "ar".equals(sourceLang) || "fa".equals(sourceLang)
-                || "he".equals(sourceLang) || "ur".equals(sourceLang);
+        // Same set as the extension's mergeTextBoxes().
+        final boolean isRTL = "ar".equals(sourceLang);
 
         // Phase 1: merge fragments on the same line.
         List<List<Box>> lines = new ArrayList<>();
@@ -77,6 +77,8 @@ public final class TextBoxMerger {
             Collections.sort(line, new Comparator<Box>() {
                 @Override
                 public int compare(Box a, Box b) {
+                    // Vertical text runs down each column, so keep top to bottom.
+                    if (isVertical) return Double.compare(a.top(), b.top());
                     if (isRTL) return Double.compare(b.left(), a.left());
                     return Double.compare(a.left(), b.left());
                 }

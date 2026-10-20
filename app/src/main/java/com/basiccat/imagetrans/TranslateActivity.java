@@ -164,13 +164,17 @@ public class TranslateActivity extends Activity {
 
     private void translateLocally(Bitmap bitmap, String mode) throws Exception {
         String sourceLang = Prefs.getSourceLang(TranslateActivity.this);
-        status("本地 OCR 识别中…");
+        status(OcrEngine.usesYoloDetection(sourceLang)
+                ? "本地 OCR：检测文本行（YOLO）…"
+                : "本地 OCR 识别中…");
         OcrEngine engine = OcrEngine.getInstance(TranslateActivity.this);
-        List<Box> boxes = engine.recognize(bitmap);
+        List<Box> boxes = engine.recognize(bitmap, sourceLang);
         if (boxes.isEmpty()) {
             throw new Exception("没有识别到文字。本地 OCR 使用中英日模型，其他语言请使用 ImageTrans 服务器模式。");
         }
 
+        // Same as doOCRYolo(): merge neighbouring lines into paragraphs before
+        // translating/rendering.
         status("合并文本框…");
         boxes = TextBoxMerger.merge(boxes, sourceLang, 15, 15);
 

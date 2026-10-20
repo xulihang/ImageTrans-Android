@@ -7,6 +7,9 @@ import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 
+import ai.onnxruntime.OrtEnvironment;
+import ai.onnxruntime.OrtSession;
+
 
 /**
  * Model plumbing for the OCR models in {@code assets/ocr/}.
@@ -18,11 +21,21 @@ import java.nio.charset.StandardCharsets;
  */
 abstract class NativeInference {
     protected static final String MODEL_DIR = "ocr/";
+    static final OrtEnvironment ENVIRONMENT = OrtEnvironment.getEnvironment("ImageTransOcr");
+    private static final int INFERENCE_THREADS = 4;
 
     protected final Context appContext;
 
     NativeInference(Context context) {
         this.appContext = context.getApplicationContext();
+    }
+
+    /** Opens a session on the asset bytes; nothing is written to disk. */
+    protected OrtSession createSession(String assetName) throws Exception {
+        byte[] model = readAssetBytes(appContext, assetName);
+        OrtSession.SessionOptions options = new OrtSession.SessionOptions();
+        options.setIntraOpNumThreads(INFERENCE_THREADS);
+        return ENVIRONMENT.createSession(model, options);
     }
 
     /**

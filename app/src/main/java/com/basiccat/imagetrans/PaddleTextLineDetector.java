@@ -93,16 +93,42 @@ final class PaddleTextLineDetector extends NativeInference {
         }
 
         float[][][][] input = new float[1][3][INPUT_SIZE][INPUT_SIZE];
+        // The input is planar (C, H, W): OrtInferSession.run() flattens
+        // [batch][C][H][W] itself, so each channel only needs its rows.
         for (int c = 0; c < 3; c++) {
-            System.arraycopy(data, c * INPUT_SIZE * INPUT_SIZE, input[0][c], 0, INPUT_SIZE * INPUT_SIZE);
+            float[] plane = new float[area];
+            System.arraycopy(data, c * area, plane, 0, area);
+            input[0][c] = reshape(plane, INPUT_SIZE);
         }
-        float[][][][] raw = (float[][][][]) session.run(input);
-        List<float[]> boxes = postprocess(raw[0][0], ratio, dw, dh, srcWidth, srcHeight);
-        Log.w(TAG, String.format("YOLO detections: %d, first bbox=%s", boxes.size(),
-                boxes.isEmpty() ? "-" : java.util.Arrays.toString(boxes.get(0))));
+        // The output is [1][4 + classes][anchors]: the batch dimension is
+        // dropped for the single-image case.
+        float[][][] raw = (float[][][]) session.run(input);
+        List<float[]> boxes = postprocess(raw[0], ratio, dw, dh, srcWidth, srcHeight);
+        // Reading order: vertical lines right to left, then top to bottom.
+        // Within a column (same x band) keep top to bottom; columns themselves
+        // run right to left. Sorting only by (y, -x) would interleave columns.
+        Collections.sort(boxes, new Comparator<float[]>() {
+            @Override
+            public int compare(float[] a, float[] b) {
+                float ax = (a[0] + a[2]) / 2, bx = (b[0] + b[2]) / 2;
+                float ay = (a[1] + a[3]) / 2, by = (b[1] + b[3]) / 2;
+                if (Math.abs(ax - bx) < (a[2] - a[0] + b[2] - b[0]) / 2) {
+                    return Float.compare(ay, by);
+                }
+                return Float.compare(bx, ax);
+            }
+        });
         Log.i(TAG, "YOLO finished in " + (System.currentTimeMillis() - start)
                 + " ms, boxes=" + boxes.size());
         return boxes;
+    }
+
+    private static float[][] reshape(float[] plane, int size) {
+        float[][] rows = new float[size][size];
+        for (int y = 0; y < size; y++) {
+            System.arraycopy(plane, y * size, rows[y], 0, size);
+        }
+        return rows;
     }
 
     /** output is [dims, anchors] with dims = 4 + classes. */
@@ -112,6 +138,8 @@ final class PaddleTextLineDetector extends NativeInference {
         int anchors = output[0].length;
         int numClasses = dims - 4;
 
+        // Same as the extension's postprocessYOLO: keep the best class per
+        // anchor, drop the manga class (5), then NMS per class.
         Map<Integer, List<float[]>> byClass = new LinkedHashMap<>();
         for (int i = 0; i < anchors; i++) {
             int bestClass = -1;
@@ -148,7 +176,8 @@ final class PaddleTextLineDetector extends NativeInference {
                     Math.max(0, Math.min(srcWidth - 1, Math.round((box[2] - dw) / ratio))),
                     Math.max(0, Math.min(srcHeight - 1, Math.round((box[3] - dh) / ratio)))
             };
-            if (b[2] - b[0] < 4 || b[3] - b[1] < 4) continue;
+            // doOCRYolo() skips regions smaller than 10 px in either direction.
+            if (b[2] - b[0] < 10 || b[3] - b[1] < 10) continue;
             scaled.add(b);
         }
         return scaled;
