@@ -2,11 +2,6 @@ package com.basiccat.imagetrans;
 
 import android.app.Activity;
 import android.graphics.Bitmap;
-import android.graphics.Canvas;
-import android.graphics.Color;
-import android.graphics.Paint;
-import android.graphics.Rect;
-import android.graphics.Typeface;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.Handler;
@@ -169,13 +164,15 @@ public class TranslateActivity extends Activity {
 
     private void translateLocally(Bitmap bitmap, String mode) throws Exception {
         String sourceLang = Prefs.getSourceLang(TranslateActivity.this);
-        boolean yolo = OcrEngine.usesYoloDetection(sourceLang);
-        status(yolo ? "本地 OCR：检测文本行（YOLO）…" : "本地 OCR 识别中…");
+        status("本地 OCR 识别中…");
         OcrEngine engine = OcrEngine.getInstance(TranslateActivity.this);
-        List<Box> boxes = engine.recognizeAndMerge(bitmap, sourceLang, yolo, 15, 15);
+        List<Box> boxes = engine.recognize(bitmap);
         if (boxes.isEmpty()) {
             throw new Exception("没有识别到文字。本地 OCR 使用中英日模型，其他语言请使用 ImageTrans 服务器模式。");
         }
+
+        status("合并文本框…");
+        boxes = TextBoxMerger.merge(boxes, sourceLang, 15, 15);
 
         if (Prefs.MODE_OPENAI.equals(mode)) {
             status("调用 OpenAI 兼容 API 翻译…");
@@ -188,48 +185,16 @@ public class TranslateActivity extends Activity {
                 boxes.get(i).target = translations.get(i);
             }
         } else {
-            // "Original" mode: render the recognized text in place.
+            // "Original" mode: render the recognized text in place, exactly like
+            // the extension's "recognize only" output (white background boxes
+            // over the original text, new text on top).
             for (Box box : boxes) {
                 box.target = box.source;
-            }
-            if (!OcrEngine.usesYoloDetection(sourceLang)) {
-                // No translation to show; layer the recognized text over the
-                // image instead of replacing it with bare text.
-                status("绘制识别结果…");
-                drawRecognizedText(bitmap, boxes);
-                return;
             }
         }
 
         status("WebView 渲染排版…");
         renderBoxes(boxes, ImageUtils.bitmapToDataUrl(bitmap));
-    }
-
-    /** Overlay of recognized text, matching the extension's "recognize only" output. */
-    private void drawRecognizedText(final Bitmap bitmap, final List<Box> boxes) {
-        final Bitmap output = bitmap.copy(Bitmap.Config.ARGB_8888, true);
-        final Canvas canvas = new Canvas(output);
-        final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
-        paint.setColor(Color.BLACK);
-        paint.setStyle(Paint.Style.FILL);
-        paint.setTypeface(Typeface.DEFAULT);
-        for (Box box : boxes) {
-            Rect bounds = new Rect();
-            paint.setTextSize((float) Math.max(6, box.height * 0.8));
-            paint.getTextBounds(box.source, 0, box.source.length(), bounds);
-            float textWidth = Math.max(1, bounds.width());
-            float textHeight = Math.max(1, bounds.height());
-            float scale = Math.min((float) box.width / textWidth, (float) box.height / textHeight);
-            canvas.save();
-            canvas.translate((float) box.x, (float) box.y);
-            canvas.scale(scale, scale);
-            canvas.drawText(box.source,
-                    (float) box.width / scale / 2 - textWidth / 2f - bounds.left,
-                    (float) box.height / scale / 2 + textHeight / 2f - bounds.bottom,
-                    paint);
-            canvas.restore();
-        }
-        showResult(output);
     }
 
     private void renderBoxes(final List<Box> boxes, final String imageDataUrl) {

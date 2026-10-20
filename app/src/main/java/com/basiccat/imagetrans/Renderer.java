@@ -54,6 +54,13 @@ public class Renderer {
         settings.setDomStorageEnabled(true);
         webView.setBackgroundColor(0x00000000);
         webView.addJavascriptInterface(new Bridge(), "AndroidRenderer");
+        webView.setWebChromeClient(new android.webkit.WebChromeClient() {
+            @Override
+            public boolean onConsoleMessage(android.webkit.ConsoleMessage message) {
+                Log.i(TAG, "console: " + message.message() + " (" + message.lineNumber() + ")");
+                return true;
+            }
+        });
         webView.setWebViewClient(new WebViewClient() {
             @Override
             public void onPageFinished(WebView view, String url) {

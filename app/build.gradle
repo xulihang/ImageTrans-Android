@@ -35,6 +35,14 @@ android {
         jniLibs {
             pickFirst 'lib/arm64-v8a/libc++_shared.so'
         }
+        resources {
+            // AARs arrive down a different path than the sibling app/libs
+            // files, so they get a different cache key. Their assets are the
+            // PP-OCRv4 models this app no longer uses (assets/ocr has the
+            // current ones); keeping the app's copy on conflicts also prevents
+            // a model removed from app/libs from lingering in the APK.
+            pickFirsts += ['assets/**']
+        }
     }
 
     lint {

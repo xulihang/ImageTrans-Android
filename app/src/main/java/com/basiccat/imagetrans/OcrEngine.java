@@ -116,6 +116,11 @@ public final class OcrEngine extends NativeInference {
         return merged;
     }
 
+    /** Recognizes the bitmap, one box per detected line (not merged). */
+    public List<Box> recognize(Bitmap bitmap) throws Exception {
+        return detect(bitmap);
+    }
+
     /** DB-detector OCR (PP-OCRv6 det + rec), one box per detected line. */
     private List<Box> detect(Bitmap bitmap) throws Exception {
         initialize();
