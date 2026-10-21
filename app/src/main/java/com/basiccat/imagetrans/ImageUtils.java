@@ -31,8 +31,8 @@ public final class ImageUtils {
     private static final long MAX_PIXELS = 12_000_000L;
     /** Tall images may keep up to this width instead of being squeezed to MAX_DIMENSION. */
     private static final int MAX_TALL_WIDTH = 2000;
-    /** height > width * 4 is a webtoon: OCR and rendering split it into parts. */
-    private static final int TALL_ASPECT = 4;
+    /** height > width * 8 is a webtoon: OCR and rendering split it into parts. */
+    private static final int TALL_ASPECT = 8;
     private static final int MAX_SAMPLE = 8;
 
     private ImageUtils() {

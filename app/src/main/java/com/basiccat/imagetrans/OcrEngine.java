@@ -39,7 +39,7 @@ public final class OcrEngine extends NativeInference {
     private static final String YOLO_MODEL = NativeInference.MODEL_DIR + "model.onnx";
     private static final String CLS_MODEL = NativeInference.MODEL_DIR + "ch_ppocr_mobile_v2.0_cls_infer.onnx";
     /** Webtoon OCR: parts are this many widths tall, then scaled down for OCR. */
-    private static final int OCR_PART_RATIO = 4;
+    private static final int OCR_PART_RATIO = 8;
     private static final int OCR_PART_MAX_SIDE = 1500;
 
     private static volatile OcrEngine instance;
@@ -149,11 +149,11 @@ public final class OcrEngine extends NativeInference {
     }
 
     /**
-     * Webtoon OCR, ported from the extension's paddleOCR(): an image taller
-     * than 4x its width is cut into parts of height 4*width, each part is
-     * scaled to at most 1500 px on its long side and recognized on its own,
-     * and the boxes are mapped back to the full image. Working on the whole
-     * strip would make the detectors resize away the text.
+     * Webtoon OCR, based on the extension's paddleOCR(): an image taller than
+     * 8x its width is cut into parts of height 8*width, each part is scaled to
+     * at most 1500 px on its long side and recognized on its own, and the
+     * boxes are mapped back to the full image. Working on the whole strip
+     * would make the detectors resize away the text.
      */
     private List<Box> recognizeTall(Bitmap bitmap, String sourceLang,
                                     RemoteOcrModels.ProgressListener listener) throws Exception {
