@@ -43,6 +43,18 @@
     <string name="floating_need_notifications">请在系统设置中允许 ImageTrans 的通知，否则无法截屏</string>
     <string name="floating_need_overlay">请先允许「显示在其他应用上层」</string>
     <string name="selection_hint">拖动边框调整区域，点按框内翻译</string>
+    <string name="main_server">翻译服务器（浏览器扩展用）</string>
+    <string name="main_server_hint">在后台提供 ImageTrans 服务器的 /translate 接口（HTTP，端口 51042），供浏览器扩展的「ImageTrans 服务器」模式调用。</string>
+    <string name="main_server_on">停止服务器</string>
+    <string name="main_server_off">启动服务器</string>
+    <string name="server_notification_title">ImageTrans 服务器运行中</string>
+    <string name="server_notification_text">扩展里填 %1$s</string>
+    <string name="server_notification_text_no_ip">请连接 Wi-Fi 后重新启动服务器</string>
+    <string name="server_start_failed">服务器启动失败：%1$s</string>
+    <string name="main_server_running">服务器已启动。在浏览器扩展的「ImageTrans 服务器」模式中填写：
+%1$s</string>
+    <string name="main_server_addr_unknown">服务器已启动，但未获取到 IP 地址，请连接 Wi-Fi 后重启服务器。</string>
+    <string name="server_need_notifications">请在系统设置中允许 ImageTrans 的通知，否则无法在后台运行服务器</string>
     <string name="main_floating">截屏翻译悬浮球</string>
     <string name="main_floating_hint">开启后屏幕上出现悬浮球，点按截取屏幕区域并翻译，译文显示在悬浮框中。</string>
     <string name="main_floating_on">关闭悬浮球</string>

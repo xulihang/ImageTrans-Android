@@ -190,6 +190,16 @@ public final class Prefs {
         return Settings.canDrawOverlays(context);
     }
 
+    // --- background server (browser extension) ----------------------------
+
+    public static boolean isServerEnabled(Context context) {
+        return get(context).getBoolean("server_enabled", false);
+    }
+
+    public static void setServerEnabled(Context context, boolean value) {
+        get(context).edit().putBoolean("server_enabled", value).apply();
+    }
+
     public static boolean isOverlayAsked(Context context) {
         return get(context).getBoolean("overlay_asked", false);
     }

@@ -323,6 +323,16 @@ public final class ImageUtils {
         return null;
     }
 
+    /**
+     * OCR only: single text lines without paragraph merging. The browser
+     * extension merges lines into paragraphs itself, so its server API
+     * returns the lines as recognized.
+     */
+    public static List<Box> detectOnly(Context context, Bitmap bitmap, String sourceLang)
+            throws Exception {
+        return OcrEngine.getInstance(context).recognize(bitmap, sourceLang, message -> { });
+    }
+
     public static JSONObject buildRenderOptions(Context context) throws JSONException {
         JSONObject options = new JSONObject();
         options.put("renderMode", "dom");

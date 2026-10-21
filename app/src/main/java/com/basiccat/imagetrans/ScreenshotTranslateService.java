@@ -59,6 +59,7 @@ public class ScreenshotTranslateService extends Service {
     static final String ACTION_SHOW = "com.basiccat.imagetrans.FLOATING_SHOW";
     static final String ACTION_HIDE = "com.basiccat.imagetrans.FLOATING_HIDE";
     static final String ACTION_BALL = "com.basiccat.imagetrans.FLOATING_BALL";
+    static final String ACTION_START_SERVER = "com.basiccat.imagetrans.START_SERVER";
 
     static final String EXTRA_RESULT_CODE = "result_code";
     static final String EXTRA_RESULT_DATA = "result_data";
@@ -67,6 +68,7 @@ public class ScreenshotTranslateService extends Service {
     private static final int NOTIFICATION_ID = 1;
     private static final String CHANNEL_ID = "screenshot_translate";
     private static final String CHANNEL_BALL_ID = "screenshot_translate_ball";
+    private static final String CHANNEL_SERVER_ID = "image_trans_server";
     private static final long NOTIFICATION_HIDE_DELAY_MS = 8000;
 
     public static void show(Context context, int resultCode, Intent resultData) {
@@ -86,6 +88,25 @@ public class ScreenshotTranslateService extends Service {
                 .putExtra(EXTRA_ENABLE_ONLY, true);
         context.startForegroundService(intent);
     }
+
+    /**
+     * Runs the image translation server for the browser extension in the
+     * background, with an ongoing notification showing its address. No
+     * floating windows are shown.
+     */
+    public static void startServer(Context context) {
+        context.startForegroundService(new Intent(context, ScreenshotTranslateService.class)
+                .setAction(ACTION_START_SERVER));
+    }
+
+    /** Stops only the server; the floating windows (if any) stay. */
+    public static void stopServer(Context context) {
+        context.startService(new Intent(context, ScreenshotTranslateService.class)
+                .setAction(ACTION_HIDE)
+                .putExtra(EXTRA_SERVER_ONLY, true));
+    }
+
+    static final String EXTRA_SERVER_ONLY = "server_only";
 
     public static void stop(Context context) {
         context.startService(new Intent(context, ScreenshotTranslateService.class)
@@ -129,6 +150,9 @@ public class ScreenshotTranslateService extends Service {
         stopForeground(STOP_FOREGROUND_REMOVE);
     };
 
+    /** Started only to run the server (no floating windows). */
+    private boolean serverOnly;
+
     // --- lifecycle --------------------------------------------------------
 
     @Override
@@ -136,6 +160,12 @@ public class ScreenshotTranslateService extends Service {
         super.onCreate();
         windowManager = (WindowManager) getSystemService(WINDOW_SERVICE);
         createChannels();
+        if (Prefs.isServerEnabled(this)) {
+            // Process restarted (or the service recreated): bring the server
+            // back; its notification follows.
+            startApiServer();
+            showServerNotification();
+        }
     }
 
     @Override
@@ -143,8 +173,35 @@ public class ScreenshotTranslateService extends Service {
         String action = intent == null ? null : intent.getAction();
         Log.i(TAG, "onStartCommand " + action);
         if (ACTION_HIDE.equals(action)) {
+            if (intent.getBooleanExtra(EXTRA_SERVER_ONLY, false)) {
+                stopApiServer();
+                if (serverOnly) {
+                    // Nothing else is running: stop the whole service.
+                    stopForeground(STOP_FOREGROUND_REMOVE);
+                    stopSelf();
+                } else {
+                    showWindows();
+                }
+                return START_NOT_STICKY;
+            }
             shutdown();
             return START_NOT_STICKY;
+        }
+        if (ACTION_START_SERVER.equals(action)) {
+            Prefs.setServerEnabled(this, true);
+            if (!startApiServer()) {
+                stopSelf();
+                return START_NOT_STICKY;
+            }
+            if (!ballShown && overlay == null) {
+                // Server only: an ongoing foreground notification.
+                serverOnly = true;
+                enterServerForeground();
+            } else {
+                // Alongside the floating windows: their notification stays.
+                showServerNotification();
+            }
+            return START_STICKY;
         }
         if (ACTION_SHOW.equals(action)) {
             projectionResultCode = intent.getIntExtra(EXTRA_RESULT_CODE, 0);
@@ -209,6 +266,10 @@ public class ScreenshotTranslateService extends Service {
                 getString(R.string.floating_ball_channel_name), NotificationManager.IMPORTANCE_MIN);
         ballChannel.setShowBadge(false);
         manager.createNotificationChannel(ballChannel);
+        NotificationChannel serverChannel = new NotificationChannel(CHANNEL_SERVER_ID,
+                getString(R.string.server_notification_title), NotificationManager.IMPORTANCE_LOW);
+        serverChannel.setShowBadge(false);
+        manager.createNotificationChannel(serverChannel);
     }
 
     /**
@@ -228,7 +289,16 @@ public class ScreenshotTranslateService extends Service {
                 .setOngoing(true)
                 .build();
         try {
-            if (Build.VERSION.SDK_INT >= 29) {
+            if (serverOnly) {
+                // A mediaProjection-type foreground service needs a live
+                // projection; the server alone has none yet.
+                if (Build.VERSION.SDK_INT >= 29) {
+                    startForeground(NOTIFICATION_ID, notification,
+                            ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC);
+                } else {
+                    startForeground(NOTIFICATION_ID, notification);
+                }
+            } else if (Build.VERSION.SDK_INT >= 29) {
                 startForeground(NOTIFICATION_ID, notification,
                         ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION);
             } else {
@@ -244,6 +314,8 @@ public class ScreenshotTranslateService extends Service {
     }
 
     private void shutdown() {
+        Prefs.setServerEnabled(this, false);
+        stopApiServer();
         mainHandler.removeCallbacksAndMessages(null);
         removeWindows();
         mediaProjection = null;
@@ -264,6 +336,91 @@ public class ScreenshotTranslateService extends Service {
             ball = null;
             ballShown = false;
         }
+        // With the server still running, its notification takes over.
+        if (Prefs.isServerEnabled(this)) showServerNotification();
+    }
+
+    // --- server -----------------------------------------------------------
+
+    /** Opens port 51042; false when that failed (the error is reported). */
+    private boolean startApiServer() {
+        try {
+            ImageTransApiServer.get().start(this);
+            return true;
+        } catch (Throwable throwable) {
+            Log.e(TAG, "server start failed", throwable);
+            Prefs.setServerEnabled(this, false);
+            ImageUtils.toast(this, getString(R.string.server_start_failed,
+                    ImageUtils.humanError(throwable)));
+            return false;
+        }
+    }
+
+    private void stopApiServer() {
+        ImageTransApiServer.get().stop();
+    }
+
+    /** Foreground notification for a server running without floating windows. */
+    private void enterServerForeground() {
+        Intent content = new Intent(this, MainActivity.class);
+        PendingIntent open = PendingIntent.getActivity(this, 0, content,
+                PendingIntent.FLAG_IMMUTABLE);
+        Intent stop = new Intent(this, ScreenshotTranslateService.class)
+                .setAction(ACTION_HIDE)
+                .putExtra(EXTRA_SERVER_ONLY, true);
+        PendingIntent stopPending = PendingIntent.getService(this, 0, stop,
+                PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
+        String url = ImageTransApiServer.get().address();
+        String text = url != null ? getString(R.string.server_notification_text, url)
+                : getString(R.string.server_notification_text_no_ip);
+        Notification notification = new Notification.Builder(this, CHANNEL_SERVER_ID)
+                .setSmallIcon(R.mipmap.ic_launcher)
+                .setContentTitle(getString(R.string.server_notification_title))
+                .setContentText(text)
+                .setStyle(new Notification.BigTextStyle().bigText(text))
+                .setContentIntent(open)
+                .addAction(0, getString(R.string.main_server_on), stopPending)
+                .setOngoing(true)
+                .build();
+        try {
+            if (Build.VERSION.SDK_INT >= 29) {
+                startForeground(NOTIFICATION_ID, notification,
+                        ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC);
+            } else {
+                startForeground(NOTIFICATION_ID, notification);
+            }
+        } catch (Throwable throwable) {
+            Log.e(TAG, "server foreground failed", throwable);
+            ImageUtils.toast(this, getString(R.string.server_need_notifications));
+            shutdown();
+        }
+    }
+
+    /**
+     * While the floating windows run they own the foreground notification;
+     * the address is added to it instead of a second notification.
+     */
+    private void showServerNotification() {
+        if (!ballShown && overlay == null) return;
+        NotificationManager manager = getSystemService(NotificationManager.class);
+        String url = ImageTransApiServer.get().address();
+        String text = url != null
+                ? getString(R.string.server_notification_title) + " · "
+                        + getString(R.string.server_notification_text, url)
+                : getString(R.string.server_notification_text_no_ip);
+        Intent content = new Intent(this, MainActivity.class);
+        PendingIntent open = PendingIntent.getActivity(this, 0, content,
+                PendingIntent.FLAG_IMMUTABLE);
+        Notification.Builder builder = new Notification.Builder(this, CHANNEL_BALL_ID)
+                .setSmallIcon(R.mipmap.ic_launcher)
+                .setContentTitle(getString(R.string.floating_running))
+                .setContentText(text)
+                .setStyle(new Notification.BigTextStyle().bigText(text))
+                .setContentIntent(open)
+                .setOngoing(true);
+        manager.notify(NOTIFICATION_ID, builder.build());
+        mainHandler.removeCallbacks(autoHideNotification);
+        mainHandler.postDelayed(autoHideNotification, NOTIFICATION_HIDE_DELAY_MS);
     }
 
     private void showWindows() {

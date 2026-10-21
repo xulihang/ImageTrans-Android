@@ -7,6 +7,7 @@
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <application
@@ -44,6 +45,11 @@
             android:windowSoftInputMode="adjustResize" />
 
         <activity
+            android:name=".ServerActivity"
+            android:exported="false"
+            android:label="@string/main_server" />
+
+        <activity
             android:name=".ProjectionPermissionActivity"
             android:exported="false"
             android:excludeFromRecents="true"
@@ -54,7 +60,7 @@
         <service
             android:name=".ScreenshotTranslateService"
             android:exported="false"
-            android:foregroundServiceType="mediaProjection" />
+            android:foregroundServiceType="mediaProjection|dataSync" />
     </application>
 
 </manifest>

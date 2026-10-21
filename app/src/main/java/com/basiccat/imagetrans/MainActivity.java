@@ -56,6 +56,8 @@ public class MainActivity extends Activity {
             }
         });
         btnFloating.setOnClickListener(v -> toggleFloating());
+        findViewById(R.id.btnServer).setOnClickListener(v ->
+                startActivity(new Intent(MainActivity.this, ServerActivity.class)));
 
         findViewById(R.id.btnPickImage).setOnClickListener(new View.OnClickListener() {
             @Override
