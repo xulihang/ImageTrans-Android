@@ -173,6 +173,10 @@ public final class ImageTransApiServer {
 
     private void handle(Socket client, Context app) {
         clients.add(client);
+        // While a request is being served the phone must not drop the
+        // network (some ROMs apply their power-saving network rules the
+        // moment the screen turns off, even to a foreground service).
+        android.net.TrafficStats.setThreadStatsTag(0x49544d);
         try (Socket socket = client) {
             socket.setSoTimeout(150_000);
             InputStream in = socket.getInputStream();
