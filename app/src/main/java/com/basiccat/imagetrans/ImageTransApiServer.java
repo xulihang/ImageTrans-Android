@@ -83,6 +83,17 @@ public final class ImageTransApiServer {
         return running.get();
     }
 
+    /** Reopens the port if listening stopped (e.g. an error in the loop). */
+    public synchronized void ensureRunning(Context context) {
+        if (running.get() && socket != null && !socket.isClosed()) return;
+        Log.i(TAG, "server not listening, restarting");
+        try {
+            start(context);
+        } catch (Throwable throwable) {
+            Log.e(TAG, "restart failed", throwable);
+        }
+    }
+
     /**
      * Starts listening. Returns the IPv4 address to use, or null when it
      * cannot be determined. Throws when the port cannot be opened.
@@ -151,8 +162,13 @@ public final class ImageTransApiServer {
                 new Thread(() -> handle(client, app), "imagetrans-http-conn").start();
             } catch (IOException e) {
                 if (running.get()) Log.w(TAG, "accept failed: " + e);
+            } catch (Throwable throwable) {
+                // Never let the loop die silently; the port would stay open
+                // but unanswered until the next restart.
+                Log.e(TAG, "accept loop error", throwable);
             }
         }
+        Log.i(TAG, "accept loop ended, running=" + running.get());
     }
 
     private void handle(Socket client, Context app) {

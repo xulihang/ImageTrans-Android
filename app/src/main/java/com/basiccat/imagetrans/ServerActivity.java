@@ -47,6 +47,10 @@ public class ServerActivity extends Activity {
     @Override
     protected void onResume() {
         super.onResume();
+        if (Prefs.isServerEnabled(this)) {
+            // Reopen the port if the server stopped listening somehow.
+            ImageTransApiServer.get().ensureRunning(this);
+        }
         updateState();
     }
 
