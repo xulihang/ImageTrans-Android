@@ -2,8 +2,6 @@ package com.basiccat.imagetrans;
 
 import android.app.Activity;
 import android.app.AlertDialog;
-import android.content.ClipData;
-import android.content.ClipboardManager;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.net.Uri;
@@ -14,7 +12,6 @@ import android.util.Log;
 import android.view.View;
 import android.webkit.WebView;
 import android.widget.Button;
-import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.ProgressBar;
 import android.widget.TextView;
@@ -530,9 +527,8 @@ public class TranslateActivity extends Activity {
 
     private void showTextBoxDialog(final int index) {
         View content = getLayoutInflater().inflate(R.layout.dialog_text_box, null);
-        EditText sourceText = content.findViewById(R.id.sourceText);
-        EditText targetText = content.findViewById(R.id.targetText);
-        AlertDialog.Builder builder = new AlertDialog.Builder(this)
+        TextView sourceText = content.findViewById(R.id.sourceText);
+        TextView targetText = content.findViewById(R.id.targetText);        AlertDialog.Builder builder = new AlertDialog.Builder(this)
                 .setTitle(getString(R.string.text_box_title, index + 1, hitBoxes.size()))
                 .setView(content)
                 .setPositiveButton(R.string.action_close, null);
@@ -547,17 +543,7 @@ public class TranslateActivity extends Activity {
         Box box = hitBoxes.get(index);
         sourceText.setText(emptyIfBlank(box.source));
         targetText.setText(emptyIfBlank(box.target));
-        sourceText.setOnClickListener(this::copyTextView);
-        targetText.setOnClickListener(this::copyTextView);
         builder.show();
-    }
-
-    private void copyTextView(View view) {
-        CharSequence text = ((TextView) view).getText();
-        if (text == null || text.length() == 0) return;
-        ClipboardManager clipboard = (ClipboardManager) getSystemService(CLIPBOARD_SERVICE);
-        clipboard.setPrimaryClip(ClipData.newPlainText("text", text));
-        ImageUtils.toast(this, getString(R.string.copied));
     }
 
     private String emptyIfBlank(String text) {

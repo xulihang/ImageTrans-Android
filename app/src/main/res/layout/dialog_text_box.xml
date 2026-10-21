@@ -18,25 +18,11 @@
             android:layout_height="wrap_content"
             android:text="@string/text_box_source" />
 
-        <!-- Editable (but not focus-grabbing) text views so the text can be
-             selected and copied, including on API 29 where plain TextViews
-             are not selectable. -->
-        <EditText
+        <TextView
             android:id="@+id/sourceText"
+            style="@style/SelectableText"
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:autoLink="none"
-            android:background="@android:color/transparent"
-            android:clickable="true"
-            android:focusable="false"
-            android:focusableInTouchMode="false"
-            android:inputType="textMultiLine"
-            android:lineSpacingExtra="3dp"
-            android:padding="0dp"
-            android:scrollHorizontally="false"
-            android:textColor="@color/text_primary"
-            android:textIsSelectable="true"
-            android:textSize="16sp" />
+            android:layout_height="wrap_content" />
 
         <TextView
             style="@style/FieldLabel"
@@ -45,21 +31,10 @@
             android:layout_marginTop="18dp"
             android:text="@string/text_box_target" />
 
-        <EditText
+        <TextView
             android:id="@+id/targetText"
+            style="@style/SelectableText"
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:autoLink="none"
-            android:background="@android:color/transparent"
-            android:clickable="true"
-            android:focusable="false"
-            android:focusableInTouchMode="false"
-            android:inputType="textMultiLine"
-            android:lineSpacingExtra="3dp"
-            android:padding="0dp"
-            android:scrollHorizontally="false"
-            android:textColor="@color/text_primary"
-            android:textIsSelectable="true"
-            android:textSize="16sp" />
+            android:layout_height="wrap_content" />
     </LinearLayout>
 </ScrollView>
