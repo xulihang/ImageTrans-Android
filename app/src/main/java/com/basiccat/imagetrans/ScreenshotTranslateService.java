@@ -419,9 +419,15 @@ public class ScreenshotTranslateService extends Service {
     // --- selection frame --------------------------------------------------
 
     private void showOverlay() {
-        if (overlay != null) {
+        // Windows left by an earlier turnkey session (whose code may have
+        // covered the whole screen) must be removed, not reused.
+        if (overlay != null && overlay.isAttachedToWindow()) {
             overlay.setVisibility(View.VISIBLE);
             return;
+        }
+        if (overlay != null) {
+            overlay.remove();
+            overlay = null;
         }
         overlay = new SelectionOverlay(this, new SelectionOverlay.Callback() {
             @Override

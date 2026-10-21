@@ -218,6 +218,33 @@ public class SelectionOverlay extends View {
     }
 
     /**
+     * Resizes the window to the frame after a gesture ended. During the drag
+     * the window stays fixed (so coordinates do not drift); when the finger
+     * lifts, the window is trimmed so it only covers the frame.
+     */
+    private void fitWindowToFrame() {
+        if (!attached || screenHeight == 0) return;
+        int left = clampInt(frame.left - sideInset(), 0, screenWidth);
+        int top = clampInt(frame.top - topInset(), 0, screenHeight);
+        int width = Math.max(1, Math.min(screenWidth - left, frameWidth(frame)));
+        int height = Math.max(1, Math.min(screenHeight - top, frameHeight(frame)));
+        if (params.x == left && params.y == top
+                && params.width == width && params.height == height) return;
+        params.x = left;
+        params.y = top;
+        params.width = width;
+        params.height = height;
+        contentOffsetX = left;
+        contentOffsetY = top;
+        try {
+            windowManager.updateViewLayout(this, params);
+        } catch (IllegalArgumentException | IllegalStateException ignored) {
+            // Detached.
+        }
+        invalidate();
+    }
+
+    /**
      * Moves the window without letting its position follow the frame during a
      * drag: the window keeps the size and (where possible) the position it
      * had when the gesture started, so touch coordinates stay stable. It is
@@ -232,8 +259,8 @@ public class SelectionOverlay extends View {
         if (frame.left - side < x) x = Math.max(0, frame.left - side);
         if (frame.right > x + params.width) x = Math.max(0, frame.right - params.width);
         if (frame.top - above < y) y = Math.max(0, frame.top - above);
-        if (frame.bottom + bottomInset() > y + params.height) {
-            y = Math.max(0, frame.bottom + bottomInset() - params.height);
+        if (frame.bottom > y + params.height) {
+            y = Math.max(0, frame.bottom - params.height);
         }
         if (x == params.x && y == params.y) {
             invalidate();
@@ -284,12 +311,8 @@ public class SelectionOverlay extends View {
     }
 
     private int frameHeight(Rect f) {
-        return f.height() + topInset() + bottomInset();
-    }
-
-    /** Grip below the frame where a drag can start. */
-    private int bottomInset() {
-        return Math.round(20 * density);
+        // No margin below: the window must stay clear of everything else.
+        return f.height() + topInset();
     }
 
     private static int clampInt(int value, int min, int max) {
@@ -484,25 +507,32 @@ public class SelectionOverlay extends View {
                 clearing = false;
                 return true;
             case MotionEvent.ACTION_UP:
-                if (clearing) {
-                    clearing = false;
-                    clearTranslation();
-                    return true;
+                try {
+                    return handleUp(event, x, y);
+                } finally {
+                    fitWindowToFrame();
                 }
-                if (dragged) return true;
-                // Only text in the result reacts to a tap; starting the
-                // translation is the ball's job.
-                // The bitmap is fitted into the frame ("fit center").
-                Rect image = imageRect();
-                if (state == STATE_RESULT && image.contains((int) x, (int) y)) {
-                    float scale = Math.min(frame.width() / (float) translated.getWidth(),
-                            frame.height() / (float) translated.getHeight());
-                    newResultTap((x - image.left) / scale, (y - image.top) / scale);
-                }
-                return true;
             default:
                 return super.onTouchEvent(event);
         }
+    }
+
+    private boolean handleUp(MotionEvent event, float x, float y) {
+        if (clearing) {
+            clearing = false;
+            clearTranslation();
+            return true;
+        }
+        if (dragged) return true;
+        // Only text in the result reacts to a tap; starting the translation
+        // is the ball's job. The bitmap is fitted into the frame.
+        Rect image = imageRect();
+        if (state == STATE_RESULT && image.contains((int) x, (int) y)) {
+            float scale = Math.min(frame.width() / (float) translated.getWidth(),
+                    frame.height() / (float) translated.getHeight());
+            newResultTap((x - image.left) / scale, (y - image.top) / scale);
+        }
+        return true;
     }
 
     private void newResultTap(float imageX, float imageY) {
