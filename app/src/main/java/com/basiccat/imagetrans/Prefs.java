@@ -23,13 +23,13 @@ public final class Prefs {
             "(no markdown, no code fences).\nTexts: {texts}";
 
     public static final String[] LANG_CODES = {
-            "auto", "zh", "ja", "en", "ko", "fr", "de", "es", "ru",
-            "ar", "pt", "it", "th", "vi", "id", "tr", "pl", "nl"
+            "zh", "ja", "en", "ko", "fr", "de", "es", "ru",
+            "ar", "pt", "it", "th", "vi", "id", "tr", "pl", "nl", "auto"
     };
 
     public static final String[] LANG_NAMES = {
-            "自动检测", "中文", "日语", "英语", "韩语", "法语", "德语", "西班牙语", "俄语",
-            "阿拉伯语", "葡萄牙语", "意大利语", "泰语", "越南语", "印尼语", "土耳其语", "波兰语", "荷兰语"
+            "中文", "日语", "英语", "韩语", "法语", "德语", "西班牙语", "俄语",
+            "阿拉伯语", "葡萄牙语", "意大利语", "泰语", "越南语", "印尼语", "土耳其语", "波兰语", "荷兰语", "自动检测"
     };
 
     private Prefs() {
@@ -73,7 +73,7 @@ public final class Prefs {
     }
 
     public static String getSourceLang(Context context) {
-        return get(context).getString("source_lang", "auto");
+        return get(context).getString("source_lang", "zh");
     }
 
     public static void setSourceLang(Context context, String value) {
