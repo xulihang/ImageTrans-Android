@@ -30,14 +30,10 @@ import android.view.LayoutInflater;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewConfiguration;
-import android.view.ViewGroup;
 import android.view.WindowManager;
 import android.webkit.WebView;
-import android.widget.FrameLayout;
 import android.widget.LinearLayout;
-import android.widget.ProgressBar;
 import android.widget.TextView;
-
 
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
@@ -50,13 +46,12 @@ import java.util.concurrent.TimeUnit;
 /**
  * Screenshot translation as floating windows.
  *
- * A draggable ball starts a screen capture after the user picks a region
- * (or taps once to capture the whole screen); the translation then appears
- * in a floating panel on top of other apps. Text in the panel is tappable
- * (same source/target dialog as TranslateActivity) and the "×" clears it.
- * The ball must be expanded to capture again, so it never covers the screen
- * capture; that also allows a second capture of the same content with
- * different settings.
+ * Two things stay on screen together: a draggable ball and a selection frame
+ * ("选框"). Tapping "翻译" on the ball captures the frame's region; the
+ * translated image is shown inside the same frame (tapping its text opens the
+ * source/target dialog). The frame's "×" clears the result and leaves the
+ * frame ready for the next capture. The ball is hidden while capturing so it
+ * does not end up in the screenshot.
  */
 public class ScreenshotTranslateService extends Service {
     private static final String TAG = "ScreenshotTranslate";
@@ -98,27 +93,24 @@ public class ScreenshotTranslateService extends Service {
     private boolean ballExpanded;
     private final Runnable collapseBall = () -> setBallExpanded(false);
 
-    // Result panel
-    private FrameLayout panel;
-    private ZoomableImageView panelImage;
-    private LinearLayout panelStatus;
-    private TextView panelStatusText;
-    private TextView clearButton;
-    private WindowManager.LayoutParams panelParams;
-    private boolean panelShown;
+    // Selection frame, which also shows the result
+    private SelectionOverlay overlay;
+    private WindowManager.LayoutParams overlayParams;
+    private boolean overlayShown;
     private final List<Box> hitBoxes = new ArrayList<>();
-    private Bitmap translatedBitmap;
 
     // Capture
     private MediaProjection mediaProjection = null;
     private int projectionResultCode;
     private Intent projectionData;
-    private View selectionView;
-    private final Runnable hideBallForCapture = () -> {
-        if (ballShown) ball.setVisibility(View.GONE);
-    };
-
     private int generation;
+
+    private final Runnable autoHideNotification = () -> {
+        if (Build.VERSION.SDK_INT >= 33) {
+            getSystemService(NotificationManager.class).cancel(NOTIFICATION_ID);
+        }
+        stopForeground(STOP_FOREGROUND_REMOVE);
+    };
 
     // --- lifecycle --------------------------------------------------------
 
@@ -140,72 +132,22 @@ public class ScreenshotTranslateService extends Service {
         if (ACTION_SHOW.equals(action)) {
             projectionResultCode = intent.getIntExtra(EXTRA_RESULT_CODE, 0);
             projectionData = intent.getParcelableExtra(EXTRA_RESULT_DATA);
-            if (!ballShown) showBall();
-            try {
-                startCapture();
-            } catch (Throwable throwable) {
-                Log.e(TAG, "capture failed", throwable);
-                onCaptureError(throwable);
-            }
+            showWindows();
             return START_NOT_STICKY;
         }
-        enterForeground(getString(R.string.floating_preparing));
-        if (ACTION_BALL.equals(action) || intent == null || ACTION_START.equals(action)) {
-            // Restarted by the system (no capture token) or the user tapped
-            // the notification: offer the ball again, it asks for capture.
-            if (!ballShown) showBall();
-            else if (!panelShown) startCapture();
+        // Restarted by the system (no capture token) or the ball notification.
+        enterForeground(getString(R.string.floating_running));
+        if (!Prefs.hasOverlayPermission(this)) {
+            shutdown();
             return START_NOT_STICKY;
+        }
+        if (!ballShown || !overlayShown) {
+            // A restart lost the projection token; the buttons ask for it.
+            projectionData = null;
+            mediaProjection = null;
+            showWindows();
         }
         return START_NOT_STICKY;
-    }
-
-    /**
-     * Puts the service in the foreground. Android only hands out a screen
-     * projection to a foreground service of type mediaProjection, so this
-     * happens before getMediaProjection() is ever called.
-     */
-    private void enterForeground(String title) {
-        Intent content = new Intent(this, MainActivity.class);
-        PendingIntent pending = PendingIntent.getActivity(this, 0, content,
-                PendingIntent.FLAG_IMMUTABLE);
-        Notification notification = new Notification.Builder(this, CHANNEL_ID)
-                .setSmallIcon(R.mipmap.ic_launcher)
-                .setContentTitle(title)
-                .setContentIntent(pending)
-                .setOngoing(true)
-                .build();
-        if (Build.VERSION.SDK_INT >= 29) {
-            startForeground(NOTIFICATION_ID, notification,
-                    ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION);
-        } else {
-            startForeground(NOTIFICATION_ID, notification);
-        }
-    }
-
-    /** Starts the capture permission prompt if the token is missing/expired. */
-    private boolean ensureProjectionToken() throws Exception {
-        if (projectionData != null && mediaProjection == null) {
-            ensureProjection();
-            if (mediaProjection != null) return true;
-        } else if (mediaProjection != null) {
-            return true;
-        }
-        // No usable grant: ask again (e.g. after the user revoked it).
-        projectionData = null;
-        enterForeground(getString(R.string.floating_preparing));
-        startProjectionPermission();
-        return false;
-    }
-
-    private void onCaptureError(Throwable throwable) {
-        Log.e(TAG, "capture error", throwable);
-        ImageUtils.toast(this, "截屏失败：" + ImageUtils.humanError(throwable));
-        projectionData = null;
-        if (mediaProjection != null) {
-            mediaProjection.stop();
-            mediaProjection = null;
-        }
     }
 
     @Override
@@ -215,6 +157,7 @@ public class ScreenshotTranslateService extends Service {
 
     @Override
     public void onDestroy() {
+        mainHandler.removeCallbacksAndMessages(null);
         removeWindows();
         executor.shutdownNow();
         if (mediaProjection != null) mediaProjection.stop();
@@ -233,42 +176,75 @@ public class ScreenshotTranslateService extends Service {
         manager.createNotificationChannel(ballChannel);
     }
 
-    /** Foreground notification while the translation runs. */
-    private void prepareTranslationNotification() {
-        enterForeground(getString(R.string.floating_translating));
-        mainHandler.removeCallbacks(autoHideNotification);
-        mainHandler.postDelayed(autoHideNotification, NOTIFICATION_HIDE_DELAY_MS);
+    /**
+     * Puts the service in the foreground. Android only hands out a screen
+     * projection to a foreground service of type mediaProjection, so this
+     * happens before getMediaProjection() is ever called.
+     */
+    private void enterForeground(String title) {
+        Log.i(TAG, "enterForeground: " + title);
+        Intent content = new Intent(this, MainActivity.class);
+        PendingIntent pending = PendingIntent.getActivity(this, 0, content,
+                PendingIntent.FLAG_IMMUTABLE);
+        Notification notification = new Notification.Builder(this, CHANNEL_ID)
+                .setSmallIcon(R.mipmap.ic_launcher)
+                .setContentTitle(title)
+                .setContentIntent(pending)
+                .setOngoing(true)
+                .build();
+        try {
+            if (Build.VERSION.SDK_INT >= 29) {
+                startForeground(NOTIFICATION_ID, notification,
+                        ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION);
+            } else {
+                startForeground(NOTIFICATION_ID, notification);
+            }
+        } catch (Throwable throwable) {
+            // Without the projection type the system refuses the projection;
+            // say so instead of failing later with a bare NPE.
+            Log.e(TAG, "startForeground failed", throwable);
+            ImageUtils.toast(this, getString(R.string.floating_need_notifications));
+            shutdown();
+        }
     }
 
-    private final Runnable autoHideNotification = () -> {
-        NotificationManager manager = getSystemService(NotificationManager.class);
-        if (Build.VERSION.SDK_INT >= 33) {
-            manager.cancel(NOTIFICATION_ID);
-        }
-        stopForeground(STOP_FOREGROUND_REMOVE);
-    };
-
     private void shutdown() {
+        mainHandler.removeCallbacksAndMessages(null);
         removeWindows();
         mediaProjection = null;
+        projectionData = null;
         stopForeground(STOP_FOREGROUND_REMOVE);
         getSystemService(NotificationManager.class).cancel(NOTIFICATION_ID);
         stopSelf();
     }
 
     private void removeWindows() {
-        mainHandler.removeCallbacks(collapseBall);
-        mainHandler.removeCallbacks(hideBallForCapture);
-        mainHandler.removeCallbacks(autoHideNotification);
-        removeSelectionView();
-        if (panelShown) {
-            windowManager.removeView(panel);
-            panelShown = false;
+        if (overlayShown) {
+            windowManager.removeView(overlay);
+            overlay = null;
+            overlayShown = false;
         }
         if (ballShown) {
             windowManager.removeView(ball);
+            ball = null;
             ballShown = false;
         }
+    }
+
+    private void showWindows() {
+        enterForeground(getString(R.string.floating_running));
+        if (!ballShown) showBall();
+        if (!overlayShown) showOverlay();
+        // The ball is only needed as a launcher; shrink its notification.
+        NotificationManager manager = getSystemService(NotificationManager.class);
+        Notification.Builder builder = new Notification.Builder(this, CHANNEL_BALL_ID)
+                .setSmallIcon(R.mipmap.ic_launcher)
+                .setContentTitle(getString(R.string.floating_running))
+                .setContentText(getString(R.string.floating_running_hint))
+                .setOngoing(true);
+        manager.notify(NOTIFICATION_ID, builder.build());
+        mainHandler.removeCallbacks(autoHideNotification);
+        mainHandler.postDelayed(autoHideNotification, NOTIFICATION_HIDE_DELAY_MS);
     }
 
     private int overlayType() {
@@ -279,7 +255,8 @@ public class ScreenshotTranslateService extends Service {
 
     // --- floating ball ----------------------------------------------------
 
-    private View buildBall(Context themed) {
+    private void showBall() {
+        Context themed = new ContextThemeWrapper(this, R.style.FloatingTheme);
         LinearLayout row = new LinearLayout(themed);
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setGravity(Gravity.CENTER_VERTICAL);
@@ -299,12 +276,12 @@ public class ScreenshotTranslateService extends Service {
         captureItem.setGravity(Gravity.CENTER);
         captureItem.setPadding(dp(12), 0, dp(12), 0);
         captureItem.setOnClickListener(v -> {
-            Log.i(TAG, "capture tapped");
+            Log.i(TAG, "translate tapped");
             setBallExpanded(false);
-            startCapture();
+            capture();
         });
         row.addView(captureItem, new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT, dp(52)));
+                android.view.ViewGroup.LayoutParams.WRAP_CONTENT, dp(52)));
 
         TextView hideItem = new TextView(themed);
         hideItem.setText(R.string.action_close);
@@ -317,15 +294,9 @@ public class ScreenshotTranslateService extends Service {
             shutdown();
         });
         row.addView(hideItem, new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT, dp(52)));
-        return row;
-    }
+                android.view.ViewGroup.LayoutParams.WRAP_CONTENT, dp(52)));
 
-    private void showBall() {
-        if (ballShown) return;
-        Context themed = new ContextThemeWrapper(this, R.style.FloatingTheme);
-        ball = (LinearLayout) buildBall(themed);
-        ball.setOnTouchListener(new View.OnTouchListener() {
+        row.setOnTouchListener(new View.OnTouchListener() {
             private float downRawX, downRawY;
             private int downLeft, downTop;
             private boolean dragging;
@@ -379,11 +350,24 @@ public class ScreenshotTranslateService extends Service {
         ballParams.gravity = Gravity.TOP | Gravity.START;
         ballParams.x = Prefs.getFloatingBallX(this);
         ballParams.y = Prefs.getFloatingBallY(this);
+        ball = row;
         windowManager.addView(ball, ballParams);
-        clampBall();
-        windowManager.updateViewLayout(ball, ballParams);
         ballShown = true;
         setBallExpanded(false);
+        ball.post(this::clampBallAtStart);
+    }
+
+    /** Keeps a saved position valid after a screen size change. */
+    private void clampBallAtStart() {
+        if (!ballShown || ball == null) return;
+        int x = ballParams.x;
+        int y = ballParams.y;
+        clampBall();
+        if (x != ballParams.x || y != ballParams.y) {
+            windowManager.updateViewLayout(ball, ballParams);
+            Prefs.setFloatingBallX(this, ballParams.x);
+            Prefs.setFloatingBallY(this, ballParams.y);
+        }
     }
 
     private void setBallExpanded(boolean expanded) {
@@ -404,47 +388,74 @@ public class ScreenshotTranslateService extends Service {
         ballParams.y = Math.max(0, Math.min(maxY, ballParams.y));
     }
 
+    // --- selection frame --------------------------------------------------
+
+    private void showOverlay() {
+        overlay = new SelectionOverlay(this, new SelectionOverlay.Callback() {
+            @Override
+            public void onSelected(Rect rect) {
+                Log.i(TAG, "frame region " + rect);
+                capture(rect);
+            }
+
+            @Override
+            public void onCancelled() {
+                Log.i(TAG, "overlay cancelled");
+                shutdown();
+            }
+        });
+        overlay.setTapListener(this::onOverlayTap);
+        overlayParams = new WindowManager.LayoutParams(
+                WindowManager.LayoutParams.MATCH_PARENT,
+                WindowManager.LayoutParams.MATCH_PARENT,
+                overlayType(),
+                WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
+                PixelFormat.TRANSLUCENT);
+        overlayParams.gravity = Gravity.TOP | Gravity.START;
+        overlayParams.setTitle("SelectionOverlay");
+        windowManager.addView(overlay, overlayParams);
+        overlayShown = true;
+    }
+
     // --- capture ----------------------------------------------------------
 
-    private void startCapture() {
+    private void capture() {
         if (!Prefs.hasOverlayPermission(this)) {
             ImageUtils.toast(this, getString(R.string.floating_need_overlay));
             shutdown();
             return;
         }
+        enterForeground(getString(R.string.floating_translating));
+        mainHandler.removeCallbacks(autoHideNotification);
         try {
-            if (!ensureProjectionToken()) return;
+            if (!ensureProjection()) {
+                // Permission prompt: the result comes back through ACTION_SHOW.
+                projectionData = null;
+                mainHandler.removeCallbacks(autoHideNotification);
+                return;
+            }
         } catch (Throwable throwable) {
             Log.e(TAG, "projection setup failed", throwable);
             onCaptureError(throwable);
             return;
         }
-        showSelection();
+        capture(overlay.getFrameRect());
     }
 
-    private void startProjectionPermission() {
-        Log.i(TAG, "asking for capture permission");
-        startActivity(new Intent(this, ProjectionPermissionActivity.class)
-                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
-    }
-
-    private void ensureProjection() {
-        if (mediaProjection != null) return;
-        if (projectionData == null) return;
-        // Must be a foreground service of type mediaProjection by now,
-        // otherwise the system throws SecurityException.
-        enterForeground(getString(R.string.floating_preparing));
-        MediaProjectionManager manager = getSystemService(MediaProjectionManager.class);
-        try {
-            mediaProjection = manager.getMediaProjection(projectionResultCode, projectionData);
-        } catch (RuntimeException e) {
-            // The grant was used up or expired: ask for it again.
-            Log.w(TAG, "getMediaProjection failed: " + e);
-            projectionData = null;
-            mediaProjection = null;
-            return;
+    private boolean ensureProjection() {
+        if (mediaProjection != null) return true;
+        if (projectionData == null) {
+            startProjectionPermission();
+            return false;
         }
-        if (mediaProjection == null) return;
+        enterForeground(getString(R.string.floating_translating));
+        mediaProjection = restartMediaProjection();
+        if (mediaProjection == null) {
+            // The grant was used up or expired: ask for it again.
+            projectionData = null;
+            startProjectionPermission();
+            return false;
+        }
         mediaProjection.registerCallback(new MediaProjection.Callback() {
             @Override
             public void onStop() {
@@ -454,68 +465,78 @@ public class ScreenshotTranslateService extends Service {
                 projectionResultCode = 0;
             }
         }, mainHandler);
+        return true;
     }
 
-    private void showSelection() {
-        removeSelectionView();
-        if (ballShown) ball.setVisibility(View.GONE);
-        final SelectionOverlay overlay = new SelectionOverlay(this, new SelectionOverlay.Callback() {
-            @Override
-            public void onSelected(Rect rect) {
-                Log.i(TAG, "region selected " + rect);
-                removeSelectionView();
-                captureRegion(rect);
+    /**
+     * Creates the projection with the stored grant. Only one projection can
+     * come out of a grant, so the grant is reobtained on each capture; this
+     * must be done on the main thread, where the grant was received.
+     */
+    private MediaProjection restartMediaProjection() {
+        if (projectionData == null) return null;
+        MediaProjectionManager manager = getSystemService(MediaProjectionManager.class);
+        MediaProjection created = null;
+        for (int attempt = 0; attempt < 2 && created == null; attempt++) {
+            try {
+                created = manager.getMediaProjection(projectionResultCode, projectionData);
+            } catch (RuntimeException e) {
+                Log.w(TAG, "getMediaProjection failed (attempt " + attempt + "): " + e);
+                // Projection needs a mediaProjection-type foreground service.
+                enterForeground(getString(R.string.floating_translating));
             }
-
-            @Override
-            public void onCancelled() {
-                Log.i(TAG, "region selection cancelled");
-                removeSelectionView();
-                if (ballShown) ball.setVisibility(View.VISIBLE);
-                if (!panelShown) {
-                    // Nothing was open: stop the foreground notification later.
-                    mainHandler.postDelayed(() -> {
-                        if (!panelShown) shutdown();
-                    }, 300);
-                }
-            }
-        });
-        WindowManager.LayoutParams params = new WindowManager.LayoutParams(
-                WindowManager.LayoutParams.MATCH_PARENT,
-                WindowManager.LayoutParams.MATCH_PARENT,
-                overlayType(),
-                WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
-                PixelFormat.TRANSLUCENT);
-        params.gravity = Gravity.TOP | Gravity.START;
-        windowManager.addView(overlay, params);
-        selectionView = overlay;
-    }
-
-    private void removeSelectionView() {
-        if (selectionView != null) {
-            windowManager.removeView(selectionView);
-            selectionView = null;
         }
+        Log.i(TAG, "mediaProjection " + (created == null ? "unavailable" : "created"));
+        return created;
     }
 
-    private void captureRegion(final Rect rect) {
-        final int width = rect.width();
-        final int height = rect.height();
-        if (width <= 0 || height <= 0) {
-            if (ballShown) ball.setVisibility(View.VISIBLE);
+    private void startProjectionPermission() {
+        Log.i(TAG, "asking for capture permission");
+        startActivity(new Intent(this, ProjectionPermissionActivity.class)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+    }
+
+    /** Captures the given screen region, then translates it in the frame. */
+    private void capture(Rect region) {
+        Rect rect = new Rect(region);
+        if (rect.width() <= 0 || rect.height() <= 0) return;
+        if (mediaProjection == null) {
+            // A capture called directly by the overlay also needs a projection.
+            try {
+                if (!ensureProjection()) return;
+            } catch (Throwable throwable) {
+                onCaptureError(throwable);
+                return;
+            }
+        }
+        Log.i(TAG, "capturing " + rect + " mode=projection");
+        captureProjection(rect);
+    }
+
+    /**
+     * Mirrors the whole screen into an ImageReader (the only size a
+     * projection reliably accepts) and cuts out the requested region in
+     * memory; the full-screen bitmap is recycled immediately.
+     */
+    private void captureProjection(Rect rect) {
+        final DisplayMetrics metrics = getResources().getDisplayMetrics();
+        final int screenWidth = metrics.widthPixels;
+        final int screenHeight = metrics.heightPixels;
+        // The overlay is hidden (not removed) rather than going invisible:
+        // some systems stop the projection when the app's UI leaves the
+        // screen, and the overlay still counts as visible UI.
+        overlay.setVisibility(View.INVISIBLE);
+        final Rect screen = new Rect(0, 0, screenWidth, screenHeight);
+        final Rect crop = new Rect(rect);
+        crop.intersect(screen);
+        if (crop.isEmpty()) {
+            imageOnCaptured(null, null);
             return;
         }
-        // The selection overlay is already gone; let the app redraw without
-        // the dimmed screen before grabbing pixels.
-        mainHandler.postDelayed(hideBallForCapture, 0);
-        mainHandler.postDelayed(() -> doCapture(rect), 350);
-    }
-
-    private void doCapture(final Rect rect) {
-        final int width = rect.width();
-        final int height = rect.height();
-        Log.i(TAG, "capturing " + rect);
-        final ImageReader reader = ImageReader.newInstance(width, height, PixelFormat.RGBA_8888, 2);
+        final ImageReader reader = ImageReader.newInstance(screenWidth, screenHeight,
+                PixelFormat.RGBA_8888, 2);
+        final int screenHeightFinal = screenHeight;
+        final int screenWidthFinal = screenWidth;
         final VirtualDisplay[] display = {null};
         final Runnable release = () -> {
             if (display[0] != null) {
@@ -525,70 +546,106 @@ public class ScreenshotTranslateService extends Service {
             reader.close();
         };
         final long startedAt = SystemClock.uptimeMillis();
-        final boolean[] got = {false};
-        reader.setOnImageAvailableListener(r -> {
-            if (got[0]) return;
-            got[0] = true;
-            Bitmap bitmap = null;
-            Image image = null;
-            try {
-                image = r.acquireLatestImage();
-            } catch (Exception e) {
-                Log.e(TAG, "acquireLatestImage failed: " + e);
-            }
-            if (image != null) {
-                try {
-                    ByteBuffer buffer = image.getPlanes()[0].getBuffer();
-                    int pixelStride = image.getPlanes()[0].getPixelStride();
-                    int rowStride = image.getPlanes()[0].getRowStride();
-                    int rowPadding = rowStride - pixelStride * width;
-                    int paddedWidth = width + rowPadding / pixelStride;
-                    bitmap = Bitmap.createBitmap(paddedWidth, height, Bitmap.Config.ARGB_8888);
-                    bitmap.copyPixelsFromBuffer(buffer);
-                    if (paddedWidth != width) {
-                        Bitmap cropped = Bitmap.createBitmap(bitmap, 0, 0, width, height);
-                        bitmap.recycle();
-                        bitmap = cropped;
-                    }
-                    Log.i(TAG, "captured " + width + "x" + height
-                            + " in " + (SystemClock.uptimeMillis() - startedAt) + "ms");
-                } catch (Throwable throwable) {
-                    Log.e(TAG, "reading capture failed", throwable);
-                } finally {
-                    image.close();
-                }
-            }
-            reader.setOnImageAvailableListener(null, null);
-            final Bitmap result = bitmap;
-            mainHandler.post(() -> {
+        // Hide the ball first, then give the screen a moment to redraw
+        // without it before grabbing pixels.
+        mainHandler.postDelayed(() -> {
+            if (mediaProjection == null) {
                 release.run();
-                onCaptured(result);
-            });
+                imageOnCaptured(null, "截屏授权已失效，请再点一次翻译");
+                return;
+            }
+            try {
+                display[0] = mediaProjection.createVirtualDisplay("screenshot-translate",
+                        screenWidthFinal, screenHeightFinal, metrics.densityDpi,
+                        DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR,
+                        reader.getSurface(), null, mainHandler);
+            } catch (Throwable throwable) {
+                Log.e(TAG, "createVirtualDisplay failed", throwable);
+                release.run();
+                imageOnCaptured(null, ImageUtils.humanError(throwable));
+            }
+        }, 300);
+        reader.setOnImageAvailableListener(new ImageReader.OnImageAvailableListener() {
+            @Override
+            public void onImageAvailable(ImageReader r) {
+                // The listener runs on the service's main handler; do the
+                // (slow) decoding off it so the UI stays responsive.
+                r.setOnImageAvailableListener(null, null);
+                executor.execute(() -> decodeScreen(r, crop, screenWidthFinal, screenHeightFinal,
+                        startedAt, release));
+            }
         }, mainHandler);
-
-        try {
-            display[0] = mediaProjection.createVirtualDisplay("screenshot-translate",
-                    width, height, getResources().getDisplayMetrics().densityDpi,
-                    DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR,
-                    reader.getSurface(), null, mainHandler);
-        } catch (Throwable throwable) {
-            Log.e(TAG, "createVirtualDisplay failed", throwable);
-            release.run();
-            onCaptured(null);
-        }
     }
 
-    private void onCaptured(final Bitmap bitmap) {
+    private void decodeScreen(ImageReader r, Rect crop, int screenWidthFinal,
+                              int screenHeightFinal, long startedAt, Runnable release) {
+        Image image = null;
+        String error = null;
+        Bitmap bitmap = null;
+        try {
+            image = r.acquireLatestImage();
+        } catch (Exception e) {
+            Log.e(TAG, "acquireLatestImage failed: " + e);
+        }
+        if (image != null) {
+            try {
+                ByteBuffer buffer = image.getPlanes()[0].getBuffer();
+                int pixelStride = image.getPlanes()[0].getPixelStride();
+                int rowStride = image.getPlanes()[0].getRowStride();
+                int rowPadding = rowStride - pixelStride * screenWidthFinal;
+                int paddedWidth = screenWidthFinal + rowPadding / pixelStride;
+                Bitmap full = Bitmap.createBitmap(paddedWidth, screenHeightFinal,
+                        Bitmap.Config.ARGB_8888);
+                full.copyPixelsFromBuffer(buffer);
+                Bitmap result = full;
+                if (paddedWidth != screenWidthFinal || !crop.isEmpty()) {
+                    result = Bitmap.createBitmap(full, crop.left, crop.top,
+                            crop.width(), crop.height());
+                    if (result != full) full.recycle();
+                }
+                bitmap = result;
+                Log.i(TAG, "captured " + result.getWidth() + "x" + result.getHeight()
+                        + " in " + (SystemClock.uptimeMillis() - startedAt) + "ms");
+            } catch (Throwable throwable) {
+                Log.e(TAG, "reading capture failed", throwable);
+                error = ImageUtils.humanError(throwable);
+            } finally {
+                image.close();
+            }
+        } else {
+            error = "没有收到图像";
+        }
+        final Bitmap result = bitmap;
+        final String message = error;
+        mainHandler.post(() -> {
+            release.run();
+            imageOnCaptured(result, message);
+        });
+    }
+
+    private void imageOnCaptured(Bitmap bitmap, String error) {
+        releaseProjection();
+        overlay.setVisibility(View.VISIBLE);
+        if (ballShown) ball.setVisibility(View.VISIBLE);
         if (bitmap == null) {
-            ImageUtils.toast(this, getString(R.string.floating_capture_failed));
-            if (ballShown) ball.setVisibility(View.VISIBLE);
+            overlay.showTranslation(null, error != null
+                    ? getString(R.string.floating_capture_failed) + "：" + error
+                    : getString(R.string.floating_capture_failed));
             return;
         }
-        showPanel();
-        showStatus(R.string.floating_translating);
+        onCaptured(bitmap);
+    }
+
+    private void onCaptured(Bitmap bitmap) {
+        if (ballShown) ball.setVisibility(View.VISIBLE);
+        overlay.showStatus(getString(R.string.floating_translating));
+        if (bitmap == null) {
+            overlay.showTranslation(null, getString(R.string.floating_capture_failed));
+            return;
+        }
         final int current = ++generation;
-        // The capture bitmap is needed as the renderer's background, so it is
-        // released only once the render callback has run.
+        // The capture bitmap is the renderer's background, so it is released
+        // only after the render callback has run.
         executor.execute(() -> {
             WebHelper helper = null;
             try {
@@ -597,19 +654,22 @@ public class ScreenshotTranslateService extends Service {
                 Log.i(TAG, "detected " + (result == null ? 0 : result.boxes.size()) + " boxes");
                 if (result == null) {
                     mainHandler.post(() -> {
-                        if (current == generation) showStatusText(getString(R.string.floating_no_text));
+                        if (current == generation) {
+                            overlay.showTranslation(null, getString(R.string.floating_no_text));
+                        }
                     });
                     return;
                 }
                 if (current != generation) return;
                 helper = new WebHelper();
                 final WebHelper renderHelper = helper;
+                final List<Box> boxes = result.boxes;
                 final String imageDataUrl = ImageUtils.bitmapToDataUrl(bitmap);
                 mainHandler.post(() -> {
                     if (current != generation) return;
                     try {
                         List<Box> renderable = new ArrayList<>();
-                        for (Box box : result.boxes) {
+                        for (Box box : boxes) {
                             if (box.target != null && !box.target.trim().isEmpty()) renderable.add(box);
                         }
                         renderHelper.renderer.render(renderable, imageDataUrl,
@@ -621,17 +681,22 @@ public class ScreenshotTranslateService extends Service {
                                             rendered.recycle();
                                             return;
                                         }
-                                        showTranslated(rendered, result.boxes);
+                                        showTranslated(rendered, boxes);
                                     }
 
                                     @Override
                                     public void onError(String message) {
-                                        if (current == generation) showStatusText("翻译失败：" + message);
+                                        if (current == generation) {
+                                            overlay.showTranslation(null, getString(
+                                                    R.string.floating_translate_failed, message));
+                                        }
                                     }
                                 });
                     } catch (Throwable throwable) {
                         if (current == generation) {
-                            showStatusText("翻译失败：" + ImageUtils.humanError(throwable));
+                            overlay.showTranslation(null, getString(
+                                    R.string.floating_translate_failed,
+                                    ImageUtils.humanError(throwable)));
                         }
                     }
                 });
@@ -639,233 +704,54 @@ public class ScreenshotTranslateService extends Service {
                 Log.e(TAG, "translation failed", throwable);
                 mainHandler.post(() -> {
                     if (current != generation) return;
-                    showStatusText("翻译失败：" + ImageUtils.humanError(throwable));
+                    overlay.showTranslation(null, getString(R.string.floating_translate_failed,
+                            ImageUtils.humanError(throwable)));
                 });
             } finally {
-                // Renderer must be destroyed on the main thread, and only
-                // after the render it was started for has finished; give the
-                // timeout a generous margin.
+                // Renderer must be destroyed on the main thread, after the
+                // render it was started for has finished (timeout + margin).
                 if (helper != null) {
                     final WebHelper toDestroy = helper;
-                    mainHandler.postDelayed(toDestroy::destroy, 5 * 60 * 1000);
+                    mainHandler.postDelayed(toDestroy::destroy, 3 * 60 * 1000);
                 }
             }
         });
+    }
+
+    private void onCaptureError(Throwable throwable) {
+        Log.e(TAG, "capture error", throwable);
+        if (overlayShown) {
+            overlay.showTranslation(null, getString(R.string.floating_capture_failed));
+        }
+        ImageUtils.toast(this, "截屏失败：" + ImageUtils.humanError(throwable));
+        if (mediaProjection != null) {
+            mediaProjection.stop();
+            mediaProjection = null;
+        }
+        projectionData = null;
+    }
+
+    /** Releases the screen capture once a capture has finished with it. */
+    private void releaseProjection() {
+        if (mediaProjection != null) {
+            Log.i(TAG, "releasing projection");
+            mediaProjection.stop();
+            mediaProjection = null;
+        }
     }
 
     private void showTranslated(Bitmap bitmap, List<Box> boxes) {
-        if (translatedBitmap != null && translatedBitmap != bitmap) translatedBitmap.recycle();
-        translatedBitmap = bitmap;
         hitBoxes.clear();
         hitBoxes.addAll(boxes);
-        panelImage.setImage(bitmap);
-        panelStatus.setVisibility(View.GONE);
-        clearButton.setVisibility(View.VISIBLE);
+        overlay.showTranslation(bitmap, null);
         Log.i(TAG, "translation shown, " + boxes.size() + " boxes");
     }
 
-    private void showStatus(int stringRes) {
-        showStatusText(getString(stringRes));
-    }
-
-    private void showStatusText(String text) {
-        panelStatus.setVisibility(View.VISIBLE);
-        panelStatusText.setText(text);
-        clearButton.setVisibility(hitBoxes.isEmpty() ? View.GONE : View.VISIBLE);
-    }
-
-    // --- result panel -----------------------------------------------------
-
-    private void showPanel() {
-        if (panelShown) return;
-        Context themed = new ContextThemeWrapper(this, R.style.FloatingTheme);
-        FrameLayout root = new FrameLayout(themed);
-        root.setBackgroundResource(R.drawable.floating_panel_bg);
-
-        panelImage = new ZoomableImageView(themed);
-        panelImage.setTapListener(this::onPanelTap);
-        root.addView(panelImage, new FrameLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
-
-        panelStatus = new LinearLayout(themed);
-        panelStatus.setOrientation(LinearLayout.HORIZONTAL);
-        panelStatus.setGravity(Gravity.CENTER);
-        panelStatus.setBackgroundColor(0xE6FFFFFF);
-        ProgressBar progress = new ProgressBar(themed);
-        panelStatus.addView(progress, new LinearLayout.LayoutParams(dp(24), dp(24)));
-        panelStatusText = new TextView(themed);
-        panelStatusText.setTextColor(getColor(R.color.text_primary));
-        panelStatusText.setTextSize(14);
-        panelStatusText.setText(R.string.floating_loading);
-        panelStatus.addView(panelStatusText, new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT) {{
-            setMargins(dp(8), 0, 0, 0);
-        }});
-        root.addView(panelStatus, new FrameLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT,
-                Gravity.CENTER));
-
-        clearButton = new TextView(themed);
-        clearButton.setText("×");
-        clearButton.setTextColor(getColor(R.color.white));
-        clearButton.setTextSize(22);
-        clearButton.setGravity(Gravity.CENTER);
-        clearButton.setBackgroundResource(R.drawable.clear_button_bg);
-        clearButton.setVisibility(View.GONE);
-        clearButton.setOnClickListener(v -> clearResult());
-        FrameLayout.LayoutParams clearParams = new FrameLayout.LayoutParams(dp(40), dp(40));
-        clearParams.gravity = Gravity.TOP | Gravity.END;
-        clearParams.setMargins(dp(20), dp(20), dp(8), dp(8));
-        root.addView(clearButton, clearParams);
-
-        panel = root;
-        panelParams = new WindowManager.LayoutParams(
-                Prefs.getFloatingPanelWidth(this),
-                Prefs.getFloatingPanelHeight(this),
-                overlayType(),
-                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
-                PixelFormat.TRANSLUCENT);
-        panelParams.gravity = Gravity.TOP | Gravity.START;
-        panelParams.x = Prefs.getFloatingPanelX(this);
-        panelParams.y = Prefs.getFloatingPanelY(this);
-        clampPanel();
-        windowManager.addView(panel, panelParams);
-        panelShown = true;
-        installPanelDrag(root);
-        installPanelResize(root);
-    }
-
-    private void installPanelDrag(View root) {
-        final int titleBar = dp(48);
-        root.setOnTouchListener(new View.OnTouchListener() {
-            private float downRawX, downRawY;
-            private int downX, downY;
-            private boolean dragging;
-
-            @Override
-            public boolean onTouch(View v, MotionEvent event) {
-                if (event.getActionMasked() == MotionEvent.ACTION_DOWN
-                        && event.getY() > titleBar) {
-                    return false;
-                }
-                switch (event.getActionMasked()) {
-                    case MotionEvent.ACTION_DOWN:
-                        downRawX = event.getRawX();
-                        downRawY = event.getRawY();
-                        downX = panelParams.x;
-                        downY = panelParams.y;
-                        dragging = false;
-                        return true;
-                    case MotionEvent.ACTION_MOVE:
-                        dragging = true;
-                        panelParams.x = downX + (int) (event.getRawX() - downRawX);
-                        panelParams.y = downY + (int) (event.getRawY() - downRawY);
-                        clampPanel();
-                        windowManager.updateViewLayout(panel, panelParams);
-                        return true;
-                    case MotionEvent.ACTION_UP:
-                        if (dragging) {
-                            Prefs.setFloatingPanelX(ScreenshotTranslateService.this, panelParams.x);
-                            Prefs.setFloatingPanelY(ScreenshotTranslateService.this, panelParams.y);
-                        }
-                        dragging = false;
-                        return true;
-                    default:
-                        return false;
-                }
-            }
-        });
-    }
-
-    /** Resize by dragging the bottom-end corner. */
-    private void installPanelResize(View root) {
-        Context themed = new ContextThemeWrapper(this, R.style.FloatingTheme);
-        TextView grip = new TextView(themed);
-        grip.setText("◢");
-        grip.setTextColor(getColor(R.color.white));
-        grip.setTextSize(14);
-        grip.setGravity(Gravity.CENTER);
-        grip.setBackgroundResource(R.drawable.clear_button_bg);
-        ((FrameLayout) root).addView(grip, new FrameLayout.LayoutParams(
-                dp(36), dp(36), Gravity.BOTTOM | Gravity.END));
-        grip.setOnTouchListener(new View.OnTouchListener() {
-            private float downRawX, downRawY;
-            private int downW, downH;
-
-            @Override
-            public boolean onTouch(View v, MotionEvent event) {
-                switch (event.getActionMasked()) {
-                    case MotionEvent.ACTION_DOWN:
-                        downRawX = event.getRawX();
-                        downRawY = event.getRawY();
-                        downW = panelParams.width;
-                        downH = panelParams.height;
-                        return true;
-                    case MotionEvent.ACTION_MOVE: {
-                        int maxW = getResources().getDisplayMetrics().widthPixels - panelParams.x;
-                        int maxH = getResources().getDisplayMetrics().heightPixels - panelParams.y;
-                        panelParams.width = Math.max(dp(120), Math.min(maxW,
-                                downW + (int) (event.getRawX() - downRawX)));
-                        panelParams.height = Math.max(dp(120), Math.min(maxH,
-                                downH + (int) (event.getRawY() - downRawY)));
-                        windowManager.updateViewLayout(panel, panelParams);
-                        return true;
-                    }
-                    case MotionEvent.ACTION_UP:
-                        Prefs.setFloatingPanelWidth(ScreenshotTranslateService.this, panelParams.width);
-                        Prefs.setFloatingPanelHeight(ScreenshotTranslateService.this, panelParams.height);
-                        return true;
-                    default:
-                        return false;
-                }
-            }
-        });
-    }
-
-    private void clampPanel() {
-        DisplayMetrics metrics = getResources().getDisplayMetrics();
-        panelParams.width = Math.min(panelParams.width, metrics.widthPixels);
-        panelParams.height = Math.min(panelParams.height, metrics.heightPixels);
-        panelParams.x = Math.max(0, Math.min(metrics.widthPixels - panelParams.width, panelParams.x));
-        panelParams.y = Math.max(0, Math.min(metrics.heightPixels - panelParams.height, panelParams.y));
-    }
-
-    private void clearResult() {
-        Log.i(TAG, "clear tapped");
-        generation++;
-        hitBoxes.clear();
-        panelImage.setImage(null);
-        if (translatedBitmap != null) {
-            translatedBitmap.recycle();
-            translatedBitmap = null;
-        }
-        panelStatus.setVisibility(View.GONE);
-        clearButton.setVisibility(View.GONE);
-        windowManager.removeView(panel);
-        panelShown = false;
-        if (ballShown) ball.setVisibility(View.VISIBLE);
-        mainHandler.removeCallbacks(autoHideNotification);
-        stopForeground(STOP_FOREGROUND_REMOVE);
-        // The ball now runs from its own notification.
-        Intent intent = new Intent(this, ScreenshotTranslateService.class);
-        PendingIntent show = PendingIntent.getService(this, 0,
-                new Intent(this, ScreenshotTranslateService.class).setAction(ACTION_BALL),
-                PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
-        Notification notification = new Notification.Builder(this, CHANNEL_BALL_ID)
-                .setSmallIcon(R.mipmap.ic_launcher)
-                .setContentTitle(getString(R.string.floating_running))
-                .setContentText(getString(R.string.floating_running_hint))
-                .setContentIntent(show)
-                .setOngoing(true)
-                .build();
-        getSystemService(NotificationManager.class).notify(NOTIFICATION_ID, notification);
-    }
-
-    private void onPanelTap(float x, float y) {
-        if (hitBoxes.isEmpty() || panelImage == null) return;
-        float[] image = panelImage.viewToImage(x, y);
-        float scale = Math.max(panelImage.getImageScale(), 0.01f);
-        float minSize = dp(44) / scale;
+    /** A tap on the frame's content. Returns true when it opened a dialog. */
+    private boolean onOverlayTap(float x, float y) {
+        if (hitBoxes.isEmpty() || overlay == null) return false;
+        float scale = 1f;
+        float minSize = dp(44) / Math.max(scale, 0.01f);
         int best = -1;
         double bestArea = Double.MAX_VALUE;
         for (int i = 0; i < hitBoxes.size(); i++) {
@@ -873,8 +759,8 @@ public class ScreenshotTranslateService extends Service {
             if (!box.hasText()) continue;
             float growX = Math.max(0, ((float) minSize - (float) box.width) / 2f);
             float growY = Math.max(0, ((float) minSize - (float) box.height) / 2f);
-            if (image[0] < box.left() - growX || image[0] > box.right() + growX
-                    || image[1] < box.top() - growY || image[1] > box.bottom() + growY) {
+            if (x < box.left() - growX || x > box.right() + growX
+                    || y < box.top() - growY || y > box.bottom() + growY) {
                 continue;
             }
             double area = box.width * box.height;
@@ -883,8 +769,10 @@ public class ScreenshotTranslateService extends Service {
                 best = i;
             }
         }
-        Log.i(TAG, "panel tap " + image[0] + "," + image[1] + " -> box " + best);
-        if (best >= 0) showTextBoxDialog(best);
+        Log.i(TAG, "tap " + x + "," + y + " -> box " + best);
+        if (best < 0) return false;
+        showTextBoxDialog(best);
+        return true;
     }
 
     private void showTextBoxDialog(int index) {
@@ -920,9 +808,7 @@ public class ScreenshotTranslateService extends Service {
             final CountDownLatch latch = new CountDownLatch(1);
             mainHandler.post(() -> {
                 try {
-                    WebView webView = new WebView(ScreenshotTranslateService.this);
-                    renderer = new Renderer(webView);
-                    holder[0] = renderer;
+                    holder[0] = new Renderer(new WebView(ScreenshotTranslateService.this));
                 } catch (Throwable throwable) {
                     error[0] = throwable;
                 } finally {
