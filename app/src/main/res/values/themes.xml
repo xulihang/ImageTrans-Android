@@ -11,8 +11,28 @@
         <item name="android:fontFamily">sans</item>
     </style>
 
+    <!-- Floating-window chrome: light theme so dialogs opened from the
+         screenshot service match the app. -->
+    <style name="FloatingTheme" parent="@android:style/Theme.Material.Light.DialogWhenLarge">
+        <item name="android:colorPrimary">@color/primary</item>
+        <item name="android:colorAccent">@color/accent</item>
+        <item name="android:windowBackground">@color/card</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:fontFamily">sans</item>
+    </style>
+
     <!-- Referenced by the rapidocr4j AAR manifest. -->
     <style name="Theme.RapidOcrAndroid4j" parent="@android:style/Theme.Material.Light.NoActionBar" />
+
+    <!-- Selectable (copyable) text in the text-box dialog. -->
+    <style name="SelectableText">
+        <item name="android:theme">@android:style/Theme.Material</item>
+        <item name="android:textColor">@color/text_primary</item>
+        <item name="android:textSize">16sp</item>
+        <item name="android:lineSpacingExtra">3dp</item>
+        <item name="android:textIsSelectable">true</item>
+    </style>
 
     <style name="PrimaryButton" parent="@android:style/Widget.Material.Button">
         <item name="android:backgroundTint">@color/primary</item>
@@ -27,14 +47,6 @@
         <item name="android:textSize">15sp</item>
         <item name="android:textAllCaps">false</item>
         <item name="android:minHeight">44dp</item>
-    </style>
-
-    <style name="SelectableText">
-        <item name="android:theme">@android:style/Theme.Material</item>
-        <item name="android:textColor">@color/text_primary</item>
-        <item name="android:textSize">16sp</item>
-        <item name="android:lineSpacingExtra">3dp</item>
-        <item name="android:textIsSelectable">true</item>
     </style>
 
     <style name="SectionTitle">

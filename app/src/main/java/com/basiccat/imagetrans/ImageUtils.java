@@ -18,11 +18,16 @@ import android.util.Log;
 import android.util.Size;
 import android.widget.Toast;
 
+import org.json.JSONException;
+import org.json.JSONObject;
+
 import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.text.SimpleDateFormat;
+import java.util.ArrayList;
 import java.util.Date;
+import java.util.List;
 import java.util.Locale;
 
 public final class ImageUtils {
@@ -270,5 +275,62 @@ public final class ImageUtils {
 
     public static boolean isAtLeastQ() {
         return Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q;
+    }
+
+    public static void recycle(Bitmap bitmap) {
+        if (bitmap != null) bitmap.recycle();
+    }
+
+    /** Bitmaps for the current settings, or null when there is no text. */
+    public static final class Result {
+        /** All detected boxes, including ones without a translation. */
+        public final List<Box> boxes;
+
+        Result(List<Box> boxes) {
+            this.boxes = boxes;
+        }
+    }
+
+    /**
+     * Detects and translates text on a bitmap with the current settings
+     * (server, local OCR + OpenAI, or recognize only). Returns null when
+     * nothing was found; otherwise the caller renders with the returned boxes.
+     */
+    public static Result detectAndTranslate(Context context, Bitmap bitmap) throws Exception {
+        String mode = Prefs.getMode(context);
+        List<Box> boxes;
+        if (Prefs.MODE_IMAGETRANS.equals(mode)) {
+            boxes = ImageTransServer.translate(context, bitmapToDataUrl(bitmap)).boxes;
+        } else {
+            String sourceLang = Prefs.getSourceLang(context);
+            boxes = OcrEngine.getInstance(context).recognize(bitmap, sourceLang, message -> { });
+            if (boxes.isEmpty()) throw new Exception("没有识别到文字");
+            boxes = TextBoxMerger.merge(boxes, sourceLang, 15, 15);
+            if (Prefs.MODE_OPENAI.equals(mode)) {
+                List<String> texts = new ArrayList<>();
+                for (Box box : boxes) texts.add(box.source);
+                List<String> translations = OpenAiTranslator.translate(context, texts);
+                for (int i = 0; i < boxes.size() && i < translations.size(); i++) {
+                    boxes.get(i).target = translations.get(i);
+                }
+            } else {
+                for (Box box : boxes) box.target = box.source;
+            }
+        }
+        for (Box box : boxes) {
+            if (box.target != null && !box.target.trim().isEmpty()) return new Result(boxes);
+        }
+        return null;
+    }
+
+    public static JSONObject buildRenderOptions(Context context) throws JSONException {
+        JSONObject options = new JSONObject();
+        options.put("renderMode", "dom");
+        options.put("renderTextCSS", Prefs.getRenderCss(context));
+        options.put("minFontSize", Prefs.getMinFontSize(context));
+        options.put("textRepairMode", Prefs.getTextRepairMode(context));
+        options.put("sourceLang", Prefs.getSourceLang(context));
+        options.put("targetLang", Prefs.getTargetLang(context));
+        return options;
     }
 }

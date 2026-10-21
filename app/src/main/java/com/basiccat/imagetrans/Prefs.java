@@ -1,7 +1,10 @@
 package com.basiccat.imagetrans;
 
 import android.content.Context;
+import android.content.Intent;
 import android.content.SharedPreferences;
+import android.net.Uri;
+import android.provider.Settings;
 
 /**
  * Application settings stored in SharedPreferences.
@@ -171,6 +174,88 @@ public final class Prefs {
             }
         }
         return code;
+    }
+
+    // --- floating screenshot translation ---------------------------------
+
+    public static boolean isFloatingEnabled(Context context) {
+        return get(context).getBoolean("floating_enabled", false);
+    }
+
+    public static void setFloatingEnabled(Context context, boolean value) {
+        get(context).edit().putBoolean("floating_enabled", value).apply();
+    }
+
+    public static boolean hasOverlayPermission(Context context) {
+        return Settings.canDrawOverlays(context);
+    }
+
+    public static boolean isOverlayAsked(Context context) {
+        return get(context).getBoolean("overlay_asked", false);
+    }
+
+    public static void setOverlayAsked(Context context) {
+        get(context).edit().putBoolean("overlay_asked", true).apply();
+    }
+
+    public static Intent overlayPermissionIntent(Context context) {
+        return new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                Uri.parse("package:" + context.getPackageName()));
+    }
+
+    public static int getFloatingBallX(Context context) {
+        return get(context).getInt("floating_ball_x", 0);
+    }
+
+    public static int getFloatingBallY(Context context) {
+        return get(context).getInt("floating_ball_y",
+                Math.round(300 * context.getResources().getDisplayMetrics().density));
+    }
+
+    public static void setFloatingBallX(Context context, int value) {
+        get(context).edit().putInt("floating_ball_x", value).apply();
+    }
+
+    public static void setFloatingBallY(Context context, int value) {
+        get(context).edit().putInt("floating_ball_y", value).apply();
+    }
+
+    public static int getFloatingPanelX(Context context) {
+        return get(context).getInt("floating_panel_x",
+                Math.round(24 * context.getResources().getDisplayMetrics().density));
+    }
+
+    public static int getFloatingPanelY(Context context) {
+        return get(context).getInt("floating_panel_y",
+                Math.round(400 * context.getResources().getDisplayMetrics().density));
+    }
+
+    public static void setFloatingPanelX(Context context, int value) {
+        get(context).edit().putInt("floating_panel_x", value).apply();
+    }
+
+    public static void setFloatingPanelY(Context context, int value) {
+        get(context).edit().putInt("floating_panel_y", value).apply();
+    }
+
+    public static int getFloatingPanelWidth(Context context) {
+        int screen = context.getResources().getDisplayMetrics().widthPixels;
+        return Math.min(get(context).getInt("floating_panel_width", Math.round(screen * 0.66f)),
+                screen);
+    }
+
+    public static int getFloatingPanelHeight(Context context) {
+        int screen = context.getResources().getDisplayMetrics().heightPixels;
+        return Math.min(get(context).getInt("floating_panel_height", Math.round(screen * 0.5f)),
+                screen);
+    }
+
+    public static void setFloatingPanelWidth(Context context, int value) {
+        get(context).edit().putInt("floating_panel_width", value).apply();
+    }
+
+    public static void setFloatingPanelHeight(Context context, int value) {
+        get(context).edit().putInt("floating_panel_height", value).apply();
     }
 
     public static String modeName(String mode) {

@@ -4,6 +4,10 @@
 
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <application
         android:allowBackup="true"
@@ -38,6 +42,19 @@
             android:exported="false"
             android:label="@string/title_settings"
             android:windowSoftInputMode="adjustResize" />
+
+        <activity
+            android:name=".ProjectionPermissionActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar" />
+
+        <!-- Screenshot translation: floating ball + translated result window.
+             Not exported: only the app itself starts it. -->
+        <service
+            android:name=".ScreenshotTranslateService"
+            android:exported="false"
+            android:foregroundServiceType="mediaProjection" />
     </application>
 
 </manifest>

@@ -309,14 +309,7 @@ public class TranslateActivity extends Activity {
     }
 
     private JSONObject buildRenderOptions() throws Exception {
-        JSONObject options = new JSONObject();
-        options.put("renderMode", "dom");
-        options.put("renderTextCSS", Prefs.getRenderCss(this));
-        options.put("minFontSize", Prefs.getMinFontSize(this));
-        options.put("textRepairMode", Prefs.getTextRepairMode(this));
-        options.put("sourceLang", Prefs.getSourceLang(this));
-        options.put("targetLang", Prefs.getTargetLang(this));
-        return options;
+        return ImageUtils.buildRenderOptions(this);
     }
 
     /**
