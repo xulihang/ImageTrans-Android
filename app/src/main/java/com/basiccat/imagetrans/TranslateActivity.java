@@ -2,9 +2,12 @@ package com.basiccat.imagetrans;
 
 import android.app.Activity;
 import android.app.AlertDialog;
+import android.content.ClipData;
+import android.content.ClipboardManager;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
@@ -521,7 +524,8 @@ public class TranslateActivity extends Activity {
     private void showTextBoxDialog(final int index) {
         View content = getLayoutInflater().inflate(R.layout.dialog_text_box, null);
         TextView sourceText = content.findViewById(R.id.sourceText);
-        TextView targetText = content.findViewById(R.id.targetText);        AlertDialog.Builder builder = new AlertDialog.Builder(this)
+        TextView targetText = content.findViewById(R.id.targetText);
+        AlertDialog.Builder builder = new AlertDialog.Builder(this)
                 .setTitle(getString(R.string.text_box_title, index + 1, hitBoxes.size()))
                 .setView(content)
                 .setPositiveButton(R.string.action_close, null);
@@ -536,7 +540,29 @@ public class TranslateActivity extends Activity {
         Box box = hitBoxes.get(index);
         sourceText.setText(emptyIfBlank(box.source));
         targetText.setText(emptyIfBlank(box.target));
+        // Selectable (long press to copy part of it); a tap copies all.
+        enableSelection(sourceText);
+        enableSelection(targetText);
+        sourceText.setOnClickListener(this::copyText);
+        targetText.setOnClickListener(this::copyText);
         builder.show();
+    }
+
+    private static void enableSelection(TextView view) {
+        // Not focusable, so a long press only selects (no keyboard).
+        view.setFocusable(false);
+        view.setFocusableInTouchMode(false);
+        view.setTextIsSelectable(true);
+    }
+
+    private void copyText(View view) {
+        CharSequence text = ((TextView) view).getText();
+        if (text == null || text.length() == 0) return;
+        ClipboardManager clipboard = (ClipboardManager) getSystemService(CLIPBOARD_SERVICE);
+        clipboard.setPrimaryClip(ClipData.newPlainText("text", text));
+        if (Build.VERSION.SDK_INT < 33) {
+            ImageUtils.toast(this, getString(R.string.copied));
+        }
     }
 
     private String emptyIfBlank(String text) {
