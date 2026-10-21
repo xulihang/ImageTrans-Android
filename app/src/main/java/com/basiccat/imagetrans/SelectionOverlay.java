@@ -489,7 +489,9 @@ public class SelectionOverlay extends View {
                 if (clearing) return true;
                 float dx = x - downX;
                 float dy = y - downY;
-                if (!dragged && Math.hypot(dx, dy) < touchSlop) return true;
+                if (!dragged && Math.hypot(rawX - downRawX, rawY - downRawY) < touchSlop) {
+                    return true;
+                }
                 if (!dragged) {
                     dragged = true;
                     if (dragCorner < 0) {
@@ -550,14 +552,30 @@ public class SelectionOverlay extends View {
 
     /** Corner handles 0-3, edge handles 4 (top) and 5 (bottom). */
     private int cornerAt(float x, float y) {
-        // Comfortably larger than the drawn dots.
+        // Edge handles only stick out of the frame; inside it, only the
+        // corners (plus a small margin) resize.
         float r = 22 * density;
+        float inset = 12 * density;
         float cx = frame.exactCenterX();
         float cy = frame.exactCenterY();
-        float[] hx = {frame.left, frame.right, frame.left, frame.right, cx, cx};
-        float[] hy = {frame.top, frame.top, frame.bottom, frame.bottom, frame.top, frame.bottom};
-        for (int i = 0; i < hx.length; i++) {
-            if (Math.hypot(x - hx[i], y - hy[i]) < r) return i;
+        float[][] corners = {
+                {frame.left, frame.top}, {frame.right, frame.top},
+                {frame.right, frame.bottom}, {frame.left, frame.bottom}};
+        int best = -1;
+        float bestDistance = r;
+        for (int i = 0; i < corners.length; i++) {
+            float distance = (float) Math.hypot(x - corners[i][0], y - corners[i][1]);
+            if (distance < bestDistance) {
+                bestDistance = distance;
+                best = i;
+            }
+        }
+        if (best >= 0) return best;
+        boolean above = y < frame.top + inset;
+        boolean below = y > frame.bottom - inset;
+        if (Math.abs(x - cx) < r) {
+            if (above) return 4;
+            if (below) return 5;
         }
         return -1;
     }
@@ -606,25 +624,26 @@ public class SelectionOverlay extends View {
         boolean leftMoves = dragCorner == 0 || dragCorner == 3;
         boolean topMoves = dragCorner == 0 || dragCorner == 1;
         if (leftMoves) {
-            left = Math.min(left, right - minFrame);
+            left = Math.max(0, Math.min(left, right - minFrame));
             right = startRight;
         } else if (dragCorner == 1 || dragCorner == 2) {
-            right = Math.max(right, left + minFrame);
+            right = Math.min(screenWidth, Math.max(right, left + minFrame));
             left = startLeft;
         } else {
             left = startLeft;
             right = startRight;
         }
         if (topMoves) {
-            top = Math.min(top, bottom - minFrame);
+            top = Math.max(0, Math.min(top, bottom - minFrame));
             bottom = startBottom;
         } else if (dragCorner == 2 || dragCorner == 5) {
-            bottom = Math.max(bottom, top + minFrame);
+            bottom = Math.min(screenHeight, Math.max(bottom, top + minFrame));
             top = startTop;
         } else {
             top = startTop;
             bottom = startBottom;
         }
+
         boolean changed = frame.left != left || frame.top != top
                 || frame.right != right || frame.bottom != bottom;
         if (changed) {
