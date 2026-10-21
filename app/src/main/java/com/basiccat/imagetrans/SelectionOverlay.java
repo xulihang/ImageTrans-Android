@@ -65,6 +65,7 @@ public class SelectionOverlay extends View {
     private int dragCorner = -1;
     private boolean dragBox;
     private boolean dragged;
+    private boolean clearing;
     private float downX, downY;
     private int startLeft, startTop, startRight, startBottom;
 
@@ -79,7 +80,9 @@ public class SelectionOverlay extends View {
         setFocusable(true);
         setFocusableInTouchMode(true);
 
-        borderPaint.setColor(0xFFF9A825);
+        // Neutral grey frame: it is captured inside the region (a bright
+        // colour would tint the result's edge).
+        borderPaint.setColor(0x991F2933);
         borderPaint.setStyle(Paint.Style.STROKE);
         borderPaint.setStrokeWidth(2 * density);
         handlePaint.setColor(0xFF1565C0);
@@ -135,10 +138,12 @@ public class SelectionOverlay extends View {
                 canvas.drawRoundRect(handle.left, handle.top, handle.right, handle.bottom,
                         handleSize, handleSize, handlePaint);
             }
+            // The hint sits outside the frame (it would be captured inside
+            // and end up in the translated image).
             String hint = getContext().getString(R.string.selection_hint);
-            float y = selection.top - Math.round(14 * density) - hintPaint.getTextSize();
+            float y = selection.top - Math.round(24 * density);
             if (y < hintPaint.getTextSize()) {
-                y = selection.top + hintPaint.getTextSize() + Math.round(10 * density);
+                y = selection.bottom + Math.round(28 * density);
             }
             canvas.drawText(hint, selection.exactCenterX(), y, hintPaint);
             return;
@@ -229,14 +234,16 @@ public class SelectionOverlay extends View {
                 startBottom = selection.bottom;
                 dragCorner = -1;
                 dragBox = false;
+                // A button always contains the touch, so the matching ACTION_UP
+                // can never turn into a "translate again" tap on the frame.
+                if (state == STATE_RESULT && clearRect.contains((int) downX, (int) downY)) {
+                    clearing = true;
+                    return true;
+                }
                 if (state == STATE_SELECT) {
                     dragCorner = cornerAt(downX, downY);
                     dragBox = dragCorner < 0 && selection.contains((int) downX, (int) downY);
                 } else {
-                    if (clearRect.contains((int) downX, (int) downY)) {
-                        clearResult();
-                        return true;
-                    }
                     // With a result shown, the frame is moved by its border;
                     // drags inside the frame are for selecting text later.
                     dragBox = borderNear(downX, downY);
@@ -258,7 +265,15 @@ public class SelectionOverlay extends View {
                 invalidate();
                 return true;
             }
+            case MotionEvent.ACTION_CANCEL:
+                clearing = false;
+                return true;
             case MotionEvent.ACTION_UP:
+                if (clearing) {
+                    clearing = false;
+                    clearResult();
+                    return true;
+                }
                 if (!dragged) {
                     if (state == STATE_RESULT) {
                         if (selection.contains((int) event.getX(), (int) event.getY())) {

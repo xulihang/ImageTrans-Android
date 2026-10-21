@@ -442,6 +442,11 @@ public class ScreenshotTranslateService extends Service {
         capture(overlay.getFrameRect());
     }
 
+    /**
+     * Makes sure a live projection exists. The session is kept for as long
+     * as the floating windows run, so only the first capture needs the system
+     * permission prompt; it is recreated only if the user or system ended it.
+     */
     private boolean ensureProjection() {
         if (mediaProjection != null) return true;
         if (projectionData == null) {
@@ -451,7 +456,6 @@ public class ScreenshotTranslateService extends Service {
         enterForeground(getString(R.string.floating_translating));
         mediaProjection = restartMediaProjection();
         if (mediaProjection == null) {
-            // The grant was used up or expired: ask for it again.
             projectionData = null;
             startProjectionPermission();
             return false;
@@ -459,7 +463,7 @@ public class ScreenshotTranslateService extends Service {
         mediaProjection.registerCallback(new MediaProjection.Callback() {
             @Override
             public void onStop() {
-                Log.i(TAG, "projection stopped");
+                Log.i(TAG, "projection stopped by system");
                 mediaProjection = null;
                 projectionData = null;
                 projectionResultCode = 0;
@@ -468,11 +472,6 @@ public class ScreenshotTranslateService extends Service {
         return true;
     }
 
-    /**
-     * Creates the projection with the stored grant. Only one projection can
-     * come out of a grant, so the grant is reobtained on each capture; this
-     * must be done on the main thread, where the grant was received.
-     */
     private MediaProjection restartMediaProjection() {
         if (projectionData == null) return null;
         MediaProjectionManager manager = getSystemService(MediaProjectionManager.class);
@@ -624,7 +623,6 @@ public class ScreenshotTranslateService extends Service {
     }
 
     private void imageOnCaptured(Bitmap bitmap, String error) {
-        releaseProjection();
         overlay.setVisibility(View.VISIBLE);
         if (ballShown) ball.setVisibility(View.VISIBLE);
         if (bitmap == null) {
@@ -728,16 +726,8 @@ public class ScreenshotTranslateService extends Service {
             mediaProjection.stop();
             mediaProjection = null;
         }
+        // The grant is single-use; the next capture asks for a new one.
         projectionData = null;
-    }
-
-    /** Releases the screen capture once a capture has finished with it. */
-    private void releaseProjection() {
-        if (mediaProjection != null) {
-            Log.i(TAG, "releasing projection");
-            mediaProjection.stop();
-            mediaProjection = null;
-        }
     }
 
     private void showTranslated(Bitmap bitmap, List<Box> boxes) {
