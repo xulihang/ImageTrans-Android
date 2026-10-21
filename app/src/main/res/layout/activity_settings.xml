@@ -107,6 +107,23 @@
                 android:singleLine="true" />
 
             <TextView
+                style="@style/FieldLabel"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="渲染方式" />
+
+            <Spinner
+                android:id="@+id/spinnerServerRender"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content" />
+
+            <TextView
+                style="@style/Note"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="服务端渲染直接使用 ImageTrans 项目自身的排版，下面的“排版渲染”设置不参与；App 内渲染只取回文字框，使用下方 CSS、最小字号等设置排版。服务端渲染失败时会自动回退到文字框。" />
+
+            <TextView
                 style="@style/Note"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"

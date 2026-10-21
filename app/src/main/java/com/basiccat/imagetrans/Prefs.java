@@ -13,6 +13,11 @@ public final class Prefs {
     public static final String MODE_OPENAI = "openai";
     public static final String MODE_ORIGINAL = "original";
 
+    /** Use the image rendered by ImageTrans (its project's layout settings). */
+    public static final String SERVER_RENDER_SERVER = "server";
+    /** Request text boxes only and render them with the app's WebView settings. */
+    public static final String SERVER_RENDER_APP = "app";
+
     /** Cloud server: Android cannot run the desktop ImageTrans server locally. */
     public static final String DEFAULT_SERVER_URL = "https://service.basiccat.org:51043";
     /** Old default; on a phone it resolves to the phone itself, so migrate it. */
@@ -61,6 +66,14 @@ public final class Prefs {
 
     public static void setServerUrl(Context context, String value) {
         get(context).edit().putString("server_url", value).apply();
+    }
+
+    public static String getServerRenderMode(Context context) {
+        return get(context).getString("server_render_mode", SERVER_RENDER_SERVER);
+    }
+
+    public static void setServerRenderMode(Context context, String value) {
+        get(context).edit().putString("server_render_mode", value).apply();
     }
 
     public static String getDisplayName(Context context) {

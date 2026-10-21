@@ -147,12 +147,23 @@ public class TranslateActivity extends Activity {
         String imageDataUrl = ImageUtils.bitmapToDataUrl(bitmap);
         ImageTransServer.Result result = ImageTransServer.translate(TranslateActivity.this, imageDataUrl);
 
-        if (!result.boxes.isEmpty()) {
+        // Default: show the image ImageTrans rendered (its project's layout).
+        // "App rendering" instead prefers the returned boxes and lays them out
+        // with the app's own CSS/font settings. Either way, fall back to the
+        // other response shape if the preferred one is missing.
+        boolean preferServerImage = !Prefs.SERVER_RENDER_APP.equals(
+                Prefs.getServerRenderMode(TranslateActivity.this));
+        boolean useBoxes = preferServerImage
+                ? result.renderedImageDataUrl == null && !result.boxes.isEmpty()
+                : !result.boxes.isEmpty();
+
+        if (useBoxes) {
             status("WebView 渲染排版…");
             renderBoxes(result.boxes, bitmap);
             return;
         }
         if (result.renderedImageDataUrl != null) {
+            status("显示 ImageTrans 渲染结果…");
             Bitmap rendered = ImageUtils.dataUrlToBitmap(result.renderedImageDataUrl);
             if (rendered == null) {
                 throw new Exception("服务器返回的图片无法解码");

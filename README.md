@@ -5,13 +5,13 @@ ImageTrans 的 Android 客户端。当前版本先实现**图片翻译**；拍�
 ## 已实现
 
 - 从相册 / 文件选择一张图片并翻译。
-- **ImageTrans 服务器模式**：调用 `POST {serverURL}/translate`，以 `withoutImage=true` 取回文字框，再在 App 内用 WebView 渲染译文。
+- **ImageTrans 服务器模式**：调用 `POST {serverURL}/translate`。默认由服务器渲染并直接显示返回的图片（使用 ImageTrans 项目自身的排版）；也可以在设置里改为 App 内渲染，此时传 `withoutImage=true` 取回文字框，再用 App 的 WebView 和 CSS/字号设置排版。任一结果缺失时自动回退到另一种。
 - **本地 OCR + OpenAI 兼容 API**：使用 rapidocr4j-android 在设备上做检测和识别，再把文本发给 OpenAI 兼容接口翻译。
 - **仅识别模式**：只做 OCR，把识别结果覆盖回图片，方便调试。
 - **长条漫**：解码时保留长图比例（不再压到最长边 3500px）；OCR 按扩展的规则以 4×宽度为一块切分识别；渲染也分块进行再纵向拼接，避开 WebView/Canvas 的尺寸和内存限制。
 - 译文保存到相册、分享。
 - 原文 / 译文切换。
-- 设置：服务器地址、项目名称、密码、OpenAI 地址/Key/模型、语言对、渲染 CSS、最小字号、原文背景处理方式。
+- 设置：服务器地址、项目名称、密码、服务器渲染方式（服务端渲染 / App 内渲染）、OpenAI 地址/Key/模型、语言对、渲染 CSS、最小字号、原文背景处理方式。
 
 ## 架构
 

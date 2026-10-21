@@ -13,6 +13,10 @@ import android.widget.Spinner;
 public class SettingsActivity extends Activity {
     private static final String[] REPAIR_NAMES = {"白色背景", "取背景色", "不处理"};
     private static final String[] REPAIR_VALUES = {"white", "background", "none"};
+    private static final String[] RENDER_NAMES = {
+            "服务端渲染（ImageTrans 返回图片）", "App 内渲染（返回文字框）"};
+    private static final String[] RENDER_VALUES = {
+            Prefs.SERVER_RENDER_SERVER, Prefs.SERVER_RENDER_APP};
 
     private RadioGroup modeGroup;
     private RadioButton modeImagetrans;
@@ -23,6 +27,7 @@ public class SettingsActivity extends Activity {
     private EditText editServerUrl;
     private EditText editDisplayName;
     private EditText editPassword;
+    private Spinner spinnerServerRender;
     private EditText editOpenAiUrl;
     private EditText editOpenAiKey;
     private EditText editOpenAiModel;
@@ -46,6 +51,7 @@ public class SettingsActivity extends Activity {
         editServerUrl = findViewById(R.id.editServerUrl);
         editDisplayName = findViewById(R.id.editDisplayName);
         editPassword = findViewById(R.id.editPassword);
+        spinnerServerRender = findViewById(R.id.spinnerServerRender);
         editOpenAiUrl = findViewById(R.id.editOpenAiUrl);
         editOpenAiKey = findViewById(R.id.editOpenAiKey);
         editOpenAiModel = findViewById(R.id.editOpenAiModel);
@@ -84,6 +90,11 @@ public class SettingsActivity extends Activity {
                 this, android.R.layout.simple_spinner_item, REPAIR_NAMES);
         repairAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
         spinnerRepairMode.setAdapter(repairAdapter);
+
+        ArrayAdapter<String> renderAdapter = new ArrayAdapter<>(
+                this, android.R.layout.simple_spinner_item, RENDER_NAMES);
+        renderAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+        spinnerServerRender.setAdapter(renderAdapter);
     }
 
     private void loadSettings() {
@@ -99,6 +110,13 @@ public class SettingsActivity extends Activity {
         editServerUrl.setText(Prefs.getServerUrl(this));
         editDisplayName.setText(Prefs.getDisplayName(this));
         editPassword.setText(Prefs.getPassword(this));
+        String renderMode = Prefs.getServerRenderMode(this);
+        for (int i = 0; i < RENDER_VALUES.length; i++) {
+            if (RENDER_VALUES[i].equals(renderMode)) {
+                spinnerServerRender.setSelection(i);
+                break;
+            }
+        }
         editOpenAiUrl.setText(Prefs.getOpenAiUrl(this));
         editOpenAiKey.setText(Prefs.getOpenAiKey(this));
         editOpenAiModel.setText(Prefs.getOpenAiModel(this));
@@ -155,6 +173,8 @@ public class SettingsActivity extends Activity {
         Prefs.setServerUrl(this, serverUrl);
         Prefs.setDisplayName(this, editDisplayName.getText().toString().trim());
         Prefs.setPassword(this, editPassword.getText().toString());
+        Prefs.setServerRenderMode(this,
+                RENDER_VALUES[spinnerServerRender.getSelectedItemPosition()]);
         Prefs.setOpenAiUrl(this, editOpenAiUrl.getText().toString().trim());
         Prefs.setOpenAiKey(this, editOpenAiKey.getText().toString().trim());
         Prefs.setOpenAiModel(this, editOpenAiModel.getText().toString().trim());

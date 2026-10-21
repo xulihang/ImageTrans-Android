@@ -21,9 +21,11 @@ import java.util.Map;
  *   POST {serverURL}/translate
  *   Content-Type: application/x-www-form-urlencoded
  *
- * With withoutImage=true the server returns text boxes, which we render in
- * the app's WebView. Older server versions may still return a rendered image;
- * both response shapes are supported.
+ * By default the server renders the translated image (its project's layout
+ * settings apply) and we display it directly. If the "app rendering" option
+ * is selected, withoutImage=true asks for text boxes instead, which the app's
+ * WebView renders with its own CSS/font settings. Both response shapes are
+ * supported either way.
  */
 public final class ImageTransServer {
     public static class Result {
@@ -55,7 +57,9 @@ public final class ImageTransServer {
         form.put("displayName", displayName);
         form.put("password", Prefs.getPassword(context));
         form.put("headless", "true");
-        form.put("withoutImage", "true");
+        if (Prefs.SERVER_RENDER_APP.equals(Prefs.getServerRenderMode(context))) {
+            form.put("withoutImage", "true");
+        }
 
         String sourceLang = Prefs.getSourceLang(context);
         String targetLang = Prefs.getTargetLang(context);
