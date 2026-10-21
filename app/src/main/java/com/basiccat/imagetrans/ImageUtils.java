@@ -6,12 +6,16 @@ import android.content.Context;
 import android.content.Intent;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
+import android.graphics.ColorSpace;
+import android.graphics.ImageDecoder;
 import android.graphics.Matrix;
 import android.media.ExifInterface;
 import android.net.Uri;
 import android.os.Build;
 import android.provider.MediaStore;
 import android.util.Base64;
+import android.util.Log;
+import android.util.Size;
 import android.widget.Toast;
 
 import java.io.ByteArrayOutputStream;
@@ -22,8 +26,13 @@ import java.util.Date;
 import java.util.Locale;
 
 public final class ImageUtils {
+    private static final String TAG = "ImageUtils";
     private static final int MAX_DIMENSION = 3500;
     private static final long MAX_PIXELS = 12_000_000L;
+    /** Tall images may keep up to this width instead of being squeezed to MAX_DIMENSION. */
+    private static final int MAX_TALL_WIDTH = 2000;
+    /** height > width * 4 is a webtoon: OCR and rendering split it into parts. */
+    private static final int TALL_ASPECT = 4;
     private static final int MAX_SAMPLE = 8;
 
     private ImageUtils() {
@@ -39,6 +48,25 @@ public final class ImageUtils {
         }
         if (bounds.outWidth <= 0 || bounds.outHeight <= 0) {
             throw new Exception("无法读取图片尺寸");
+        }
+
+        int orientation = readOrientation(context, uri);
+        // BitmapFactory's bounds are in the encoded orientation; a rotated
+        // image swaps width and height once decoded.
+        boolean swapsAxes = orientation == ExifInterface.ORIENTATION_ROTATE_90
+                || orientation == ExifInterface.ORIENTATION_ROTATE_270
+                || orientation == ExifInterface.ORIENTATION_TRANSPOSE
+                || orientation == ExifInterface.ORIENTATION_TRANSVERSE;
+        int orientedWidth = swapsAxes ? bounds.outHeight : bounds.outWidth;
+        int orientedHeight = swapsAxes ? bounds.outWidth : bounds.outHeight;
+        if (isTall(orientedWidth, orientedHeight)) {
+            // A long webtoon cannot use the maxDimension cap: squeezing the
+            // long side to 3500 would leave a handful of pixels of width.
+            // ImageDecoder scales during decode, so no oversized intermediate
+            // bitmap is allocated.
+            Bitmap tall = decodeTall(context, uri, orientedWidth, orientedHeight);
+            if (tall != null) return tall;
+            Log.w(TAG, "ImageDecoder unavailable for tall image, falling back to BitmapFactory");
         }
 
         int sample = 1;
@@ -58,7 +86,6 @@ public final class ImageUtils {
             throw new Exception("无法解码图片");
         }
 
-        int orientation = readOrientation(context, uri);
         if (orientation != ExifInterface.ORIENTATION_NORMAL) {
             bitmap = applyOrientation(bitmap, orientation);
         }
@@ -98,6 +125,44 @@ public final class ImageUtils {
             return exif.getAttributeInt(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL);
         } catch (Exception e) {
             return ExifInterface.ORIENTATION_NORMAL;
+        }
+    }
+
+    /** Whether the image is a webtoon-style strip that OCR/rendering must split. */
+    static boolean isTall(int width, int height) {
+        return width > 0 && height > (long) width * TALL_ASPECT;
+    }
+
+    /**
+     * Decodes a tall image with ImageDecoder, which scales during decode (so no
+     * huge intermediate bitmap) and applies EXIF orientation itself. The target
+     * keeps the strip's width and caps the total pixel count instead of the
+     * long side, which is what makes webtoon text readable.
+     */
+    private static Bitmap decodeTall(Context context, Uri uri, int orientedWidth, int orientedHeight) {
+        float scale = Math.min(1f, Math.min(
+                (float) MAX_TALL_WIDTH / orientedWidth,
+                (float) Math.sqrt((double) MAX_PIXELS / ((double) orientedWidth * orientedHeight))));
+        try {
+            ImageDecoder.Source source = ImageDecoder.createSource(context.getContentResolver(), uri);
+            Bitmap bitmap = ImageDecoder.decodeBitmap(source, (decoder, info, src) -> {
+                Size size = info.getSize();
+                int width = Math.max(1, Math.round(size.getWidth() * scale));
+                int height = Math.max(1, Math.round(size.getHeight() * scale));
+                decoder.setTargetSize(width, height);
+                decoder.setAllocator(ImageDecoder.ALLOCATOR_SOFTWARE);
+                // Keep the bitmap at 8 bits per channel; RGBA_F16 would double
+                // the memory a webtoon already needs.
+                decoder.setTargetColorSpace(ColorSpace.get(ColorSpace.Named.SRGB));
+            });
+            if (bitmap != null) {
+                Log.i(TAG, "tall image decoded " + bitmap.getWidth() + "x" + bitmap.getHeight()
+                        + " (scale " + scale + ")");
+            }
+            return bitmap;
+        } catch (Throwable throwable) {
+            Log.w(TAG, "tall decode failed", throwable);
+            return null;
         }
     }
 

@@ -2,10 +2,12 @@ package com.basiccat.imagetrans;
 
 import android.app.Activity;
 import android.graphics.Bitmap;
+import android.graphics.Canvas;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import android.util.Log;
 import android.view.View;
 import android.webkit.WebView;
 import android.widget.Button;
@@ -18,8 +20,10 @@ import org.json.JSONObject;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Single-image translation flow:
@@ -28,6 +32,8 @@ import java.util.concurrent.Executors;
  *   -> render boxes with the WebView renderer -> show / save / share.
  */
 public class TranslateActivity extends Activity {
+    private static final String TAG = "TranslateActivity";
+
     private ImageView imageView;
     private TextView errorText;
     private TextView statusText;
@@ -143,7 +149,7 @@ public class TranslateActivity extends Activity {
 
         if (!result.boxes.isEmpty()) {
             status("WebView 渲染排版…");
-            renderBoxes(result.boxes, imageDataUrl);
+            renderBoxes(result.boxes, bitmap);
             return;
         }
         if (result.renderedImageDataUrl != null) {
@@ -205,10 +211,10 @@ public class TranslateActivity extends Activity {
         }
 
         status("WebView 渲染排版…");
-        renderBoxes(boxes, ImageUtils.bitmapToDataUrl(bitmap));
+        renderBoxes(boxes, bitmap);
     }
 
-    private void renderBoxes(final List<Box> boxes, final String imageDataUrl) {
+    private void renderBoxes(final List<Box> boxes, final Bitmap bitmap) {
         final List<Box> renderable = new ArrayList<>();
         for (Box box : boxes) {
             if (box.target != null && !box.target.trim().isEmpty()) {
@@ -220,18 +226,24 @@ public class TranslateActivity extends Activity {
             return;
         }
 
+        final JSONObject options;
+        try {
+            options = buildRenderOptions();
+        } catch (Throwable throwable) {
+            postError(throwable);
+            return;
+        }
+
+        if (RenderChunks.needsSplit(bitmap)) {
+            renderChunked(renderable, bitmap, options);
+            return;
+        }
+
+        final String imageDataUrl = ImageUtils.bitmapToDataUrl(bitmap);
         mainHandler.post(new Runnable() {
             @Override
             public void run() {
                 try {
-                    JSONObject options = new JSONObject();
-                    options.put("renderMode", "dom");
-                    options.put("renderTextCSS", Prefs.getRenderCss(TranslateActivity.this));
-                    options.put("minFontSize", Prefs.getMinFontSize(TranslateActivity.this));
-                    options.put("textRepairMode", Prefs.getTextRepairMode(TranslateActivity.this));
-                    options.put("sourceLang", Prefs.getSourceLang(TranslateActivity.this));
-                    options.put("targetLang", Prefs.getTargetLang(TranslateActivity.this));
-
                     ensureRenderer();
                     renderer.render(renderable, imageDataUrl, options, new Renderer.Callback() {
                         @Override
@@ -249,6 +261,103 @@ public class TranslateActivity extends Activity {
                 }
             }
         });
+    }
+
+    private JSONObject buildRenderOptions() throws Exception {
+        JSONObject options = new JSONObject();
+        options.put("renderMode", "dom");
+        options.put("renderTextCSS", Prefs.getRenderCss(this));
+        options.put("minFontSize", Prefs.getMinFontSize(this));
+        options.put("textRepairMode", Prefs.getTextRepairMode(this));
+        options.put("sourceLang", Prefs.getSourceLang(this));
+        options.put("targetLang", Prefs.getTargetLang(this));
+        return options;
+    }
+
+    /**
+     * Renders a webtoon-sized image one vertical chunk at a time, then stitches
+     * the chunks into a full-size bitmap. A single offscreen WebView canvas of
+     * a 10000+ px tall strip exceeds the WebView/GPU canvas limits, so the
+     * extension's whole-image render cannot be used here.
+     */
+    private void renderChunked(final List<Box> renderable, final Bitmap bitmap,
+                               final JSONObject options) {
+        final List<RenderChunks.Chunk> chunks = RenderChunks.split(bitmap, renderable);
+        final int width = bitmap.getWidth();
+        final int height = bitmap.getHeight();
+        final Bitmap result;
+        try {
+            result = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
+        } catch (OutOfMemoryError error) {
+            postError(new Exception("图片过大，内存不足，无法渲染"));
+            return;
+        }
+        Canvas canvas = new Canvas(result);
+
+        for (int i = 0; i < chunks.size(); i++) {
+            final RenderChunks.Chunk chunk = chunks.get(i);
+            status("WebView 渲染排版…（" + (i + 1) + "/" + chunks.size() + "）");
+
+            Bitmap region = Bitmap.createBitmap(bitmap, 0, chunk.top, width, chunk.height);
+            final String dataUrl = ImageUtils.bitmapToDataUrl(region);
+            region.recycle();
+
+            final CountDownLatch latch = new CountDownLatch(1);
+            final Bitmap[] rendered = new Bitmap[1];
+            final String[] error = new String[1];
+            mainHandler.post(new Runnable() {
+                @Override
+                public void run() {
+                    try {
+                        ensureRenderer();
+                        renderer.render(chunk.boxes, dataUrl, options, new Renderer.Callback() {
+                            @Override
+                            public void onSuccess(Bitmap chunkBitmap, String url) {
+                                rendered[0] = chunkBitmap;
+                                latch.countDown();
+                            }
+
+                            @Override
+                            public void onError(String message) {
+                                error[0] = message == null ? "渲染失败" : message;
+                                latch.countDown();
+                            }
+                        });
+                    } catch (Throwable throwable) {
+                        error[0] = ImageUtils.humanError(throwable);
+                        latch.countDown();
+                    }
+                }
+            });
+
+            try {
+                if (!latch.await(120, TimeUnit.SECONDS)) {
+                    error[0] = "渲染超时";
+                }
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                error[0] = "渲染被中断";
+            }
+            if (error[0] != null) {
+                if (rendered[0] != null) rendered[0].recycle();
+                result.recycle();
+                postError(new Exception(error[0]));
+                return;
+            }
+            Bitmap chunkBitmap = rendered[0];
+            if (chunkBitmap == null) {
+                result.recycle();
+                postError(new Exception("渲染结果为空"));
+                return;
+            }
+            if (chunkBitmap.getWidth() != width || chunkBitmap.getHeight() != chunk.height) {
+                Log.w(TAG, "chunk size mismatch: expected " + width + "x" + chunk.height
+                        + ", got " + chunkBitmap.getWidth() + "x" + chunkBitmap.getHeight());
+            }
+            canvas.drawBitmap(chunkBitmap, 0, chunk.top, null);
+            chunkBitmap.recycle();
+        }
+        showResult(result);
     }
 
     private void ensureRenderer() {

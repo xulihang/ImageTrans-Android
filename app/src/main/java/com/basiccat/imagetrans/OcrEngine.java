@@ -38,6 +38,9 @@ public final class OcrEngine extends NativeInference {
     private static final String REC_DICT = NativeInference.MODEL_DIR + "ppocrv6_dict.txt";
     private static final String YOLO_MODEL = NativeInference.MODEL_DIR + "model.onnx";
     private static final String CLS_MODEL = NativeInference.MODEL_DIR + "ch_ppocr_mobile_v2.0_cls_infer.onnx";
+    /** Webtoon OCR: parts are this many widths tall, then scaled down for OCR. */
+    private static final int OCR_PART_RATIO = 4;
+    private static final int OCR_PART_MAX_SIDE = 1500;
 
     private static volatile OcrEngine instance;
 
@@ -128,13 +131,71 @@ public final class OcrEngine extends NativeInference {
     public List<Box> recognize(Bitmap bitmap, String sourceLang,
                                RemoteOcrModels.ProgressListener listener) throws Exception {
         try {
-            return usesYoloDetection(sourceLang)
-                    ? detectWithYolo(bitmap)
-                    : detectWithDb(bitmap, sourceLang, listener);
+            if (ImageUtils.isTall(bitmap.getWidth(), bitmap.getHeight())) {
+                return recognizeTall(bitmap, sourceLang, listener);
+            }
+            return recognizePart(bitmap, sourceLang, listener);
         } catch (Throwable throwable) {
             Log.e(TAG, "local OCR failed", throwable);
             throw throwable;
         }
+    }
+
+    private List<Box> recognizePart(Bitmap bitmap, String sourceLang,
+                                    RemoteOcrModels.ProgressListener listener) throws Exception {
+        return usesYoloDetection(sourceLang)
+                ? detectWithYolo(bitmap)
+                : detectWithDb(bitmap, sourceLang, listener);
+    }
+
+    /**
+     * Webtoon OCR, ported from the extension's paddleOCR(): an image taller
+     * than 4x its width is cut into parts of height 4*width, each part is
+     * scaled to at most 1500 px on its long side and recognized on its own,
+     * and the boxes are mapped back to the full image. Working on the whole
+     * strip would make the detectors resize away the text.
+     */
+    private List<Box> recognizeTall(Bitmap bitmap, String sourceLang,
+                                    RemoteOcrModels.ProgressListener listener) throws Exception {
+        long start = System.currentTimeMillis();
+        int width = bitmap.getWidth();
+        int height = bitmap.getHeight();
+        int partHeight = width * OCR_PART_RATIO;
+        int count = (height + partHeight - 1) / partHeight;
+        List<Box> boxes = new ArrayList<>();
+        for (int i = 0; i < count; i++) {
+            int top = i * partHeight;
+            int heightPart = Math.min(partHeight, height - top);
+            if (listener != null) {
+                listener.onProgress("本地 OCR 识别中…（" + (i + 1) + "/" + count + "）");
+            }
+            Bitmap part = Bitmap.createBitmap(bitmap, 0, top, width, heightPart);
+            float scale = Math.min(1f,
+                    (float) OCR_PART_MAX_SIDE / Math.max(width, heightPart));
+            Bitmap ocrBitmap = part;
+            if (scale < 1f) {
+                int scaledWidth = Math.max(1, Math.round(width * scale));
+                int scaledHeight = Math.max(1, Math.round(heightPart * scale));
+                ocrBitmap = Bitmap.createScaledBitmap(part, scaledWidth, scaledHeight, true);
+                part.recycle();
+            }
+            try {
+                // Only the first part may report model downloads/initialization;
+                // later parts reuse the engine.
+                for (Box box : recognizePart(ocrBitmap, sourceLang, i == 0 ? listener : null)) {
+                    box.x /= scale;
+                    box.y = box.y / scale + top;
+                    box.width /= scale;
+                    box.height /= scale;
+                    boxes.add(box);
+                }
+            } finally {
+                ocrBitmap.recycle();
+            }
+        }
+        Log.i(TAG, "tall OCR finished in " + (System.currentTimeMillis() - start)
+                + " ms, parts=" + count + ", lines=" + boxes.size());
+        return boxes;
     }
 
 
