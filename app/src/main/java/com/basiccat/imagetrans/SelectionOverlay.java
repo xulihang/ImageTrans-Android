@@ -78,9 +78,8 @@ public class SelectionOverlay extends View {
     private boolean dragged;
     private boolean clearing;
     private int dragCorner = -1;
-    private int startWindowX;
-    private int startWindowY;
     private float downX, downY;
+    private float downRawX, downRawY;
     private int startLeft, startTop, startRight, startBottom;
 
     public SelectionOverlay(Context context, Callback callback) {
@@ -457,13 +456,18 @@ public class SelectionOverlay extends View {
     public boolean onTouchEvent(MotionEvent event) {
         if (state == STATE_TRANSLATING) return true;
         // Touch coordinates are relative to the window; the canvas is drawn
-        // with the frame's top-left at (sideInset, topInset).
+        // with the frame's top-left at (sideInset, topInset). The raw
+        // coordinates are screen coordinates and never move with the window.
         float x = event.getX() + contentOffsetX;
         float y = event.getY() + contentOffsetY;
+        float rawX = event.getRawX();
+        float rawY = event.getRawY();
         switch (event.getActionMasked()) {
             case MotionEvent.ACTION_DOWN:
                 downX = x;
                 downY = y;
+                downRawX = rawX;
+                downRawY = rawY;
                 dragged = false;
                 clearing = false;
                 dragCorner = -1;
@@ -488,19 +492,24 @@ public class SelectionOverlay extends View {
                 if (!dragged && Math.hypot(dx, dy) < touchSlop) return true;
                 if (!dragged) {
                     dragged = true;
-                    // The window must stay put under the finger while the
-                    // frame moves: remember where it was at gesture start.
-                    startWindowX = contentOffsetX;
-                    startWindowY = contentOffsetY;
+                    if (dragCorner < 0) {
+                        // Moving: the window must pan exactly as far as the
+                        // frame, otherwise the view slides under the finger
+                        // and the frame jumps.
+                        followFrame();
+                        return true;
+                    }
                 }
                 if (dragCorner >= 0) {
-                    resize(dx, dy);
-                } else {
-                    frame.set(startLeft, startTop, startRight, startBottom);
-                    frame.offset(Math.round(dx), Math.round(dy));
-                    clampFrame();
+                    // Resizing: the window stays put so the coordinates do
+                    // not drift; screen distances ignore the window layout.
+                    resize(rawX - downRawX, rawY - downRawY);
+                    return true;
                 }
-                moveWindow(startWindowX, startWindowY);
+                frame.set(startLeft, startTop, startRight, startBottom);
+                frame.offset(Math.round(rawX - downRawX), Math.round(rawY - downRawY));
+                clampFrame();
+                followFrame();
                 return true;
             }
             case MotionEvent.ACTION_CANCEL:
@@ -553,30 +562,99 @@ public class SelectionOverlay extends View {
         return -1;
     }
 
-    private void resize(float dx, float dy) {
+    /**
+     * Resizes with the dragged corner/edge following the finger; the
+     * opposite side stays where it was when the gesture began.
+     */
+    private void resize(float rawDx, float rawDy) {
         int left = startLeft;
         int top = startTop;
         int right = startRight;
         int bottom = startBottom;
         switch (dragCorner) {
-            case 0: left = (int) (startLeft + dx); top = (int) (startTop + dy); break;
-            case 1: right = (int) (startRight + dx); top = (int) (startTop + dy); break;
-            case 2: right = (int) (startRight + dx); bottom = (int) (startBottom + dy); break;
-            case 3: left = (int) (startLeft + dx); bottom = (int) (startBottom + dy); break;
-            case 4: top = (int) (startTop + dy); break;
-            case 5: bottom = (int) (startBottom + dy); break;
-            default: break;
+            case 0: // top-left
+                left = startLeft + Math.round(rawDx);
+                top = startTop + Math.round(rawDy);
+                break;
+            case 1: // top-right
+                right = startRight + Math.round(rawDx);
+                top = startTop + Math.round(rawDy);
+                break;
+            case 2: // bottom-right
+                right = startRight + Math.round(rawDx);
+                bottom = startBottom + Math.round(rawDy);
+                break;
+            case 3: // bottom-left
+                left = startLeft + Math.round(rawDx);
+                bottom = startBottom + Math.round(rawDy);
+                break;
+            case 4: // top edge
+                top = startTop + Math.round(rawDy);
+                break;
+            case 5: // bottom edge
+                bottom = startBottom + Math.round(rawDy);
+                break;
+            default:
+                return;
         }
-        if (right - left < minFrame) {
-            if (dragCorner == 0 || dragCorner == 3) left = right - minFrame;
-            else right = left + minFrame;
+        // Keep the moving side on screen.
+        left = clampInt(left, 0, screenWidth);
+        right = clampInt(right, 0, screenWidth);
+        top = clampInt(top, 0, screenHeight);
+        bottom = clampInt(bottom, 0, screenHeight);
+        // The opposite side is the anchor: it must not move.
+        boolean leftMoves = dragCorner == 0 || dragCorner == 3;
+        boolean topMoves = dragCorner == 0 || dragCorner == 1;
+        if (leftMoves) {
+            left = Math.min(left, right - minFrame);
+            right = startRight;
+        } else if (dragCorner == 1 || dragCorner == 2) {
+            right = Math.max(right, left + minFrame);
+            left = startLeft;
+        } else {
+            left = startLeft;
+            right = startRight;
         }
-        if (bottom - top < minFrame) {
-            if (dragCorner == 0 || dragCorner == 1) top = bottom - minFrame;
-            else bottom = top + minFrame;
+        if (topMoves) {
+            top = Math.min(top, bottom - minFrame);
+            bottom = startBottom;
+        } else if (dragCorner == 2 || dragCorner == 5) {
+            bottom = Math.max(bottom, top + minFrame);
+            top = startTop;
+        } else {
+            top = startTop;
+            bottom = startBottom;
         }
-        frame.set(left, top, right, bottom);
-        clampFrame();
+        boolean changed = frame.left != left || frame.top != top
+                || frame.right != right || frame.bottom != bottom;
+        if (changed) {
+            frame.set(left, top, right, bottom);
+            invalidate();
+        }
     }
 
+    /** Moves the window by the same offset as the frame moved. */
+    private void followFrame() {
+        int left = clampInt(frame.left - sideInset(), 0, screenWidth);
+        int top = clampInt(frame.top - topInset(), 0, screenHeight);
+        // Keep the window inside the screen without shrinking it.
+        int maxX = Math.max(0, screenWidth - params.width);
+        int maxY = Math.max(0, screenHeight - params.height);
+        left = Math.min(left, maxX);
+        top = Math.min(top, maxY);
+        if (left == params.x && top == params.y) {
+            invalidate();
+            return;
+        }
+        params.x = left;
+        params.y = top;
+        contentOffsetX = left;
+        contentOffsetY = top;
+        try {
+            windowManager.updateViewLayout(this, params);
+        } catch (IllegalArgumentException | IllegalStateException ignored) {
+            // Detached.
+        }
+        invalidate();
+    }
 }
