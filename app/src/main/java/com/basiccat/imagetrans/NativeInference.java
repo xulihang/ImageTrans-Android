@@ -38,16 +38,22 @@ abstract class NativeInference {
         return ENVIRONMENT.createSession(model, options);
     }
 
+    /** Directory for models extracted from assets and downloaded models. */
+    static java.io.File modelDir(Context context) throws java.io.IOException {
+        java.io.File dir = new java.io.File(context.getFilesDir(), "models");
+        if (!dir.exists() && !dir.mkdirs()) {
+            throw new java.io.IOException("Cannot create " + dir);
+        }
+        return dir;
+    }
+
     /**
      * Absolute path for a rapidocr4j config (OrtInferSession accepts only
      * absolute paths, and only if the file exists), so the asset is extracted
      * to {@code filesDir/models} once per app version and reused.
      */
     static String ensureModelFile(Context context, String assetName) throws Exception {
-        java.io.File dir = new java.io.File(context.getFilesDir(), "models");
-        if (!dir.exists() && !dir.mkdirs()) {
-            throw new java.io.IOException("Cannot create " + dir);
-        }
+        java.io.File dir = modelDir(context);
         java.io.File file = new java.io.File(dir, new java.io.File(assetName).getName());
         if (file.exists() && file.length() > 0) {
             return file.getAbsolutePath();
@@ -65,9 +71,9 @@ abstract class NativeInference {
     /**
      * Dictionary file for rapidocr4j, which reads it line by line and skips
      * lines whose trimmed text is empty. Every line matters: the dictionary
-     * must be exactly 18706 entries so that adding rapidocr4j's space (at the
-     * end) and blank (at index 0) gives the model's 18708 characters. That
-     * file has no empty-looking lines, so it is only copied.
+     * must be exactly 18708 entries so that adding rapidocr4j's space (at the
+     * end) and blank (at index 0) gives the model's 18710 characters. The
+     * one ideographic-space line survives Java's trim, so it is a real entry.
      */
     static String ensureDictFile(Context context, String assetName) throws Exception {
         String text = readAssetText(context, assetName);
@@ -76,14 +82,11 @@ abstract class NativeInference {
         for (String line : lines) {
             if (!line.trim().isEmpty()) characters++;
         }
-        if (characters != 18706) {
+        if (characters != 18708) {
             Log.w("NativeInference", "PP-OCRv6 dictionary has " + characters
-                    + " entries, expected 18706");
+                    + " entries, expected 18708");
         }
-        java.io.File dir = new java.io.File(context.getFilesDir(), "models");
-        if (!dir.exists() && !dir.mkdirs()) {
-            throw new java.io.IOException("Cannot create " + dir);
-        }
+        java.io.File dir = modelDir(context);
         java.io.File file = new java.io.File(dir, new java.io.File(assetName).getName());
         try (java.io.FileOutputStream stream = new java.io.FileOutputStream(file)) {
             stream.write(text.getBytes(StandardCharsets.UTF_8));

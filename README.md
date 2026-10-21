@@ -90,10 +90,11 @@ https://192.168.1.10:51043
 - ImageTrans 服务器模式：语言对也可以由服务器上的项目配置决定；App 里设置非 `auto` 时会一并发送 `sourceLang` / `targetLang`。
 - 本地 OCR 模式：模型在 `app/src/main/assets/ocr/`，与浏览器扩展的 `paddleocr/` 一致。这些模型不提交到仓库，需要从扩展目录复制：
   - `PP-OCRv6_det_small.onnx`：DB 文本检测（默认语言）。
-  - `rec.onnx` + `ppocrv6_dict.txt`：PP-OCRv6 识别，中、英、日效果最好。
+  - `rec.onnx` + `ppocrv6_dict.txt`：PP-OCRv6 识别，中、英、日以及拉丁系语言使用这个内置模型。
   - `model.onnx`：YOLO 文本行检测。源语言设为日语时与扩展一致，先用它检测文字行，再逐行用 `rec.onnx` 识别（竖排行顺时针旋转 90° 后识别，按自右向左顺序）。
   - 模型首次使用时解压到应用私有目录 `files/models/`，因为 rapidocr4j 只接受文件路径。
-  - 不使用方向分类模型：`useCls` 关闭，rapidocr4j 初始化时不会创建分类器，`ch_ppocr_mobile_v2.0_cls_infer.onnx` 也不需要放进 `app/src/main/assets/ocr/`。
+- 韩语、阿拉伯语、俄语、泰语不在 PP-OCRv6 的覆盖范围内。与扩展的 `PADDLE_LANG_TO_MODEL` 一致，这四种语言首次识别时会从 ModelScope 下载对应的 PP-OCRv5 识别模型和词典（每套约 8–13 MB），保存到 `files/models/` 后复用；检测仍使用内置的 PP-OCRv6 DB 模型。下载进度显示在翻译页的状态栏，只有首次使用需要联网。
+- DB 检测流程启用了方向分类（`useCls`），需要 `ch_ppocr_mobile_v2.0_cls_infer.onnx`；YOLO 识别流程不使用它。
 - 本地模式的“仅识别”不翻译，通过 WebView 渲染器把原文按原位置绘回图片（与扩展一致，会按“原文背景处理”盖住原文）。
 
 ### 排版
@@ -110,7 +111,7 @@ border-radius: 10%;
 ## 已知限制 / 后续
 
 - 拍照翻译、截屏翻译未实现。
-- 本地 OCR 的语种范围受 PP-OCRv6 识别模型限制（中/英/日为主）；其他语言可通过 `OcrConfig.Rec.modelPath` / `recKeysPath` 接入对应语言的识别模型。
+- 本地 OCR：中、英、日及拉丁系语言使用内置 PP-OCRv6；韩、阿、俄、泰使用首次联网下载的 PP-OCRv5 识别模型。其他语种仍需在扩展中补充对应模型。
 - 超大长图在 WebView / Canvas 上有尺寸和内存限制，目前按最长边 3500px、总像素 1200 万做缩放。
 - 自签名证书目前依赖系统信任链；后续可以加“首次连接确认 + 证书指纹固定”的 TOFU 流程。
 - iOS 版本尚未开始；原生 OCR 侧可以复用相应的 ONNX Runtime + 前后处理方案。

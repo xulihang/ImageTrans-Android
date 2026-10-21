@@ -21,7 +21,10 @@ import io.github.hzkitty.entity.RecResult;
  * - default: PP-OCRv6 DB text detection ({@code PP-OCRv6_det_small.onnx})
  *   followed by PP-OCRv6 recognition ({@code rec.onnx}) per region;
  * - Japanese: the YOLO text-line detector ({@code model.onnx}) followed by
- *   PP-OCRv6 recognition, matching the extension's default for that language.
+ *   PP-OCRv6 recognition, matching the extension's default for that language;
+ * - Korean, Arabic, Russian and Thai: the bundled DB detector with a
+ *   language-specific PP-OCRv5 recognizer downloaded on first use (see
+ *   RemoteOcrModels), matching the extension's dedicated models.
  *
  * The recognizer and the YOLO detector run through rapidocr4j's
  * OrtInferSession, which only opens existing file paths, so the assets are
@@ -39,6 +42,8 @@ public final class OcrEngine extends NativeInference {
     private static volatile OcrEngine instance;
 
     private RapidOCR rapidOCR;
+    /** rec model + dict currently loaded, so switching back doesn't rebuild. */
+    private String engineKey;
     private PaddleTextLineDetector lineDetector;
     private PaddleRecognizer recognizer;
 
@@ -62,10 +67,30 @@ public final class OcrEngine extends NativeInference {
         return "ja".equals(sourceLang);
     }
 
-    public synchronized void initialize() throws Exception {
-        if (rapidOCR != null) return;
+    public synchronized void initialize(String sourceLang,
+                                        RemoteOcrModels.ProgressListener listener)
+            throws Exception {
+        RemoteOcrModels.Model remote = RemoteOcrModels.forLanguage(sourceLang);
         long start = System.currentTimeMillis();
         try {
+            String recModel;
+            String recDict;
+            if (remote != null) {
+                // First use of the language downloads rec+dict from ModelScope;
+                // later runs reuse the files in filesDir/models.
+                String[] paths = RemoteOcrModels.ensure(appContext, remote, listener);
+                recModel = paths[0];
+                recDict = paths[1];
+                if (listener != null) {
+                    listener.onProgress("正在初始化" + remote.displayName + "识别模型…");
+                }
+            } else {
+                recModel = ensureModelFile(appContext, REC_MODEL);
+                recDict = ensureDictFile(appContext, REC_DICT);
+            }
+            String key = recModel + "|" + recDict;
+            if (rapidOCR != null && key.equals(engineKey)) return;
+
             // Load the OpenCV AAR's native library up front, so the org.opencv
             // classes shared with rapidocr4j bind to it.
             RootlessOpencvLoader.load();
@@ -74,31 +99,38 @@ public final class OcrEngine extends NativeInference {
             // detector are loaded the same way from the paths below.
             OcrConfig config = new OcrConfig();
             config.Det.modelPath = ensureModelFile(appContext, DET_MODEL);
-            config.Rec.modelPath = ensureModelFile(appContext, REC_MODEL);
-            // PP-OCRv6 conventions: the dictionary file gives the 18706 regular
-            // characters, followed by space and then blank at index 0, matching
-            // the extension (special tokens: blank, joiner, space, BOS, EOS).
-            config.Rec.recKeysPath = NativeInference.ensureDictFile(appContext, REC_DICT);
+            config.Rec.modelPath = recModel;
+            config.Rec.recKeysPath = recDict;
             // DB detection keeps the direction classifier on: rapidocr4j turns
             // 180-degree lines upright before recognition, which the combined
             // DB pipeline needs for the detection order it produces.
             config.Global.useCls = true;
             config.Cls.modelPath = ensureModelFile(appContext, CLS_MODEL);
             rapidOCR = RapidOCR.create(appContext, config);
+            engineKey = key;
         } catch (Throwable throwable) {
             throw new Exception("OCR 引擎初始化失败: " + ImageUtils.humanError(throwable), throwable);
         }
-        Log.i(TAG, "RapidOCR initialized in " + (System.currentTimeMillis() - start) + " ms");
+        Log.i(TAG, "RapidOCR initialized in " + (System.currentTimeMillis() - start) + " ms"
+                + (remote == null ? "" : " (" + remote.displayName + ")"));
     }
 
     /**
      * Recognizes the bitmap, one box per detected line (not merged). Japanese
      * uses the YOLO text-line detector like the extension; other languages use
-     * PP-OCRv6's DB detector.
+     * PP-OCRv6's DB detector with the recognition model for that language.
      */
     public List<Box> recognize(Bitmap bitmap, String sourceLang) throws Exception {
+        return recognize(bitmap, sourceLang, null);
+    }
+
+    /** Same as {@link #recognize(Bitmap, String)}, reporting download progress. */
+    public List<Box> recognize(Bitmap bitmap, String sourceLang,
+                               RemoteOcrModels.ProgressListener listener) throws Exception {
         try {
-            return usesYoloDetection(sourceLang) ? detectWithYolo(bitmap) : detectWithDb(bitmap);
+            return usesYoloDetection(sourceLang)
+                    ? detectWithYolo(bitmap)
+                    : detectWithDb(bitmap, sourceLang, listener);
         } catch (Throwable throwable) {
             Log.e(TAG, "local OCR failed", throwable);
             throw throwable;
@@ -119,9 +151,11 @@ public final class OcrEngine extends NativeInference {
         return lines;
     }
 
-    /** DB-detector OCR (PP-OCRv6 det + rec), one box per detected line. */
-    private List<Box> detectWithDb(Bitmap bitmap) throws Exception {
-        initialize();
+    /** DB-detector OCR (PP-OCRv6 det + language recognition model), one box per line. */
+    private List<Box> detectWithDb(Bitmap bitmap, String sourceLang,
+                                   RemoteOcrModels.ProgressListener listener) throws Exception {
+        initialize(sourceLang, listener);
+        if (listener != null) listener.onProgress("本地 OCR 识别中…");
         long start = System.currentTimeMillis();
         OcrResult result = rapidOCR.run(bitmap);
         List<Box> boxes = new ArrayList<>();

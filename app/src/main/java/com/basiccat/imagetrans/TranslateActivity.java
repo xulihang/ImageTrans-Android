@@ -168,9 +168,16 @@ public class TranslateActivity extends Activity {
                 ? "本地 OCR：检测文本行（YOLO）…"
                 : "本地 OCR 识别中…");
         OcrEngine engine = OcrEngine.getInstance(TranslateActivity.this);
-        List<Box> boxes = engine.recognize(bitmap, sourceLang);
+        List<Box> boxes = engine.recognize(bitmap, sourceLang,
+                new RemoteOcrModels.ProgressListener() {
+                    @Override
+                    public void onProgress(String message) {
+                        status(message);
+                    }
+                });
         if (boxes.isEmpty()) {
-            throw new Exception("没有识别到文字。本地 OCR 使用中英日模型，其他语言请使用 ImageTrans 服务器模式。");
+            throw new Exception("没有识别到文字。本地 OCR 支持中、英、日、拉丁系语言，"
+                    + "以及首次联网下载模型的韩、阿、俄、泰语；其他语言请使用 ImageTrans 服务器模式。");
         }
 
         // Same as doOCRYolo(): merge neighbouring lines into paragraphs before
