@@ -106,7 +106,6 @@ public class ScreenshotTranslateService extends Service {
     // Selection frame, which also shows the result
     private SelectionOverlay overlay;
     private WindowManager.LayoutParams overlayParams;
-    private boolean overlayShown;
     /** A capture was requested while the permission prompt was open. */
     private boolean pendingCapture;
     private final List<Box> hitBoxes = new ArrayList<>();
@@ -145,11 +144,9 @@ public class ScreenshotTranslateService extends Service {
             projectionResultCode = intent.getIntExtra(EXTRA_RESULT_CODE, 0);
             projectionData = intent.getParcelableExtra(EXTRA_RESULT_DATA);
             if (intent.getBooleanExtra(EXTRA_ENABLE_ONLY, false)) {
-                // Enabled from the main screen: show the ball only; the frame
-                // appears with the first capture.
+                // Enabled from the main screen: ball and frame together.
                 Prefs.setFloatingEnabled(this, true);
-                enterForeground(getString(R.string.floating_running));
-                if (!ballShown) showBall();
+                showWindows();
                 return START_NOT_STICKY;
             }
             showWindows();
@@ -164,19 +161,18 @@ public class ScreenshotTranslateService extends Service {
             shutdown();
             return START_NOT_STICKY;
         }
-        // Restarted by the system (no capture token): the system refuses a
-        // projection for a service started in the background, so show only
-        // the ball. The frame appears at the first capture, which gets the
-        // permission (the ball must be tapped first: that is visible UI).
+        // Restarted by the system or opened from the notification: there is
+        // no capture token. Keep the turnkey content and show the frame; the
+        // next capture asks for the permission (tapping the frame or the ball
+        // is visible UI, which Android requires for that).
         enterForeground(getString(R.string.floating_running));
         if (!Prefs.hasOverlayPermission(this)) {
             shutdown();
             return START_NOT_STICKY;
         }
-        projectionResultCode = 0;
-        projectionData = null;
-        mediaProjection = null;
+        if (projectionData == null) mediaProjection = null;
         if (!ballShown) showBall();
+        showOverlay();
         return START_NOT_STICKY;
     }
 
@@ -249,10 +245,9 @@ public class ScreenshotTranslateService extends Service {
     }
 
     private void removeWindows() {
-        if (overlayShown) {
-            windowManager.removeView(overlay);
+        if (overlay != null) {
+            overlay.remove();
             overlay = null;
-            overlayShown = false;
         }
         if (ballShown) {
             windowManager.removeView(ball);
@@ -264,8 +259,7 @@ public class ScreenshotTranslateService extends Service {
     private void showWindows() {
         enterForeground(getString(R.string.floating_running));
         if (!ballShown) showBall();
-        if (!overlayShown) showOverlay();
-        overlay.setVisibility(View.VISIBLE);
+        showOverlay();
         // The ball is only needed as a launcher; shrink its notification.
         NotificationManager manager = getSystemService(NotificationManager.class);
         Notification.Builder builder = new Notification.Builder(this, CHANNEL_BALL_ID)
@@ -422,30 +416,34 @@ public class ScreenshotTranslateService extends Service {
     // --- selection frame --------------------------------------------------
 
     private void showOverlay() {
+        if (overlay != null) {
+            overlay.setVisibility(View.VISIBLE);
+            return;
+        }
         overlay = new SelectionOverlay(this, new SelectionOverlay.Callback() {
             @Override
-            public void onSelected(Rect rect) {
-                Log.i(TAG, "frame region " + rect);
-                capture(rect);
+            public void onHide() {
+                // Keep the ball; the frame comes back with the next capture.
+                Log.i(TAG, "frame hidden");
+                if (overlay != null) {
+                    overlay.remove();
+                    overlay = null;
+                }
+                if (ballShown) ball.setVisibility(View.VISIBLE);
             }
 
             @Override
             public void onCancelled() {
-                Log.i(TAG, "overlay cancelled");
-                shutdown();
+                // Only while shutting down.
             }
         });
         overlay.setTapListener(this::onOverlayTap);
-        overlayParams = new WindowManager.LayoutParams(
-                WindowManager.LayoutParams.MATCH_PARENT,
-                WindowManager.LayoutParams.MATCH_PARENT,
-                overlayType(),
-                WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
-                PixelFormat.TRANSLUCENT);
-        overlayParams.gravity = Gravity.TOP | Gravity.START;
-        overlayParams.setTitle("SelectionOverlay");
-        windowManager.addView(overlay, overlayParams);
-        overlayShown = true;
+        Rect frame = new Rect(
+                Math.round(getResources().getDisplayMetrics().widthPixels * 0.06f),
+                Math.round(getResources().getDisplayMetrics().heightPixels * 0.18f),
+                Math.round(getResources().getDisplayMetrics().widthPixels * 0.94f),
+                Math.round(getResources().getDisplayMetrics().heightPixels * 0.82f));
+        overlay.show(frame);
     }
 
     // --- capture ----------------------------------------------------------
@@ -456,12 +454,8 @@ public class ScreenshotTranslateService extends Service {
             shutdown();
             return;
         }
-        if (overlayShown) {
-            overlay.setVisibility(View.VISIBLE);
-        } else {
-            // Opened from the notification before a frame existed.
-            showOverlay();
-        }
+        showOverlay();
+        if (overlay != null) overlay.setVisibility(View.VISIBLE);
         enterForeground(getString(R.string.floating_translating));
         mainHandler.removeCallbacks(autoHideNotification);
         try {
@@ -562,6 +556,8 @@ public class ScreenshotTranslateService extends Service {
         // The overlay is hidden (not removed) rather than going invisible:
         // some systems stop the projection when the app's UI leaves the
         // screen, and the overlay still counts as visible UI.
+        // Keep the frame's window (a visible UI) but draw nothing briefly, so
+        // the capture does not contain it.
         overlay.setVisibility(View.INVISIBLE);
         final Rect screen = new Rect(0, 0, screenWidth, screenHeight);
         final Rect crop = new Rect(rect);
@@ -661,10 +657,15 @@ public class ScreenshotTranslateService extends Service {
     }
 
     private void imageOnCaptured(Bitmap bitmap, String error) {
+        if (overlay == null) {
+            // Hidden while the capture ran; the result would have nowhere to go.
+            ImageUtils.recycle(bitmap);
+            return;
+        }
         overlay.setVisibility(View.VISIBLE);
         if (ballShown) ball.setVisibility(View.VISIBLE);
         if (bitmap == null) {
-            overlay.showTranslation(null, error != null
+            overlay.showResult(null, error != null
                     ? getString(R.string.floating_capture_failed) + "：" + error
                     : getString(R.string.floating_capture_failed));
             return;
@@ -676,7 +677,7 @@ public class ScreenshotTranslateService extends Service {
         if (ballShown) ball.setVisibility(View.VISIBLE);
         overlay.showStatus(getString(R.string.floating_translating));
         if (bitmap == null) {
-            overlay.showTranslation(null, getString(R.string.floating_capture_failed));
+            overlay.showResult(null, getString(R.string.floating_capture_failed));
             return;
         }
         final int current = ++generation;
@@ -691,7 +692,7 @@ public class ScreenshotTranslateService extends Service {
                 if (result == null) {
                     mainHandler.post(() -> {
                         if (current == generation) {
-                            overlay.showTranslation(null, getString(R.string.floating_no_text));
+                            overlay.showResult(null, getString(R.string.floating_no_text));
                         }
                     });
                     return;
@@ -723,14 +724,14 @@ public class ScreenshotTranslateService extends Service {
                                     @Override
                                     public void onError(String message) {
                                         if (current == generation) {
-                                            overlay.showTranslation(null, getString(
+                                            overlay.showResult(null, getString(
                                                     R.string.floating_translate_failed, message));
                                         }
                                     }
                                 });
                     } catch (Throwable throwable) {
                         if (current == generation) {
-                            overlay.showTranslation(null, getString(
+                            overlay.showResult(null, getString(
                                     R.string.floating_translate_failed,
                                     ImageUtils.humanError(throwable)));
                         }
@@ -740,7 +741,7 @@ public class ScreenshotTranslateService extends Service {
                 Log.e(TAG, "translation failed", throwable);
                 mainHandler.post(() -> {
                     if (current != generation) return;
-                    overlay.showTranslation(null, getString(R.string.floating_translate_failed,
+                    overlay.showResult(null, getString(R.string.floating_translate_failed,
                             ImageUtils.humanError(throwable)));
                 });
             } finally {
@@ -756,8 +757,8 @@ public class ScreenshotTranslateService extends Service {
 
     private void onCaptureError(Throwable throwable) {
         Log.e(TAG, "capture error", throwable);
-        if (overlayShown) {
-            overlay.showTranslation(null, getString(R.string.floating_capture_failed));
+        if (overlay != null) {
+            overlay.showResult(null, getString(R.string.floating_capture_failed));
         }
         ImageUtils.toast(this, "截屏失败：" + ImageUtils.humanError(throwable));
         if (mediaProjection != null) {
@@ -771,7 +772,7 @@ public class ScreenshotTranslateService extends Service {
     private void showTranslated(Bitmap bitmap, List<Box> boxes) {
         hitBoxes.clear();
         hitBoxes.addAll(boxes);
-        overlay.showTranslation(bitmap, null);
+        overlay.showResult(bitmap, null);
         Log.i(TAG, "translation shown, " + boxes.size() + " boxes");
     }
 
