@@ -4,6 +4,8 @@ import android.Manifest;
 import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.Intent;
+import android.os.Handler;
+import android.os.Looper;
 import android.content.pm.PackageManager;
 import android.media.projection.MediaProjectionManager;
 import android.net.Uri;
@@ -23,6 +25,14 @@ public class MainActivity extends Activity {
     private TextView modeSummary;
     private TextView langSummary;
     private Button btnFloating;
+    /** While the button says "close", poll whether the service is still up. */
+    private final Handler pollHandler = new Handler(Looper.getMainLooper());
+    private final Runnable pollFloating = new Runnable() {
+        @Override
+        public void run() {
+            updateFloatingButton();
+        }
+    };
     /** The user is touching the screen, i.e. this activity is in front. */
     private boolean touching;
 
@@ -70,6 +80,12 @@ public class MainActivity extends Activity {
         updateFloatingButton();
     }
 
+    @Override
+    protected void onDestroy() {
+        pollHandler.removeCallbacks(pollFloating);
+        super.onDestroy();
+    }
+
     private void updateSummary() {
         String mode = Prefs.getMode(this);
         modeSummary.setText("翻译方式：" + Prefs.modeName(mode));
@@ -78,8 +94,29 @@ public class MainActivity extends Activity {
     }
 
     private void updateFloatingButton() {
-        btnFloating.setText(Prefs.isFloatingEnabled(this)
-                ? R.string.main_floating_on : R.string.main_floating_off);
+        boolean running = isFloatingRunning();
+        if (!running && Prefs.isFloatingEnabled(this)) {
+            // Nothing on screen: the service died without a chance to reset
+            // the flag (killed process, crash): forget "enabled".
+            Prefs.setFloatingEnabled(this, false);
+        }
+        btnFloating.setText(running ? R.string.main_floating_on : R.string.main_floating_off);
+        pollHandler.removeCallbacks(pollFloating);
+        if (running) pollHandler.postDelayed(pollFloating, 2000);
+    }
+
+    /** True when the floating windows are actually on screen. */
+    private boolean isFloatingRunning() {
+        if (!Prefs.isFloatingEnabled(this)) return false;
+        android.app.ActivityManager manager = getSystemService(android.app.ActivityManager.class);
+        for (android.app.ActivityManager.RunningServiceInfo info
+                : manager.getRunningServices(Integer.MAX_VALUE)) {
+            if (ScreenshotTranslateService.class.getName().equals(info.service.getClassName())
+                    && info.pid == android.os.Process.myPid()) {
+                return true;
+            }
+        }
+        return false;
     }
 
     // --- floating screenshot translation ----------------------------------

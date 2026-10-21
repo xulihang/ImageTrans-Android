@@ -189,6 +189,9 @@ public class ScreenshotTranslateService extends Service {
 
     @Override
     public void onDestroy() {
+        // The pill on the main screen follows this, not the last tap: the
+        // service may also stop by itself or be killed by the system.
+        Prefs.setFloatingEnabled(this, false);
         mainHandler.removeCallbacksAndMessages(null);
         removeWindows();
         executor.shutdownNow();
