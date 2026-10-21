@@ -16,4 +16,14 @@
     <string name="translate_share">分享</string>
     <string name="translate_saved">已保存到相册</string>
     <string name="translate_save_failed">保存失败</string>
+    <string name="text_box_source">原文</string>
+    <string name="text_box_target">译文</string>
+    <string name="text_box_title">文本框 %1$d/%2$d</string>
+    <string name="text_box_empty">（空）</string>
+    <string name="text_box_navigator_hint">点按文本框查看原文和译文</string>
+    <string name="action_close">关闭</string>
+    <string name="action_previous">上一个</string>
+    <string name="action_next">下一个</string>
+    <string name="action_copy">复制</string>
+    <string name="copied">已复制</string>
 </resources>

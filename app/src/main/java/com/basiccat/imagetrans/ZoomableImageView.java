@@ -63,6 +63,22 @@ public class ZoomableImageView extends View {
     }
 
     private OnSwipeListener swipeListener;
+    private static final int TAP_SLOP_DP = 16;
+    private final int tapSlop = (int) (TAP_SLOP_DP * getResources().getDisplayMetrics().density);
+
+    /** Fired for a single (non-double) tap on the image. */
+    public interface OnTapListener {
+        /**
+         * @param x view x of the tap
+         * @param y view y of the tap
+         */
+        void onTap(float x, float y);
+    }
+
+    private OnTapListener tapListener;
+    // Where the current gesture started, to tell taps from drags.
+    private float downX, downY;
+    private boolean gestureMoved;
 
     public ZoomableImageView(Context context) {
         this(context, null);
@@ -133,6 +149,23 @@ public class ZoomableImageView extends View {
         swipeListener = listener;
     }
 
+    public void setTapListener(OnTapListener listener) {
+        tapListener = listener;
+    }
+
+    /** Maps a view coordinate to image (bitmap) coordinates. */
+    public float[] viewToImage(float x, float y) {
+        float[] point = {x, y};
+        Matrix inverse = new Matrix();
+        if (draw.invert(inverse)) inverse.mapPoints(point);
+        return point;
+    }
+
+    /** Current image pixels per device pixel. */
+    public float getImageScale() {
+        return scale();
+    }
+
     public void setImage(Bitmap bm) {
         bitmap = bm;
         stopAnimation();
@@ -163,6 +196,7 @@ public class ZoomableImageView extends View {
     @Override
     public boolean onTouchEvent(MotionEvent event) {
         if (bitmap == null) return super.onTouchEvent(event);
+        trackTap(event);
         // Track taps before the detectors so the double tap is never
         // swallowed by a drag or scale that happens between them.
         if (event.getActionMasked() == MotionEvent.ACTION_DOWN && event.getPointerCount() == 1
@@ -177,6 +211,43 @@ public class ZoomableImageView extends View {
         gestureDetector.onTouchEvent(event);
         scaleDetector.onTouchEvent(event);
         return true;
+    }
+
+    /**
+     * Fires {@link OnTapListener} for a single-finger tap that did not move or
+     * scale. A tap that turns out to be the first half of a double tap also
+     * arrives here, so listeners should allow for that (e.g. ignore a second
+     * quick tap on the same spot).
+     */
+    private void trackTap(MotionEvent event) {
+        switch (event.getActionMasked()) {
+            case MotionEvent.ACTION_DOWN:
+                downX = event.getX();
+                downY = event.getY();
+                gestureMoved = false;
+                break;
+            case MotionEvent.ACTION_POINTER_DOWN:
+                gestureMoved = true;
+                break;
+            case MotionEvent.ACTION_MOVE:
+                if (event.getPointerCount() > 1) {
+                    gestureMoved = true;
+                } else {
+                    float dx = event.getX() - downX;
+                    float dy = event.getY() - downY;
+                    if (dx * dx + dy * dy > tapSlop * tapSlop) gestureMoved = true;
+                }
+                break;
+            case MotionEvent.ACTION_UP:
+            case MotionEvent.ACTION_CANCEL:
+                if (event.getActionMasked() == MotionEvent.ACTION_UP && !gestureMoved
+                        && tapListener != null && event.getPointerCount() == 1) {
+                    tapListener.onTap(event.getX(), event.getY());
+                }
+                break;
+            default:
+                break;
+        }
     }
 
     private boolean isDoubleTap(float x, float y, long time) {

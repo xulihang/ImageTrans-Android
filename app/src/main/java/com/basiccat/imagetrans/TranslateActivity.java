@@ -1,6 +1,9 @@
 package com.basiccat.imagetrans;
 
 import android.app.Activity;
+import android.app.AlertDialog;
+import android.content.ClipData;
+import android.content.ClipboardManager;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.net.Uri;
@@ -11,6 +14,7 @@ import android.util.Log;
 import android.view.View;
 import android.webkit.WebView;
 import android.widget.Button;
+import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.ProgressBar;
 import android.widget.TextView;
@@ -54,6 +58,17 @@ public class TranslateActivity extends Activity {
     private Uri savedUri;
     private boolean showingOriginal;
     private boolean busy;
+
+    /**
+     * Text boxes hit-testable on the shown image, in image coordinates: the
+     * OCR / server result if there is one, otherwise boxes read back from the
+     * renderer's layout (see {@link #fetchRenderedBoxes}).
+     */
+    private List<Box> hitBoxes = new ArrayList<>();
+    private List<Box> pendingHitBoxes;
+    private boolean fetchingHitBoxes;
+    private long lastTapAt;
+    private float lastTapX, lastTapY;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -102,6 +117,15 @@ public class TranslateActivity extends Activity {
             @Override
             public void onSwipe(boolean towardLeft) {
                 toggleOriginal();
+            }
+        });
+
+        // Tapping a translated text box shows its source and target text so
+        // it can be selected and copied.
+        imageView.setTapListener(new ZoomableImageView.OnTapListener() {
+            @Override
+            public void onTap(float x, float y) {
+                onImageTap(x, y);
             }
         });
 
@@ -164,6 +188,7 @@ public class TranslateActivity extends Activity {
         boolean useBoxes = preferServerImage
                 ? result.renderedImageDataUrl == null && !result.boxes.isEmpty()
                 : !result.boxes.isEmpty();
+        if (!useBoxes) pendingHitBoxes = result.boxes;
 
         if (useBoxes) {
             status("WebView 渲染排版…");
@@ -172,6 +197,9 @@ public class TranslateActivity extends Activity {
         }
         if (result.renderedImageDataUrl != null) {
             status("显示 ImageTrans 渲染结果…");
+            // No boxes in the response: read them back from the renderer's
+            // layout so text boxes are still tappable.
+            fetchRenderedBoxes(bitmap, result.renderedImageDataUrl);
             Bitmap rendered = ImageUtils.dataUrlToBitmap(result.renderedImageDataUrl);
             if (rendered == null) {
                 throw new Exception("服务器返回的图片无法解码");
@@ -230,6 +258,7 @@ public class TranslateActivity extends Activity {
         }
 
         status("WebView 渲染排版…");
+        pendingHitBoxes = boxes;
         renderBoxes(boxes, bitmap);
     }
 
@@ -386,12 +415,15 @@ public class TranslateActivity extends Activity {
     }
 
     private void showResult(Bitmap bitmap) {
+        final List<Box> boxes = pendingHitBoxes;
+        pendingHitBoxes = null;
         mainHandler.post(new Runnable() {
             @Override
             public void run() {
                 translatedBitmap = bitmap;
                 showingOriginal = false;
                 savedUri = null;
+                hitBoxes = boxes != null ? boxes : new ArrayList<Box>();
                 imageView.setImage(bitmap);
                 btnToggle.setText(R.string.translate_toggle_original);
                 progressPanel.setVisibility(View.GONE);
@@ -400,6 +432,136 @@ public class TranslateActivity extends Activity {
                 setResultButtonsEnabled(true);
             }
         });
+    }
+
+    // --- tappable text boxes --------------------------------------------
+
+    /**
+     * Re-renders the source / server-rendered image through the app's own
+     * renderer to recover the laid-out box positions (the rendered result is
+     * discarded). Used when the server returns only an image and no boxes.
+     */
+    private void fetchRenderedBoxes(final Bitmap original, final String renderedDataUrl) {
+        fetchingHitBoxes = true;
+        mainHandler.post(new Runnable() {
+            @Override
+            public void run() {
+                Bitmap rendered = null;
+                try {
+                    ensureRenderer();
+                    rendered = ImageUtils.dataUrlToBitmap(renderedDataUrl);
+                    if (rendered == null) throw new Exception("无法解码服务器图片");
+                    renderer.render(pendingHitBoxes, ImageUtils.bitmapToDataUrl(original),
+                            buildRenderOptions(), new Renderer.Callback() {
+                                @Override
+                                public void onSuccess(Bitmap bitmap, String dataUrl) {
+                                    if (bitmap != translatedBitmap) bitmap.recycle();
+                                    finishFetch();
+                                }
+
+                                @Override
+                                public void onError(String message) {
+                                    Log.w(TAG, "hit boxes render failed: " + message);
+                                    finishFetch();
+                                }
+                            });
+                } catch (Throwable throwable) {
+                    Log.w(TAG, "hit boxes unavailable: " + throwable);
+                    if (rendered != null) rendered.recycle();
+                    finishFetch();
+                }
+            }
+        });
+    }
+
+    private void finishFetch() {
+        fetchingHitBoxes = false;
+        if (pendingHitBoxes != null) {
+            hitBoxes = pendingHitBoxes;
+            pendingHitBoxes = null;
+        }
+    }
+
+    private void onImageTap(float x, float y) {
+        if (busy || fetchingHitBoxes || hitBoxes.isEmpty()) return;
+        // The first tap of a double tap zooms instead; drop a second quick tap
+        // near it so the double-tap zoom does not also pop the dialog.
+        long now = System.currentTimeMillis();
+        float slop = 48 * getResources().getDisplayMetrics().density;
+        if (now - lastTapAt < 350 && Math.abs(x - lastTapX) < slop && Math.abs(y - lastTapY) < slop) {
+            lastTapAt = 0;
+            return;
+        }
+        lastTapAt = now;
+        lastTapX = x;
+        lastTapY = y;
+
+        float[] point = imageView.viewToImage(x, y);
+        int index = findBox(point[0], point[1]);
+        if (index >= 0) showTextBoxDialog(index);
+    }
+
+    /**
+     * Finds the box under an image coordinate. Small boxes get a finger-sized
+     * minimum hit area; when several overlap, the smallest wins.
+     */
+    private int findBox(float x, float y) {
+        float scale = Math.max(imageView.getImageScale(), 0.01f);
+        float minSize = 44 * getResources().getDisplayMetrics().density / scale;
+        int best = -1;
+        double bestArea = Double.MAX_VALUE;
+        for (int i = 0; i < hitBoxes.size(); i++) {
+            Box box = hitBoxes.get(i);
+            if (!box.hasText()) continue;
+            float growX = Math.max(0, (minSize - (float) box.width) / 2f);
+            float growY = Math.max(0, (minSize - (float) box.height) / 2f);
+            if (x < box.left() - growX || x > box.right() + growX
+                    || y < box.top() - growY || y > box.bottom() + growY) {
+                continue;
+            }
+            double area = box.width * box.height;
+            if (area < bestArea) {
+                bestArea = area;
+                best = i;
+            }
+        }
+        return best;
+    }
+
+    private void showTextBoxDialog(final int index) {
+        View content = getLayoutInflater().inflate(R.layout.dialog_text_box, null);
+        EditText sourceText = content.findViewById(R.id.sourceText);
+        EditText targetText = content.findViewById(R.id.targetText);
+        AlertDialog.Builder builder = new AlertDialog.Builder(this)
+                .setTitle(getString(R.string.text_box_title, index + 1, hitBoxes.size()))
+                .setView(content)
+                .setPositiveButton(R.string.action_close, null);
+        if (hitBoxes.size() > 1) {
+            // Custom listeners replace the default dismiss-on-click, so the
+            // dialog re-opens on the neighbouring box and stays up.
+            builder.setNegativeButton(R.string.action_previous, (dialog, which) ->
+                    showTextBoxDialog((index - 1 + hitBoxes.size()) % hitBoxes.size()));
+            builder.setNeutralButton(R.string.action_next, (dialog, which) ->
+                    showTextBoxDialog((index + 1) % hitBoxes.size()));
+        }
+        Box box = hitBoxes.get(index);
+        sourceText.setText(emptyIfBlank(box.source));
+        targetText.setText(emptyIfBlank(box.target));
+        sourceText.setOnClickListener(this::copyTextView);
+        targetText.setOnClickListener(this::copyTextView);
+        builder.show();
+    }
+
+    private void copyTextView(View view) {
+        CharSequence text = ((TextView) view).getText();
+        if (text == null || text.length() == 0) return;
+        ClipboardManager clipboard = (ClipboardManager) getSystemService(CLIPBOARD_SERVICE);
+        clipboard.setPrimaryClip(ClipData.newPlainText("text", text));
+        ImageUtils.toast(this, getString(R.string.copied));
+    }
+
+    private String emptyIfBlank(String text) {
+        return text == null || text.trim().isEmpty() ? getString(R.string.text_box_empty) : text;
     }
 
     private void postError(Throwable throwable) {
