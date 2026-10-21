@@ -111,6 +111,10 @@ public class ScreenshotTranslateService extends Service {
     private final List<Box> hitBoxes = new ArrayList<>();
     /** The source/target overlay, if open. */
     private View textBoxDialog;
+    private LinearLayout selectionBar;
+    private TextView sourceText;
+    private TextView targetText;
+    private boolean targetPressed;
 
     // Capture
     private MediaProjection mediaProjection = null;
@@ -814,10 +818,12 @@ public class ScreenshotTranslateService extends Service {
         TextView sourceText = content.findViewById(R.id.sourceText);
         TextView targetText = content.findViewById(R.id.targetText);
 
-        // The overlay window cannot take focus, so long-press selection is
-        // not available here: tapping a text copies it.
-        sourceText.setOnClickListener(v -> copyText(sourceText));
-        targetText.setOnClickListener(v -> copyText(targetText));
+        // Plain text with a custom selection action: the system's own text
+        // selection menu does not appear in an app-overlay window, but the
+        // selection itself works. Long press selects, and a bar offers the
+        // actions for the selected range.
+        configureSelection(sourceText);
+        configureSelection(targetText);
 
         LinearLayout panel = new LinearLayout(themed);
         panel.setOrientation(LinearLayout.VERTICAL);
@@ -853,11 +859,41 @@ public class ScreenshotTranslateService extends Service {
                     showTextBoxDialog((index + 1) % hitBoxes.size()));
             buttons.addView(next);
         }
+        // Tapping a text copies it; long press selects part of it.
+        sourceText.setOnClickListener(v -> copyText(sourceText));
+        targetText.setOnClickListener(v -> copyText(targetText));
+        touchTracker = (view, event) -> {
+            if (view == targetText && event.getActionMasked() == MotionEvent.ACTION_DOWN) {
+                targetPressed = true;
+            } else if (view == sourceText && event.getActionMasked() == MotionEvent.ACTION_DOWN) {
+                targetPressed = false;
+            }
+        };
+        sourceText.setOnTouchListener(this::trackTouch);
+        targetText.setOnTouchListener(this::trackTouch);
+
+        LinearLayout selectionBar = new LinearLayout(themed);
+        selectionBar.setOrientation(LinearLayout.HORIZONTAL);
+        selectionBar.setGravity(Gravity.END);
+        selectionBar.setPadding(dp(12), 0, dp(12), 0);
+        TextView copySelection = dialogButton(themed, R.string.copy_selection);
+        copySelection.setOnClickListener(v -> copySelection());
+        selectionBar.addView(copySelection);
+        TextView copyAll = dialogButton(themed, R.string.copy_all);
+        copyAll.setOnClickListener(v -> copyAll());
+        selectionBar.addView(copyAll);
+        panel.addView(selectionBar, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
+
         TextView close = dialogButton(themed, R.string.action_close);
         close.setOnClickListener(v -> dismissTextBoxDialog());
         buttons.addView(close);
         panel.addView(buttons, new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
+
+        this.selectionBar = selectionBar;
+        this.sourceText = sourceText;
+        this.targetText = targetText;
 
         DisplayMetrics metrics = getResources().getDisplayMetrics();
         android.widget.ScrollView scroll = new android.widget.ScrollView(themed);
@@ -883,13 +919,64 @@ public class ScreenshotTranslateService extends Service {
         }
     }
 
+    private void configureSelection(TextView view) {
+        // Not focusable, so a long press never opens a keyboard; it only
+        // selects, and the selection bar below becomes usable.
+        view.setFocusable(false);
+        view.setFocusableInTouchMode(false);
+        view.setTextIsSelectable(true);
+    }
+
+    private interface TouchTracker {
+        void onTouch(View view, MotionEvent event);
+    }
+
+    private TouchTracker touchTracker;
+
+    private boolean trackTouch(View view, MotionEvent event) {
+        if (touchTracker != null) touchTracker.onTouch(view, event);
+        return false;
+    }
+
+    /** Tapping a text copies all of it. */
     private void copyText(TextView view) {
         CharSequence text = view.getText();
         if (text == null || text.length() == 0) return;
-        android.content.ClipboardManager clipboard =
-                (android.content.ClipboardManager) getSystemService(CLIPBOARD_SERVICE);
-        clipboard.setPrimaryClip(android.content.ClipData.newPlainText("text", text));
+        clipboard().setPrimaryClip(android.content.ClipData.newPlainText("text", text));
         ImageUtils.toast(this, getString(R.string.copied));
+    }
+
+    private android.content.ClipboardManager clipboard() {
+        return (android.content.ClipboardManager) getSystemService(CLIPBOARD_SERVICE);
+    }
+
+    private void copySelection() {
+        TextView view = selectionView();
+        int start = Math.min(view.getSelectionStart(), view.getSelectionEnd());
+        int end = Math.max(view.getSelectionStart(), view.getSelectionEnd());
+        CharSequence text = view.getText();
+        if (start < 0 || end <= start || text == null) {
+            ImageUtils.toast(this, getString(R.string.select_text_first));
+            return;
+        }
+        clipboard().setPrimaryClip(android.content.ClipData.newPlainText("text",
+                text.subSequence(start, end)));
+        ImageUtils.toast(this, getString(R.string.copied));
+    }
+
+    private void copyAll() {
+        TextView view = selectionView();
+        CharSequence text = view.getText();
+        if (text == null || text.length() == 0) return;
+        clipboard().setPrimaryClip(android.content.ClipData.newPlainText("text", text));
+        ImageUtils.toast(this, getString(R.string.copied));
+    }
+
+    /** The text being selected: whichever one was last touched. */
+    private TextView selectionView() {
+        if (targetText != null && targetText.hasSelection()) return targetText;
+        if (sourceText != null && sourceText.hasSelection()) return sourceText;
+        return targetPressed ? targetText : sourceText;
     }
 
     private TextView dialogButton(Context context, int textRes) {
