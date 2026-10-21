@@ -80,6 +80,8 @@ public class SelectionOverlay extends View {
     private boolean dragged;
     private boolean clearing;
     private int dragCorner = -1;
+    private int startWindowX;
+    private int startWindowY;
     private float downX, downY;
     private int startLeft, startTop, startRight, startBottom;
 
@@ -125,14 +127,25 @@ public class SelectionOverlay extends View {
     }
 
     void show(Rect initialFrame) {
+        params.width = -1;
+        params.height = -1;
+        params.x = -1;
+        params.y = -1;
         frame.set(initialFrame);
         setVisibility(View.VISIBLE);
         windowManager.addView(this, params);
+        attached = true;
         // Reopen the frame's touch area once the window knows the screen size.
         post(this::updateTouchableArea);
     }
 
     void remove() {
+        attached = false;
+        // Reset the placement so a later show() places the window anew.
+        params.width = -1;
+        params.height = -1;
+        params.x = -1;
+        params.y = -1;
         clearTranslation();
         setVisibility(View.GONE);
         windowManager.removeView(this);
@@ -146,27 +159,17 @@ public class SelectionOverlay extends View {
         super.onSizeChanged(w, h, oldw, oldh);
         // The window is the frame's size, so the screen size comes from the
         // display and the frame keeps its position.
-        android.graphics.Point size = new android.graphics.Point();
-        if (android.os.Build.VERSION.SDK_INT >= 30) {
-            android.graphics.Rect bounds = windowManager.getCurrentWindowMetrics().getBounds();
-            size.set(bounds.width(), bounds.height());
-        } else {
-            wmLegacySize(size);
-        }
-        screenWidth = size.x;
-        screenHeight = size.y;
+        android.util.DisplayMetrics metrics = getResources().getDisplayMetrics();
+        screenWidth = metrics.widthPixels;
+        screenHeight = metrics.heightPixels;
         if (frame.isEmpty()) {
             frame.set(Math.round(screenWidth * 0.06f), Math.round(screenHeight * 0.18f),
                     Math.round(screenWidth * 0.94f), Math.round(screenHeight * 0.82f));
         }
         updateTouchableArea();
-    }
-
-    @SuppressWarnings("deprecation")
-    private void wmLegacySize(android.graphics.Point size) {
-        android.util.DisplayMetrics metrics = new android.util.DisplayMetrics();
-        windowManager.getDefaultDisplay().getRealMetrics(metrics);
-        size.set(metrics.widthPixels, metrics.heightPixels);
+        android.util.Log.i("ImageTransFrame", "size " + screenWidth + "x" + screenHeight
+                + " frame " + frame + " window " + params.x + "," + params.y
+                + " " + params.width + "x" + params.height);
     }
 
     private void clampFrame() {
@@ -188,20 +191,26 @@ public class SelectionOverlay extends View {
      */
     private void updateTouchableArea() {
         if (screenWidth == 0 || screenHeight == 0) return;
-        // The window only spans the frame (plus a margin for the handles),
-        // so everything else on screen keeps receiving touches. Its layout
-        // position is the frame's top-left corner.
-        int margin = Math.round(28 * density);
-        int left = Math.max(0, frame.left - margin);
-        int top = Math.max(0, frame.top - margin);
-        int right = Math.min(screenWidth, frame.right + margin);
-        int bottom = Math.min(screenHeight, frame.bottom + margin);
+        if (params.width > 0 && params.x != -1) {
+            // Already placed: keep the window where it is unless the frame
+            // moved away from it. A position change during a drag would
+            // shift the touch coordinates.
+            moveWindow(params.x, params.y);
+            return;
+        }
+        // The window keeps a fixed size while the frame moves or resizes; a
+        // size change mid-gesture would move the window (and the touch
+        // coordinates) under the finger.
+        Rect staged = new Rect(frame);
+        int left = clampInt(staged.left - sideInset(), 0, screenWidth);
+        int top = clampInt(staged.top - topInset(), 0, screenHeight);
         params.x = left;
         params.y = top;
-        params.width = Math.max(1, right - left);
-        params.height = Math.max(1, bottom - top);
+        params.width = Math.max(1, Math.min(screenWidth, frameWidth(staged)));
+        params.height = Math.max(1, Math.min(screenHeight, frameHeight(staged)));
         contentOffsetX = left;
         contentOffsetY = top;
+        if (!attached) return;
         try {
             windowManager.updateViewLayout(this, params);
         } catch (IllegalArgumentException | IllegalStateException e) {
@@ -210,11 +219,84 @@ public class SelectionOverlay extends View {
         invalidate();
     }
 
-    /** Adds an area (e.g. the floating ball) that must stay touchable. */
-    void addTouchableRect(Rect rect) {
-        // The window only covers the frame; the ball is a separate window
-        // that stays touchable on top of everything.
+    /**
+     * Moves the window without letting its position follow the frame during a
+     * drag: the window keeps the size and (where possible) the position it
+     * had when the gesture started, so touch coordinates stay stable. It is
+     * only panned when the frame would otherwise leave it.
+     */
+    private void moveWindow(int preferredX, int preferredY) {
+        int x = preferredX;
+        int y = preferredY;
+        int side = sideInset();
+        int above = topInset();
+        int below = Math.round(56 * density);
+        // Cover the frame plus the "×"/"▾" buttons.
+        if (frame.left - side < x) x = Math.max(0, frame.left - side);
+        if (frame.right > x + params.width) x = Math.max(0, frame.right - params.width);
+        if (frame.top - above < y) y = Math.max(0, frame.top - above);
+        if (frame.bottom + below > y + params.height) y = Math.max(0, frame.bottom + below - params.height);
+        if (x == params.x && y == params.y) {
+            invalidate();
+            return;
+        }
+        params.x = x;
+        params.y = y;
+        contentOffsetX = x;
+        contentOffsetY = y;
+        if (!attached) return;
+        try {
+            windowManager.updateViewLayout(this, params);
+        } catch (IllegalArgumentException | IllegalStateException ignored) {
+            // Detached while dragging.
+        }
+        invalidate();
     }
+
+    /** Where the translated image is drawn: fitted (and centred) in the frame. */
+    private Rect imageRect() {
+        Rect dst = new Rect(frame);
+        if (translated == null || translated.getWidth() == 0 || translated.getHeight() == 0) {
+            return dst;
+        }
+        float scale = Math.min(frame.width() / (float) translated.getWidth(),
+                frame.height() / (float) translated.getHeight());
+        int w = Math.round(translated.getWidth() * scale);
+        int h = Math.round(translated.getHeight() * scale);
+        dst.set(frame.left + (frame.width() - w) / 2, frame.top + (frame.height() - h) / 2,
+                frame.left + (frame.width() + w) / 2, frame.top + (frame.height() + h) / 2);
+        return dst;
+    }
+
+    private Rect inflate(Rect rect) {
+        float pad = 6 * density;
+        Rect result = new Rect(rect);
+        result.inset(-Math.round(pad), -Math.round(pad));
+        return result;
+    }
+
+    /** Top of the window's visible part, relative to the frame's top. */
+    private int topInset() {
+        return Math.round(50 * density);
+    }
+
+    private int frameWidth(Rect f) {
+        return f.width() + 2 * sideInset();
+    }
+
+    private int frameHeight(Rect f) {
+        return f.height() + topInset() + Math.round(56 * density);
+    }
+
+    private static int clampInt(int value, int min, int max) {
+        return Math.max(min, Math.min(max, value));
+    }
+
+    private int sideInset() {
+        return Math.round(12 * density);
+    }
+
+    private boolean attached;
 
     /** The frame on screen: the capture region. */
     Rect getFrameRect() {
@@ -261,10 +343,16 @@ public class SelectionOverlay extends View {
     @Override
     protected void onDraw(Canvas canvas) {
         super.onDraw(canvas);
-        // The view covers the frame's margin area; draw in screen coordinates.
+        // Draw with the frame's top-left as origin.
         canvas.translate(-contentOffsetX, -contentOffsetY);
         if (state == STATE_RESULT && translated != null) {
-            canvas.drawBitmap(translated, null, frame, null);
+            // Fitted into the frame without distortion; the leftover bands
+            // are left transparent.
+            Rect dst = imageRect();
+            canvas.save();
+            canvas.clipRect(dst);
+            canvas.drawBitmap(translated, null, dst, null);
+            canvas.restore();
         }
         canvas.drawRect(frame, borderPaint);
         int clearSize = clearButtonSize();
@@ -334,17 +422,22 @@ public class SelectionOverlay extends View {
         return Math.round(36 * density);
     }
 
-    /** "×" just above the frame's top-right corner (inside the frame if needed). */
+    /**
+     * "×" at the frame's top-right corner, just above it. It is always placed
+     * so the window (which starts above the frame) contains it.
+     */
     private Rect clearButtonRect(int size) {
-        int top = frame.top - size - Math.round(8 * density);
-        if (top < 0) top = frame.top + Math.round(8 * density);
+        int gap = Math.round(8 * density);
+        int top = frame.top - size - gap;
+        if (top < contentOffsetY) top = contentOffsetY;
+        if (top < 0) top = frame.top + gap;
         return new Rect(frame.right - size, top, frame.right, top + size);
     }
 
     /** "▾" just below the frame's bottom-right corner. */
     private Rect hideButtonRect(int size) {
-        int top = frame.bottom + Math.round(8 * density);
-        if (top + size > screenHeight) top = frame.bottom - size - Math.round(8 * density);
+        int gap = Math.round(8 * density);
+        int top = frame.bottom + gap;
         return new Rect(frame.right - size, top, frame.right, top + size);
     }
 
@@ -357,7 +450,8 @@ public class SelectionOverlay extends View {
     @Override
     public boolean onTouchEvent(MotionEvent event) {
         if (state == STATE_TRANSLATING) return true;
-        // Touch coordinates are in the (frame-sized) window.
+        // Touch coordinates are relative to the window; the canvas is drawn
+        // with the frame's top-left at (sideInset, topInset).
         float x = event.getX() + contentOffsetX;
         float y = event.getY() + contentOffsetY;
         switch (event.getActionMasked()) {
@@ -373,11 +467,11 @@ public class SelectionOverlay extends View {
                 startBottom = frame.bottom;
                 if (state == STATE_RESULT) {
                     int size = clearButtonSize();
-                    if (clearButtonRect(size).contains((int) x, (int) y)) {
+                    if (inflate(clearButtonRect(size)).contains((int) x, (int) y)) {
                         clearing = true;
                         return true;
                     }
-                    if (hideButtonRect(size).contains((int) x, (int) y)) {
+                    if (inflate(hideButtonRect(size)).contains((int) x, (int) y)) {
                         callback.onHide();
                         return true;
                     }
@@ -390,15 +484,21 @@ public class SelectionOverlay extends View {
                 float dx = x - downX;
                 float dy = y - downY;
                 if (!dragged && Math.hypot(dx, dy) < touchSlop) return true;
-                dragged = true;
+                if (!dragged) {
+                    dragged = true;
+                    // The window must stay put under the finger while the
+                    // frame moves: remember where it was at gesture start.
+                    startWindowX = contentOffsetX;
+                    startWindowY = contentOffsetY;
+                }
                 if (dragCorner >= 0) {
                     resize(dx, dy);
                 } else {
                     frame.set(startLeft, startTop, startRight, startBottom);
-                    frame.offset((int) dx, (int) dy);
+                    frame.offset(Math.round(dx), Math.round(dy));
                     clampFrame();
                 }
-                updateTouchableArea();
+                moveWindow(startWindowX, startWindowY);
                 return true;
             }
             case MotionEvent.ACTION_CANCEL:
@@ -413,8 +513,12 @@ public class SelectionOverlay extends View {
                 if (dragged) return true;
                 // Only text in the result reacts to a tap; starting the
                 // translation is the ball's job.
-                if (state == STATE_RESULT && frame.contains((int) x, (int) y)) {
-                    newResultTap(x - frame.left, y - frame.top);
+                // The bitmap is fitted into the frame ("fit center").
+                Rect image = imageRect();
+                if (state == STATE_RESULT && image.contains((int) x, (int) y)) {
+                    float scale = Math.min(frame.width() / (float) translated.getWidth(),
+                            frame.height() / (float) translated.getHeight());
+                    newResultTap((x - image.left) / scale, (y - image.top) / scale);
                 }
                 return true;
             default:
@@ -428,7 +532,8 @@ public class SelectionOverlay extends View {
 
     /** Corner handles 0-3, edge handles 4 (top) and 5 (bottom). */
     private int cornerAt(float x, float y) {
-        float r = handleSize() * 2.5f;
+        // Comfortably larger than the drawn dots.
+        float r = 22 * density;
         float cx = frame.exactCenterX();
         float cy = frame.exactCenterY();
         float[] hx = {frame.left, frame.right, frame.left, frame.right, cx, cx};
