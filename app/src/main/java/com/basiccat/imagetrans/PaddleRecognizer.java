@@ -26,6 +26,7 @@ final class PaddleRecognizer extends NativeInference {
     private static final String REC_MODEL = MODEL_DIR + "rec.onnx";
     private static final String REC_DICT = MODEL_DIR + "ppocrv6_dict.txt";
     private static final String CLS_MODEL = MODEL_DIR + "ch_ppocr_mobile_v2.0_cls_infer.onnx";
+    private static final String DET_MODEL = MODEL_DIR + "PP-OCRv6_det_small.onnx";
     /**
      * doOCRYolo() drops results with mean below 0.5, but rapidocr4j's mean for
      * these lines is often lower even when the text is right; empty results are
@@ -52,6 +53,12 @@ final class PaddleRecognizer extends NativeInference {
             // Same as the extension's recognize(): one orientation per line, no
             // classifier.
             config.Global.useCls = false;
+            // rapidocr4j constructs TextDetector (and TextClassifier) whether or
+            // not the corresponding pass is enabled, and TextDetector's default
+            // path is the relative ch_PP-OCRv4_det_infer.onnx, which does not
+            // exist here. Point it at the bundled DB model so the unused session
+            // opens; detection itself stays off.
+            config.Det.modelPath = ensureModelFile(appContext, DET_MODEL);
             config.Rec.modelPath = ensureModelFile(appContext, REC_MODEL);
             config.Rec.recKeysPath = ensureDictFile(appContext, REC_DICT);
             config.Cls.modelPath = ensureModelFile(appContext, CLS_MODEL);
