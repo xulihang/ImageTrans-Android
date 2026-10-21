@@ -13,7 +13,10 @@ public final class Prefs {
     public static final String MODE_OPENAI = "openai";
     public static final String MODE_ORIGINAL = "original";
 
-    public static final String DEFAULT_SERVER_URL = "https://local.basiccat.org:51043";
+    /** Cloud server: Android cannot run the desktop ImageTrans server locally. */
+    public static final String DEFAULT_SERVER_URL = "https://service.basiccat.org:51043";
+    /** Old default; on a phone it resolves to the phone itself, so migrate it. */
+    private static final String LEGACY_DEFAULT_SERVER_URL = "https://local.basiccat.org:51043";
     public static final String DEFAULT_OPENAI_URL = "https://api.deepseek.com/v1";
     public static final String DEFAULT_OPENAI_MODEL = "deepseek-v4-flash";
     public static final String DEFAULT_RENDER_CSS = "text-align: center;\nborder-radius: 10%;";
@@ -49,7 +52,11 @@ public final class Prefs {
     }
 
     public static String getServerUrl(Context context) {
-        return get(context).getString("server_url", DEFAULT_SERVER_URL);
+        String value = get(context).getString("server_url", DEFAULT_SERVER_URL);
+        // Settings saved by older builds contain the desktop-local default,
+        // which can never work on a phone; use the cloud server instead.
+        if (LEGACY_DEFAULT_SERVER_URL.equals(value)) return DEFAULT_SERVER_URL;
+        return value;
     }
 
     public static void setServerUrl(Context context, String value) {

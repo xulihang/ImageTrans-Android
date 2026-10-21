@@ -401,8 +401,9 @@ public class TranslateActivity extends Activity {
             message += "\n原因：" + throwable.getCause();
         }
         if (Prefs.MODE_IMAGETRANS.equals(Prefs.getMode(this))) {
-            message += "\n提示：手机访问电脑上的服务器时，请填写电脑的局域网 IP（不是 local.basiccat.org）。"
-                    + "如果服务器使用自签名证书，请先在系统设置中安装证书，或改用 HTTP 地址。";
+            message += "\n提示：默认使用云端服务器 service.basiccat.org:51043；如需连接电脑上的服务器，"
+                    + "请填写电脑的局域网 IP（不是 local.basiccat.org）。"
+                    + "如果局域网服务器使用自签名证书，请先在系统设置中安装证书，或改用 HTTP 地址。";
         }
         errorText.setText(message);
         setResultButtonsEnabled(translatedBitmap != null);

@@ -110,7 +110,7 @@
                 style="@style/Note"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="手机访问电脑上的服务器时，请填写电脑的局域网地址，而不是 local.basiccat.org。若服务器使用自签名 HTTPS 证书，请先在系统设置中把证书安装为受信任证书；也可以使用 HTTP 地址。" />
+                android:text="默认使用云端服务器 service.basiccat.org:51043。如需连接电脑上的 ImageTrans 服务器，请填写电脑的局域网地址，而不是 local.basiccat.org（在手机上会解析到手机自己）。局域网服务器若使用自签名 HTTPS 证书，请先在系统设置中把证书安装为受信任证书；也可以使用 HTTP 地址。" />
         </LinearLayout>
 
         <LinearLayout

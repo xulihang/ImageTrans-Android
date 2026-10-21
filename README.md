@@ -68,7 +68,13 @@ app/build/outputs/apk/debug/app-debug.apk
 
 ### ImageTrans 服务器
 
-在桌面端 ImageTrans 中打开 **工具 → 服务器**，启动服务器。手机上填写电脑的局域网地址，例如：
+安卓手机不能运行 ImageTrans 服务器本身，因此默认使用云端服务器：
+
+```
+https://service.basiccat.org:51043
+```
+
+如果需要连接电脑上的服务器，先在桌面端 ImageTrans 中打开 **工具 → 服务器** 启动服务器，手机上填写电脑的局域网地址，例如：
 
 ```
 https://192.168.1.10:51043
@@ -77,7 +83,7 @@ https://192.168.1.10:51043
 注意：
 
 - 不要填写 `local.basiccat.org`，它在手机上解析到手机自己。
-- ImageTrans 本地服务器默认使用自签名 HTTPS 证书。App 不会全局关闭证书校验：
+- 电脑上的 ImageTrans 服务器默认使用自签名 HTTPS 证书。App 不会全局关闭证书校验：
   - 推荐把服务器证书安装到 Android 的“受信任凭据 → 用户”中（App 的 network security config 已信任用户证书）；
   - 或者临时使用 HTTP 地址进行局域网测试。
 - 项目名称（`displayName`）和密码按 ImageTrans 服务器里的设置填写；留空时 `displayName` 使用 `default`。
