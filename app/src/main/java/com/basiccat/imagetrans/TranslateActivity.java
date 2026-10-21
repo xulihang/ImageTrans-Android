@@ -11,7 +11,6 @@ import android.util.Log;
 import android.view.View;
 import android.webkit.WebView;
 import android.widget.Button;
-import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ProgressBar;
 import android.widget.TextView;
@@ -34,7 +33,7 @@ import java.util.concurrent.TimeUnit;
 public class TranslateActivity extends Activity {
     private static final String TAG = "TranslateActivity";
 
-    private ImageView imageView;
+    private ZoomableImageView imageView;
     private TextView errorText;
     private TextView statusText;
     private TextView btnToggle;
@@ -97,6 +96,15 @@ public class TranslateActivity extends Activity {
             }
         });
 
+        // At the fitted scale, swiping sideways flips original/translation.
+        // Zoomed-in images use horizontal drags for panning instead.
+        imageView.setSwipeListener(new ZoomableImageView.OnSwipeListener() {
+            @Override
+            public void onSwipe(boolean towardLeft) {
+                toggleOriginal();
+            }
+        });
+
         imageUri = getIntent().getData();
         if (imageUri == null) {
             showError(new Exception("没有收到图片"));
@@ -125,7 +133,7 @@ public class TranslateActivity extends Activity {
                     mainHandler.post(new Runnable() {
                         @Override
                         public void run() {
-                            imageView.setImageBitmap(originalBitmap);
+                            imageView.setImage(originalBitmap);
                         }
                     });
 
@@ -384,7 +392,7 @@ public class TranslateActivity extends Activity {
                 translatedBitmap = bitmap;
                 showingOriginal = false;
                 savedUri = null;
-                imageView.setImageBitmap(bitmap);
+                imageView.setImage(bitmap);
                 btnToggle.setText(R.string.translate_toggle_original);
                 progressPanel.setVisibility(View.GONE);
                 errorText.setVisibility(View.GONE);
@@ -438,7 +446,7 @@ public class TranslateActivity extends Activity {
     private void toggleOriginal() {
         if (translatedBitmap == null || originalBitmap == null) return;
         showingOriginal = !showingOriginal;
-        imageView.setImageBitmap(showingOriginal ? originalBitmap : translatedBitmap);
+        imageView.setImage(showingOriginal ? originalBitmap : translatedBitmap);
         btnToggle.setText(showingOriginal
                 ? R.string.translate_toggle_translation
                 : R.string.translate_toggle_original);
@@ -474,7 +482,7 @@ public class TranslateActivity extends Activity {
     protected void onDestroy() {
         super.onDestroy();
         executor.shutdownNow();
-        imageView.setImageDrawable(null);
+        imageView.setImage(null);
         if (renderer != null) {
             renderer.destroy();
             renderer = null;
