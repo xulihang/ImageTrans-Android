@@ -9,6 +9,7 @@ import android.media.projection.MediaProjectionManager;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
+import android.view.MotionEvent;
 import android.view.View;
 import android.widget.Button;
 import android.widget.TextView;
@@ -22,6 +23,8 @@ public class MainActivity extends Activity {
     private TextView modeSummary;
     private TextView langSummary;
     private Button btnFloating;
+    /** The user is touching the screen, i.e. this activity is in front. */
+    private boolean touching;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -31,6 +34,17 @@ public class MainActivity extends Activity {
         modeSummary = findViewById(R.id.modeSummary);
         langSummary = findViewById(R.id.langSummary);
         btnFloating = findViewById(R.id.btnFloating);
+        // Toggling screen capture requires visible UI: Android stops a
+        // projection whose foreground service was started from the
+        // background, and the floating service keeps its session alive.
+        getWindow().getDecorView().setOnTouchListener(new View.OnTouchListener() {
+            @Override
+            public boolean onTouch(View v, MotionEvent event) {
+                touching = event.getActionMasked() == MotionEvent.ACTION_DOWN
+                        || event.getActionMasked() == MotionEvent.ACTION_MOVE;
+                return false;
+            }
+        });
         btnFloating.setOnClickListener(v -> toggleFloating());
 
         findViewById(R.id.btnPickImage).setOnClickListener(new View.OnClickListener() {
@@ -81,6 +95,9 @@ public class MainActivity extends Activity {
     }
 
     private void enableFloating() {
+        // Drop a floating window left over from a previous process without
+        // its capture session (it would otherwise show an unusable mask).
+        ScreenshotTranslateService.stop(this);
         if (!Prefs.hasOverlayPermission(this)) {
             if (Prefs.isOverlayAsked(this)) {
                 new AlertDialog.Builder(this)
@@ -132,7 +149,7 @@ public class MainActivity extends Activity {
             // The grant is handed straight to the floating service.
             if (resultCode == RESULT_OK && data != null) {
                 Prefs.setFloatingEnabled(this, true);
-                ScreenshotTranslateService.show(this, resultCode, data);
+                ScreenshotTranslateService.enable(this, resultCode, data);
                 ImageUtils.toast(this, getString(R.string.main_floating_started));
             } else {
                 ImageUtils.toast(this, getString(R.string.main_floating_cancelled));

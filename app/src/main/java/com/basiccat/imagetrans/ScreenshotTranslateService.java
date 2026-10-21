@@ -59,10 +59,10 @@ public class ScreenshotTranslateService extends Service {
     static final String ACTION_SHOW = "com.basiccat.imagetrans.FLOATING_SHOW";
     static final String ACTION_HIDE = "com.basiccat.imagetrans.FLOATING_HIDE";
     static final String ACTION_BALL = "com.basiccat.imagetrans.FLOATING_BALL";
-    private static final String ACTION_START = "com.basiccat.imagetrans.FLOATING_START";
 
     static final String EXTRA_RESULT_CODE = "result_code";
     static final String EXTRA_RESULT_DATA = "result_data";
+    static final String EXTRA_ENABLE_ONLY = "enable_only";
 
     private static final int NOTIFICATION_ID = 1;
     private static final String CHANNEL_ID = "screenshot_translate";
@@ -74,6 +74,16 @@ public class ScreenshotTranslateService extends Service {
                 .setAction(ACTION_SHOW)
                 .putExtra(EXTRA_RESULT_CODE, resultCode)
                 .putExtra(EXTRA_RESULT_DATA, resultData);
+        context.startForegroundService(intent);
+    }
+
+    /** Starts the floating ball in the background (frame shown on capture). */
+    public static void enable(Context context, int resultCode, Intent resultData) {
+        Intent intent = new Intent(context, ScreenshotTranslateService.class)
+                .setAction(ACTION_SHOW)
+                .putExtra(EXTRA_RESULT_CODE, resultCode)
+                .putExtra(EXTRA_RESULT_DATA, resultData)
+                .putExtra(EXTRA_ENABLE_ONLY, true);
         context.startForegroundService(intent);
     }
 
@@ -97,6 +107,8 @@ public class ScreenshotTranslateService extends Service {
     private SelectionOverlay overlay;
     private WindowManager.LayoutParams overlayParams;
     private boolean overlayShown;
+    /** A capture was requested while the permission prompt was open. */
+    private boolean pendingCapture;
     private final List<Box> hitBoxes = new ArrayList<>();
 
     // Capture
@@ -132,21 +144,39 @@ public class ScreenshotTranslateService extends Service {
         if (ACTION_SHOW.equals(action)) {
             projectionResultCode = intent.getIntExtra(EXTRA_RESULT_CODE, 0);
             projectionData = intent.getParcelableExtra(EXTRA_RESULT_DATA);
+            if (intent.getBooleanExtra(EXTRA_ENABLE_ONLY, false)) {
+                // Enabled from the main screen: show the ball only; the frame
+                // appears with the first capture.
+                Prefs.setFloatingEnabled(this, true);
+                enterForeground(getString(R.string.floating_running));
+                if (!ballShown) showBall();
+                return START_NOT_STICKY;
+            }
             showWindows();
+            if (pendingCapture) {
+                pendingCapture = false;
+                capture();
+            }
             return START_NOT_STICKY;
         }
-        // Restarted by the system (no capture token) or the ball notification.
+        if (!Intent.ACTION_MAIN.equals(action) && !ACTION_BALL.equals(action)) {
+            // Not a system restart nor the notification: a stale start.
+            shutdown();
+            return START_NOT_STICKY;
+        }
+        // Restarted by the system (no capture token): the system refuses a
+        // projection for a service started in the background, so show only
+        // the ball. The frame appears at the first capture, which gets the
+        // permission (the ball must be tapped first: that is visible UI).
         enterForeground(getString(R.string.floating_running));
         if (!Prefs.hasOverlayPermission(this)) {
             shutdown();
             return START_NOT_STICKY;
         }
-        if (!ballShown || !overlayShown) {
-            // A restart lost the projection token; the buttons ask for it.
-            projectionData = null;
-            mediaProjection = null;
-            showWindows();
-        }
+        projectionResultCode = 0;
+        projectionData = null;
+        mediaProjection = null;
+        if (!ballShown) showBall();
         return START_NOT_STICKY;
     }
 
@@ -235,6 +265,7 @@ public class ScreenshotTranslateService extends Service {
         enterForeground(getString(R.string.floating_running));
         if (!ballShown) showBall();
         if (!overlayShown) showOverlay();
+        overlay.setVisibility(View.VISIBLE);
         // The ball is only needed as a launcher; shrink its notification.
         NotificationManager manager = getSystemService(NotificationManager.class);
         Notification.Builder builder = new Notification.Builder(this, CHANNEL_BALL_ID)
@@ -425,6 +456,12 @@ public class ScreenshotTranslateService extends Service {
             shutdown();
             return;
         }
+        if (overlayShown) {
+            overlay.setVisibility(View.VISIBLE);
+        } else {
+            // Opened from the notification before a frame existed.
+            showOverlay();
+        }
         enterForeground(getString(R.string.floating_translating));
         mainHandler.removeCallbacks(autoHideNotification);
         try {
@@ -490,6 +527,7 @@ public class ScreenshotTranslateService extends Service {
     }
 
     private void startProjectionPermission() {
+        pendingCapture = true;
         Log.i(TAG, "asking for capture permission");
         startActivity(new Intent(this, ProjectionPermissionActivity.class)
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
