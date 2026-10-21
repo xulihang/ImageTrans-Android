@@ -158,6 +158,7 @@ public class ScreenshotTranslateService extends Service {
 
     /** Started only to run the server (no floating windows). */
     private boolean serverOnly;
+    private android.os.PowerManager.WakeLock wakeLock;
 
     private boolean isServerOnly() {
         return serverOnly;
@@ -177,6 +178,7 @@ public class ScreenshotTranslateService extends Service {
             stopApiServer();
             startApiServer();
             serverOnly = true;
+            acquireWakeLock();
         }
     }
 
@@ -286,6 +288,7 @@ public class ScreenshotTranslateService extends Service {
             Log.i(TAG, "service destroyed; server continues");
             return;
         }
+        releaseWakeLock();
         executor.shutdownNow();
         if (mediaProjection != null) mediaProjection.stop();
         super.onDestroy();
@@ -393,6 +396,7 @@ public class ScreenshotTranslateService extends Service {
     private boolean startApiServer() {
         try {
             ImageTransApiServer.get().start(this);
+            acquireWakeLock();
             return true;
         } catch (Throwable throwable) {
             Log.e(TAG, "server start failed", throwable);
@@ -405,6 +409,31 @@ public class ScreenshotTranslateService extends Service {
 
     private void stopApiServer() {
         ImageTransApiServer.get().stop();
+        releaseWakeLock();
+    }
+
+    /**
+     * With the screen off the phone may power down the radio/CPU and stop
+     * answering HTTP requests. The server is meant to answer whenever the
+     * extension asks, so keep a partial wake lock while it runs (a partial
+     * wake lock is allowed from a foreground service of type dataSync and
+     * does not keep the screen on).
+     */
+    private void acquireWakeLock() {
+        if (wakeLock != null && wakeLock.isHeld()) return;
+        android.os.PowerManager power = getSystemService(android.os.PowerManager.class);
+        wakeLock = power.newWakeLock(android.os.PowerManager.PARTIAL_WAKE_LOCK,
+                "imagetrans:server");
+        wakeLock.setReferenceCounted(false);
+        wakeLock.acquire();
+        Log.i(TAG, "wake lock acquired for the server");
+    }
+
+    private void releaseWakeLock() {
+        if (wakeLock != null && wakeLock.isHeld()) {
+            wakeLock.release();
+            Log.i(TAG, "wake lock released");
+        }
     }
 
     /** Notification for a server running without floating windows. */
