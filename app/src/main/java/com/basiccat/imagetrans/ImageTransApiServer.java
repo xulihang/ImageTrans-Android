@@ -395,7 +395,10 @@ public final class ImageTransApiServer {
             }
             boolean onlyBoxes = "true".equals(form.get("withoutImage"));
 
-            List<Box> boxes = ImageUtils.detectOnly(context, bitmap, sourceLang);
+            // Merge lines into paragraphs, as the desktop server does: the
+            // extension translates what it gets.
+            List<Box> boxes = TextBoxMerger.merge(
+                    ImageUtils.detectOnly(context, bitmap, sourceLang), sourceLang, 15, 15);
             if (Prefs.MODE_OPENAI.equals(Prefs.getMode(context))) {
                 List<String> texts = new ArrayList<>();
                 for (Box box : boxes) texts.add(box.source);
