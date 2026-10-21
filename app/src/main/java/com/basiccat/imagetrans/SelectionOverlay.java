@@ -27,13 +27,11 @@ import android.view.WindowManager;
  * - Select state: drag inside the frame to move it, corner handles to resize
  *   it. Tapping inside does nothing: the floating ball starts translation.
  * - Translating: shows progress; touches are ignored.
- * - Result: tap text for its dialog; "×" clears the result, "▾" hides the frame (leaving only the ball).
+ * - Result: tap text for its dialog; "×" clears the result. The frame itself
+ *   never goes away, it is closed together with the floating ball.
  */
 public class SelectionOverlay extends View {
     public interface Callback {
-        /** "▾": hide the frame; the floating ball stays. */
-        void onHide();
-
         /** Nothing to show any more (e.g. the frame became too small). */
         void onCancelled();
     }
@@ -230,12 +228,13 @@ public class SelectionOverlay extends View {
         int y = preferredY;
         int side = sideInset();
         int above = topInset();
-        int below = Math.round(56 * density);
-        // Cover the frame plus the "×"/"▾" buttons.
+        // Cover the frame plus the "×" button above it.
         if (frame.left - side < x) x = Math.max(0, frame.left - side);
         if (frame.right > x + params.width) x = Math.max(0, frame.right - params.width);
         if (frame.top - above < y) y = Math.max(0, frame.top - above);
-        if (frame.bottom + below > y + params.height) y = Math.max(0, frame.bottom + below - params.height);
+        if (frame.bottom + bottomInset() > y + params.height) {
+            y = Math.max(0, frame.bottom + bottomInset() - params.height);
+        }
         if (x == params.x && y == params.y) {
             invalidate();
             return;
@@ -285,7 +284,12 @@ public class SelectionOverlay extends View {
     }
 
     private int frameHeight(Rect f) {
-        return f.height() + topInset() + Math.round(56 * density);
+        return f.height() + topInset() + bottomInset();
+    }
+
+    /** Grip below the frame where a drag can start. */
+    private int bottomInset() {
+        return Math.round(20 * density);
     }
 
     private static int clampInt(int value, int min, int max) {
@@ -357,7 +361,6 @@ public class SelectionOverlay extends View {
         canvas.drawRect(frame, borderPaint);
         int clearSize = clearButtonSize();
         Rect clear = clearButtonRect(clearSize);
-        Rect hide = hideButtonRect(clearSize);
 
         switch (state) {
             case STATE_SELECT: {
@@ -387,7 +390,6 @@ public class SelectionOverlay extends View {
                 float k = clearSize * 0.18f;
                 canvas.drawLine(cx - k, cy - k, cx + k, cy + k, strokePaint);
                 canvas.drawLine(cx + k, cy - k, cx - k, cy + k, strokePaint);
-                drawHideButton(canvas, hide);
                 break;
             default:
                 break;
@@ -406,18 +408,6 @@ public class SelectionOverlay extends View {
         canvas.drawText(text, cx, cy + textPaint.getTextSize() / 3f, textPaint);
     }
 
-    private void drawHideButton(Canvas canvas, Rect rect) {
-        // A small "⌄" inside a rounded square: hides the frame but keeps the
-        // ball.
-        canvas.drawRoundRect(rect.left, rect.top, rect.right, rect.bottom,
-                rect.width() / 3f, rect.width() / 3f, handlePaint);
-        float cx = rect.exactCenterX();
-        float cy = rect.exactCenterY();
-        float s = rect.width() * 0.2f;
-        canvas.drawLine(cx - s, cy - s * 0.4f, cx, cy + s * 0.6f, strokePaint);
-        canvas.drawLine(cx + s, cy - s * 0.4f, cx, cy + s * 0.6f, strokePaint);
-    }
-
     private int clearButtonSize() {
         return Math.round(36 * density);
     }
@@ -431,13 +421,6 @@ public class SelectionOverlay extends View {
         int top = frame.top - size - gap;
         if (top < contentOffsetY) top = contentOffsetY;
         if (top < 0) top = frame.top + gap;
-        return new Rect(frame.right - size, top, frame.right, top + size);
-    }
-
-    /** "▾" just below the frame's bottom-right corner. */
-    private Rect hideButtonRect(int size) {
-        int gap = Math.round(8 * density);
-        int top = frame.bottom + gap;
         return new Rect(frame.right - size, top, frame.right, top + size);
     }
 
@@ -469,10 +452,6 @@ public class SelectionOverlay extends View {
                     int size = clearButtonSize();
                     if (inflate(clearButtonRect(size)).contains((int) x, (int) y)) {
                         clearing = true;
-                        return true;
-                    }
-                    if (inflate(hideButtonRect(size)).contains((int) x, (int) y)) {
-                        callback.onHide();
                         return true;
                     }
                     return true;
@@ -570,12 +549,4 @@ public class SelectionOverlay extends View {
         clampFrame();
     }
 
-    @Override
-    public boolean onKeyDown(int keyCode, KeyEvent event) {
-        if (keyCode == KeyEvent.KEYCODE_BACK) {
-            callback.onHide();
-            return true;
-        }
-        return super.onKeyDown(keyCode, event);
-    }
 }

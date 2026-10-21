@@ -109,6 +109,8 @@ public class ScreenshotTranslateService extends Service {
     /** A capture was requested while the permission prompt was open. */
     private boolean pendingCapture;
     private final List<Box> hitBoxes = new ArrayList<>();
+    /** The source/target overlay, if open. */
+    private View textBoxDialog;
 
     // Capture
     private MediaProjection mediaProjection = null;
@@ -245,6 +247,7 @@ public class ScreenshotTranslateService extends Service {
     }
 
     private void removeWindows() {
+        dismissTextBoxDialog();
         if (overlay != null) {
             overlay.remove();
             overlay = null;
@@ -421,17 +424,6 @@ public class ScreenshotTranslateService extends Service {
             return;
         }
         overlay = new SelectionOverlay(this, new SelectionOverlay.Callback() {
-            @Override
-            public void onHide() {
-                // Keep the ball; the frame comes back with the next capture.
-                Log.i(TAG, "frame hidden");
-                if (overlay != null) {
-                    overlay.remove();
-                    overlay = null;
-                }
-                if (ballShown) ball.setVisibility(View.VISIBLE);
-            }
-
             @Override
             public void onCancelled() {
                 // Only while shutting down.
@@ -804,27 +796,116 @@ public class ScreenshotTranslateService extends Service {
         return true;
     }
 
-    private void showTextBoxDialog(int index) {
+    /**
+     * Shows the source/target of a box. A Dialog needs an activity token,
+     * which a service does not have, so the dialog is added as an overlay
+     * window instead.
+     */
+    private void showTextBoxDialog(final int index) {
+        dismissTextBoxDialog();
         Context themed = new ContextThemeWrapper(this, R.style.FloatingTheme);
         View content = LayoutInflater.from(themed).inflate(R.layout.dialog_text_box, null);
         TextView sourceText = content.findViewById(R.id.sourceText);
         TextView targetText = content.findViewById(R.id.targetText);
-        android.app.AlertDialog.Builder builder = new android.app.AlertDialog.Builder(themed)
-                .setTitle(getString(R.string.text_box_title, index + 1, hitBoxes.size()))
-                .setView(content)
-                .setPositiveButton(R.string.action_close, null);
-        if (hitBoxes.size() > 1) {
-            builder.setNegativeButton(R.string.action_previous,
-                    (dialog, which) -> showTextBoxDialog((index - 1 + hitBoxes.size()) % hitBoxes.size()));
-            builder.setNeutralButton(R.string.action_next,
-                    (dialog, which) -> showTextBoxDialog((index + 1) % hitBoxes.size()));
-        }
+
+        LinearLayout panel = new LinearLayout(themed);
+        panel.setOrientation(LinearLayout.VERTICAL);
+        panel.setBackgroundResource(R.drawable.card_bg);
+        panel.setElevation(dp(8));
+
+        TextView title = new TextView(themed);
+        title.setText(getString(R.string.text_box_title, index + 1, hitBoxes.size()));
+        title.setTextColor(getColor(R.color.text_primary));
+        title.setTextSize(18);
+        title.setPadding(dp(24), dp(20), dp(24), dp(4));
+        panel.addView(title, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
+        panel.addView(content, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
+
         Box box = hitBoxes.get(index);
         sourceText.setText(box.source == null || box.source.trim().isEmpty()
                 ? getString(R.string.text_box_empty) : box.source);
         targetText.setText(box.target == null || box.target.trim().isEmpty()
                 ? getString(R.string.text_box_empty) : box.target);
-        builder.show();
+
+        LinearLayout buttons = new LinearLayout(themed);
+        buttons.setOrientation(LinearLayout.HORIZONTAL);
+        buttons.setGravity(Gravity.END);
+        buttons.setPadding(dp(12), dp(4), dp(12), dp(8));
+        if (hitBoxes.size() > 1) {
+            TextView previous = dialogButton(themed, R.string.action_previous);
+            previous.setOnClickListener(v ->
+                    showTextBoxDialog((index - 1 + hitBoxes.size()) % hitBoxes.size()));
+            buttons.addView(previous);
+            TextView next = dialogButton(themed, R.string.action_next);
+            next.setOnClickListener(v ->
+                    showTextBoxDialog((index + 1) % hitBoxes.size()));
+            buttons.addView(next);
+        }
+        TextView close = dialogButton(themed, R.string.action_close);
+        close.setOnClickListener(v -> dismissTextBoxDialog());
+        buttons.addView(close);
+        panel.addView(buttons, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
+
+        // Keep the dialog fully on screen and let it scroll if the text is long.
+        DisplayMetrics metrics = getResources().getDisplayMetrics();
+        int maxHeight = Math.round(metrics.heightPixels * 0.6f);
+        panel.measure(View.MeasureSpec.makeMeasureSpec(Math.round(metrics.widthPixels * 0.86f),
+                        View.MeasureSpec.EXACTLY),
+                View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED));
+        int height = Math.min(panel.getMeasuredHeight(), maxHeight);
+        android.widget.ScrollView scroll = new android.widget.ScrollView(themed);
+        scroll.addView(panel);
+
+        WindowManager.LayoutParams params = new WindowManager.LayoutParams(
+                Math.round(metrics.widthPixels * 0.86f), height,
+                overlayType(),
+                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
+                        | WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
+                PixelFormat.TRANSLUCENT);
+        params.gravity = Gravity.CENTER;
+        params.setTitle("ImageTransTextBox");
+        try {
+            windowManager.addView(scroll, params);
+            textBoxDialog = scroll;
+        } catch (Throwable throwable) {
+            Log.e(TAG, "text box dialog failed", throwable);
+        }
+    }
+
+    private TextView dialogButton(Context context, int textRes) {
+        TextView button = new TextView(context);
+        button.setText(textRes);
+        button.setTextColor(getColor(R.color.primary));
+        button.setTextSize(15);
+        button.setGravity(Gravity.CENTER);
+        button.setPadding(dp(16), dp(4), dp(16), dp(4));
+        button.setBackgroundResource(selectableItemBackground(context));
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT, dp(44));
+        button.setLayoutParams(params);
+        return button;
+    }
+
+    @SuppressWarnings("deprecation")
+    private static int selectableItemBackground(Context context) {
+        android.util.TypedValue value = new android.util.TypedValue();
+        context.getTheme().resolveAttribute(android.R.attr.selectableItemBackgroundBorderless,
+                value, true);
+        return value.resourceId;
+    }
+
+    private void dismissTextBoxDialog() {
+        if (textBoxDialog != null) {
+            try {
+                windowManager.removeView(textBoxDialog);
+            } catch (IllegalArgumentException ignored) {
+                // Already removed.
+            }
+            textBoxDialog = null;
+        }
     }
 
     /** A hidden WebView renderer on the main thread, destroyed afterwards. */
