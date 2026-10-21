@@ -148,10 +148,20 @@ public class ScreenshotTranslateService extends Service {
             getSystemService(NotificationManager.class).cancel(NOTIFICATION_ID);
         }
         stopForeground(STOP_FOREGROUND_REMOVE);
+        if (Prefs.isServerEnabled(ScreenshotTranslateService.this)
+                && !ScreenshotTranslateService.this.isServerOnly()) {
+            // The floating windows keep their own notification; add the
+            // server address to it.
+            showServerNotification();
+        }
     };
 
     /** Started only to run the server (no floating windows). */
     private boolean serverOnly;
+
+    private boolean isServerOnly() {
+        return serverOnly;
+    }
 
     // --- lifecycle --------------------------------------------------------
 
@@ -161,10 +171,12 @@ public class ScreenshotTranslateService extends Service {
         windowManager = (WindowManager) getSystemService(WINDOW_SERVICE);
         createChannels();
         if (Prefs.isServerEnabled(this)) {
-            // Process restarted (or the service recreated): bring the server
-            // back; its notification follows.
+            // Service recreated: the server in this process may be a stale
+            // one (its workers belong to the old instance); replace it. The
+            // foreground notification is set up by the start command.
+            stopApiServer();
             startApiServer();
-            showServerNotification();
+            serverOnly = true;
         }
     }
 
@@ -173,6 +185,23 @@ public class ScreenshotTranslateService extends Service {
         String action = intent == null ? null : intent.getAction();
         Log.i(TAG, "onStartCommand " + action);
         if (ACTION_HIDE.equals(action)) {
+            if (Prefs.isServerEnabled(this)) {
+                if (intent.getBooleanExtra(EXTRA_SERVER_ONLY, false)) {
+                    // "Stop server": the server and its windows all go.
+                    shutdown();
+                    return START_NOT_STICKY;
+                }
+                // Closing the windows: the server keeps running.
+                Prefs.setFloatingEnabled(this, false);
+                removeWindows();
+                mediaProjection = null;
+                projectionData = null;
+                serverOnly = true;
+                // A new start command: restart the sticky state again.
+                startForeground(NOTIFICATION_ID, buildServerNotification());
+                enterServerForeground();
+                return START_STICKY;
+            }
             if (intent.getBooleanExtra(EXTRA_SERVER_ONLY, false)) {
                 stopApiServer();
                 if (serverOnly) {
@@ -251,6 +280,12 @@ public class ScreenshotTranslateService extends Service {
         Prefs.setFloatingEnabled(this, false);
         mainHandler.removeCallbacksAndMessages(null);
         removeWindows();
+        if (Prefs.isServerEnabled(this)) {
+            // The service is being restarted (e.g. for an app update). The
+            // new instance replaces the server; keep serving in the meantime.
+            Log.i(TAG, "service destroyed; server continues");
+            return;
+        }
         executor.shutdownNow();
         if (mediaProjection != null) mediaProjection.stop();
         super.onDestroy();
@@ -336,8 +371,20 @@ public class ScreenshotTranslateService extends Service {
             ball = null;
             ballShown = false;
         }
-        // With the server still running, its notification takes over.
-        if (Prefs.isServerEnabled(this)) showServerNotification();
+    }
+
+    /** Resumes the foreground notification whichever mode is active. */
+    private void restoreForegroundNotification() {
+        if (!Prefs.isServerEnabled(this)) return;
+        if (ballShown || overlay != null) {
+            // Floating windows: the foreground belongs to them; the server
+            // address is appended to their notification.
+            enterForeground(getString(R.string.floating_running));
+            showServerNotification();
+        } else {
+            serverOnly = true;
+            enterServerForeground();
+        }
     }
 
     // --- server -----------------------------------------------------------
@@ -360,8 +407,8 @@ public class ScreenshotTranslateService extends Service {
         ImageTransApiServer.get().stop();
     }
 
-    /** Foreground notification for a server running without floating windows. */
-    private void enterServerForeground() {
+    /** Notification for a server running without floating windows. */
+    private Notification buildServerNotification() {
         Intent content = new Intent(this, MainActivity.class);
         PendingIntent open = PendingIntent.getActivity(this, 0, content,
                 PendingIntent.FLAG_IMMUTABLE);
@@ -373,7 +420,7 @@ public class ScreenshotTranslateService extends Service {
         String url = ImageTransApiServer.get().address();
         String text = url != null ? getString(R.string.server_notification_text, url)
                 : getString(R.string.server_notification_text_no_ip);
-        Notification notification = new Notification.Builder(this, CHANNEL_SERVER_ID)
+        return new Notification.Builder(this, CHANNEL_SERVER_ID)
                 .setSmallIcon(R.mipmap.ic_launcher)
                 .setContentTitle(getString(R.string.server_notification_title))
                 .setContentText(text)
@@ -382,12 +429,16 @@ public class ScreenshotTranslateService extends Service {
                 .addAction(0, getString(R.string.main_server_on), stopPending)
                 .setOngoing(true)
                 .build();
+    }
+
+    /** Foreground service with the server's ongoing notification. */
+    private void enterServerForeground() {
         try {
             if (Build.VERSION.SDK_INT >= 29) {
-                startForeground(NOTIFICATION_ID, notification,
+                startForeground(NOTIFICATION_ID, buildServerNotification(),
                         ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC);
             } else {
-                startForeground(NOTIFICATION_ID, notification);
+                startForeground(NOTIFICATION_ID, buildServerNotification());
             }
         } catch (Throwable throwable) {
             Log.e(TAG, "server foreground failed", throwable);
