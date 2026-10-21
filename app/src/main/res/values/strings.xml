@@ -33,6 +33,7 @@
     <string name="floating_capture_failed">截屏失败</string>
     <string name="floating_translate_failed">翻译失败：%1$s</string>
     <string name="floating_channel_name">截屏翻译</string>
+    <string name="copied">已复制</string>
     <string name="floating_ball_channel_name">截屏翻译悬浮球</string>
     <string name="floating_running">截屏翻译已开启</string>
     <string name="floating_running_hint">点按悬浮球可翻译或关闭</string>

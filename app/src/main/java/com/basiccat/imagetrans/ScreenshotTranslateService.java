@@ -808,10 +808,14 @@ public class ScreenshotTranslateService extends Service {
         TextView sourceText = content.findViewById(R.id.sourceText);
         TextView targetText = content.findViewById(R.id.targetText);
 
+        // The overlay window cannot take focus, so long-press selection is
+        // not available here: tapping a text copies it.
+        sourceText.setOnClickListener(v -> copyText(sourceText));
+        targetText.setOnClickListener(v -> copyText(targetText));
+
         LinearLayout panel = new LinearLayout(themed);
         panel.setOrientation(LinearLayout.VERTICAL);
         panel.setBackgroundResource(R.drawable.card_bg);
-        panel.setElevation(dp(8));
 
         TextView title = new TextView(themed);
         title.setText(getString(R.string.text_box_title, index + 1, hitBoxes.size()));
@@ -849,19 +853,17 @@ public class ScreenshotTranslateService extends Service {
         panel.addView(buttons, new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
 
-        // Keep the dialog fully on screen and let it scroll if the text is long.
         DisplayMetrics metrics = getResources().getDisplayMetrics();
-        int maxHeight = Math.round(metrics.heightPixels * 0.6f);
-        panel.measure(View.MeasureSpec.makeMeasureSpec(Math.round(metrics.widthPixels * 0.86f),
-                        View.MeasureSpec.EXACTLY),
-                View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED));
-        int height = Math.min(panel.getMeasuredHeight(), maxHeight);
         android.widget.ScrollView scroll = new android.widget.ScrollView(themed);
         scroll.addView(panel);
 
         WindowManager.LayoutParams params = new WindowManager.LayoutParams(
-                Math.round(metrics.widthPixels * 0.86f), height,
+                Math.round(metrics.widthPixels * 0.86f),
+                Math.round(metrics.heightPixels * 0.6f),
                 overlayType(),
+                // Touchable but not focusable: app-overlay windows cannot
+                // become the focused window, so requesting focus would keep
+                // every touch from reaching the view here.
                 WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
                         | WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
                 PixelFormat.TRANSLUCENT);
@@ -873,6 +875,15 @@ public class ScreenshotTranslateService extends Service {
         } catch (Throwable throwable) {
             Log.e(TAG, "text box dialog failed", throwable);
         }
+    }
+
+    private void copyText(TextView view) {
+        CharSequence text = view.getText();
+        if (text == null || text.length() == 0) return;
+        android.content.ClipboardManager clipboard =
+                (android.content.ClipboardManager) getSystemService(CLIPBOARD_SERVICE);
+        clipboard.setPrimaryClip(android.content.ClipData.newPlainText("text", text));
+        ImageUtils.toast(this, getString(R.string.copied));
     }
 
     private TextView dialogButton(Context context, int textRes) {
