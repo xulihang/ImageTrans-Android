@@ -38,8 +38,13 @@ public final class OcrEngine extends NativeInference {
     private static final String REC_DICT = NativeInference.MODEL_DIR + "ppocrv6_dict.txt";
     private static final String YOLO_MODEL = NativeInference.MODEL_DIR + "model.onnx";
     private static final String CLS_MODEL = NativeInference.MODEL_DIR + "ch_ppocr_mobile_v2.0_cls_infer.onnx";
-    /** Webtoon OCR: parts are this many widths tall, then scaled down for OCR. */
-    private static final int OCR_PART_RATIO = 8;
+    /**
+     * Webtoon OCR: parts are this many widths tall, then scaled down for OCR.
+     * Keep 4 (the extension's value): each part is capped at 1500 px on its
+     * long side, so the ratio directly sets the part width (1500 / ratio).
+     * With 8 the parts are only ~187 px wide and small Hangul is misread.
+     */
+    private static final int OCR_PART_RATIO = 4;
     private static final int OCR_PART_MAX_SIDE = 1500;
 
     private static volatile OcrEngine instance;
@@ -91,7 +96,11 @@ public final class OcrEngine extends NativeInference {
                 recModel = ensureModelFile(appContext, REC_MODEL);
                 recDict = ensureDictFile(appContext, REC_DICT);
             }
-            String key = recModel + "|" + recDict;
+            // The line direction classifier only helps Chinese; it is part of
+            // the engine key because switching between Chinese and another
+            // language that reuses the bundled recognizer must rebuild it.
+            boolean useCls = "zh".equals(sourceLang);
+            String key = recModel + "|" + recDict + "|cls=" + useCls;
             if (rapidOCR != null && key.equals(engineKey)) return;
 
             // Load the OpenCV AAR's native library up front, so the org.opencv
@@ -102,12 +111,24 @@ public final class OcrEngine extends NativeInference {
             // detector are loaded the same way from the paths below.
             OcrConfig config = new OcrConfig();
             config.Det.modelPath = ensureModelFile(appContext, DET_MODEL);
+            // Same detection thresholds as the extension's defaults (and the
+            // values users tune there). erode_size has no rapidocr4j
+            // equivalent, so useDilation keeps its library default.
+            config.Det.thresh = 0.3f;
+            config.Det.boxThresh = 0.6f;
+            config.Det.unclipRatio = 1.5f;
             config.Rec.modelPath = recModel;
             config.Rec.recKeysPath = recDict;
-            // DB detection keeps the direction classifier on: rapidocr4j turns
-            // 180-degree lines upright before recognition, which the combined
-            // DB pipeline needs for the detection order it produces.
-            config.Global.useCls = true;
+            // Line direction classifier for Chinese only.
+            // ch_ppocr_mobile_v2.0_cls_infer is trained on Chinese/English
+            // lines and often labels upright Korean (or other non-Chinese)
+            // lines as 180 degrees with high confidence; rapidocr4j would
+            // rotate them before recognition, so the text is garbled or
+            // dropped by the score filter. The extension does not run this
+            // classifier at all.
+            config.Global.useCls = useCls;
+            // rapidocr4j constructs the classifier whether or not it is
+            // enabled, so the model path still has to point at an existing file.
             config.Cls.modelPath = ensureModelFile(appContext, CLS_MODEL);
             rapidOCR = RapidOCR.create(appContext, config);
             engineKey = key;
@@ -150,7 +171,7 @@ public final class OcrEngine extends NativeInference {
 
     /**
      * Webtoon OCR, based on the extension's paddleOCR(): an image taller than
-     * 8x its width is cut into parts of height 8*width, each part is scaled to
+     * 8x its width is cut into parts of height 4*width, each part is scaled to
      * at most 1500 px on its long side and recognized on its own, and the
      * boxes are mapped back to the full image. Working on the whole strip
      * would make the detectors resize away the text.

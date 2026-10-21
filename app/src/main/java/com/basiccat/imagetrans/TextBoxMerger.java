@@ -145,8 +145,13 @@ public final class TextBoxMerger {
         }
         for (List<Box> group : groups) {
             StringBuilder text = new StringBuilder();
+            // Korean uses spaces between words, unlike the CJK/Thai scripts
+            // this heuristic targets. The extension only drops spaces for
+            // zh/ja/th, so an explicit "ko" source language always keeps them.
+            // The cjkText fallback (for sourceLang "auto") no longer counts
+            // Hangul, see containsCjk().
             boolean noSpace = "zh".equals(sourceLang) || "ja".equals(sourceLang)
-                    || "th".equals(sourceLang) || cjkText;
+                    || "th".equals(sourceLang) || (cjkText && !"ko".equals(sourceLang));
             for (int i = 0; i < group.size(); i++) {
                 Box box = group.get(i);
                 if (i > 0 && !noSpace) text.append(' ');
@@ -200,10 +205,11 @@ public final class TextBoxMerger {
         if (text == null) return false;
         for (int i = 0; i < text.length(); i++) {
             char ch = text.charAt(i);
+            // Hangul (U+AC00-D7AF) is deliberately absent: Korean separates
+            // words with spaces, so it must not trigger the no-space join.
             if ((ch >= 0x4E00 && ch <= 0x9FFF)
                     || (ch >= 0x3400 && ch <= 0x4DBF)
                     || (ch >= 0x3040 && ch <= 0x30FF)
-                    || (ch >= 0xAC00 && ch <= 0xD7AF)
                     || (ch >= 0x3000 && ch <= 0x303F)
                     || (ch >= 0xFF00 && ch <= 0xFFEF)) {
                 return true;
