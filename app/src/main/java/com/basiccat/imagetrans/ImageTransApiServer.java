@@ -72,7 +72,8 @@ public final class ImageTransApiServer {
 
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
     private final AtomicBoolean running = new AtomicBoolean(false);
-    private ExecutorService pool;
+    private final java.util.Set<Socket> clients =
+            java.util.Collections.newSetFromMap(new java.util.concurrent.ConcurrentHashMap<>());
     private ServerSocket socket;
 
     private ImageTransApiServer() {
@@ -95,17 +96,16 @@ public final class ImageTransApiServer {
             Log.e(TAG, "cannot listen on " + PORT, e);
             throw e;
         }
-        pool = Executors.newFixedThreadPool(4);
         running.set(true);
         // OCR models may need a one-time download; get them ready now.
-        pool.execute(() -> {
+        new Thread(() -> {
             try {
                 OcrEngine.getInstance(app);
             } catch (Throwable throwable) {
                 Log.w(TAG, "OCR init failed", throwable);
             }
-        });
-        pool.execute(() -> acceptLoop(socket, app));
+        }, "imagetrans-ocr-init").start();
+        new Thread(() -> acceptLoop(socket, app), "imagetrans-http").start();
         String address = address();
         Log.i(TAG, "listening on " + PORT + ", address " + address);
         return address;
@@ -121,10 +121,14 @@ public final class ImageTransApiServer {
             }
             socket = null;
         }
-        if (pool != null) {
-            pool.shutdownNow();
-            pool = null;
+        for (Socket client : clients) {
+            try {
+                client.close();
+            } catch (IOException ignored) {
+                // Closing.
+            }
         }
+        clients.clear();
         Log.i(TAG, "stopped");
     }
 
@@ -140,13 +144,11 @@ public final class ImageTransApiServer {
     private void acceptLoop(ServerSocket server, Context app) {
         while (running.get() && !server.isClosed()) {
             try {
-                Socket client = server.accept();
-                ExecutorService executor = pool;
-                if (executor == null || executor.isShutdown()) {
-                    client.close();
-                    return;
-                }
-                executor.execute(() -> handle(client, app));
+                // A thread per connection: one slow or abandoned request must
+                // not block the others (a small fixed pool did, and once its
+                // few threads were stuck the server stopped answering).
+                final Socket client = server.accept();
+                new Thread(() -> handle(client, app), "imagetrans-http-conn").start();
             } catch (IOException e) {
                 if (running.get()) Log.w(TAG, "accept failed: " + e);
             }
@@ -154,8 +156,9 @@ public final class ImageTransApiServer {
     }
 
     private void handle(Socket client, Context app) {
+        clients.add(client);
         try (Socket socket = client) {
-            socket.setSoTimeout(180_000);
+            socket.setSoTimeout(150_000);
             InputStream in = socket.getInputStream();
             Request request = readRequest(in);
             if (request == null) return;
@@ -186,6 +189,8 @@ public final class ImageTransApiServer {
             writeResponse(socket.getOutputStream(), response, "HEAD".equals(request.method));
         } catch (Throwable throwable) {
             Log.w(TAG, "connection failed: " + throwable);
+        } finally {
+            clients.remove(client);
         }
     }
 
