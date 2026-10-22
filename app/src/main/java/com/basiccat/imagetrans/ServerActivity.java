@@ -11,7 +11,7 @@ import android.widget.TextView;
  * Starts and stops the background server that the browser extension calls in
  * its "ImageTrans server" mode.
  */
-public class ServerActivity extends Activity {
+public class ServerActivity extends LocalizedActivity {
     private Button toggle;
     private TextView address;
 

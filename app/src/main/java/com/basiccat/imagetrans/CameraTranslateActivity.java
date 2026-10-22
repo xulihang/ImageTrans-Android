@@ -47,7 +47,7 @@ import java.util.concurrent.Executors;
  * translation; the camera is unbound while the dialog is open and resumes
  * when it is closed.
  */
-public class CameraTranslateActivity extends Activity implements LifecycleOwner {
+public class CameraTranslateActivity extends LocalizedActivity implements LifecycleOwner {
     private static final String TAG = "CameraTranslate";
     private static final int REQUEST_CAMERA_PERMISSION = 2001;
 
@@ -304,7 +304,7 @@ public class CameraTranslateActivity extends Activity implements LifecycleOwner 
                 });
             } catch (Throwable throwable) {
                 final String message = throwable.getMessage() != null
-                        && throwable.getMessage().contains("没有识别到文字")
+                        && throwable.getMessage().equals(getString(R.string.error_no_text))
                         ? getString(R.string.camera_no_text)
                         : getString(R.string.camera_translate_failed,
                                 ImageUtils.humanError(throwable));

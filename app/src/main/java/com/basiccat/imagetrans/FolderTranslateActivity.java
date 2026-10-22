@@ -36,7 +36,7 @@ import java.util.concurrent.Executors;
  * the results as PNG files to an "out" subdirectory. Processing stays in this
  * Activity: leaving the screen cancels the remaining files.
  */
-public class FolderTranslateActivity extends Activity {
+public class FolderTranslateActivity extends LocalizedActivity {
     private static final String TAG = "FolderTranslate";
     private static final int REQUEST_DIRECTORY = 4001;
     private static final String OUT_DIR = "out";
@@ -146,7 +146,8 @@ public class FolderTranslateActivity extends Activity {
             return;
         }
         if (root == null || !root.isDirectory() || !root.canRead()) {
-            showFinalError(getString(R.string.folder_translate_read_failed, "无法读取该目录"));
+            showFinalError(getString(R.string.folder_translate_read_failed,
+                    getString(R.string.folder_translate_cannot_read)));
             return;
         }
         startBatch(root);

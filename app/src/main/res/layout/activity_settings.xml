@@ -22,7 +22,7 @@
             style="@style/SectionTitle"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="语言" />
+            android:text="@string/settings_language" />
 
         <LinearLayout
             android:layout_width="match_parent"
@@ -53,10 +53,21 @@
         </LinearLayout>
 
         <TextView
+            style="@style/FieldLabel"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/settings_ui_language" />
+
+        <Spinner
+            android:id="@+id/spinnerUiLang"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content" />
+
+        <TextView
             style="@style/SectionTitle"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="翻译方式" />
+            android:text="@string/settings_translation_mode" />
 
         <RadioGroup
             android:id="@+id/modeGroup"
@@ -68,28 +79,28 @@
                 android:id="@+id/modeMyMemory"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="本地 OCR + MyMemory（免费）"
+                android:text="@string/settings_mode_mymemory"
                 android:textSize="15sp" />
 
             <RadioButton
                 android:id="@+id/modeOpenai"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="本地 OCR + OpenAI 兼容 API"
+                android:text="@string/settings_mode_openai"
                 android:textSize="15sp" />
 
             <RadioButton
                 android:id="@+id/modeOriginal"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="仅识别，不翻译（调试）"
+                android:text="@string/settings_mode_original"
                 android:textSize="15sp" />
 
             <RadioButton
                 android:id="@+id/modeImagetrans"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="ImageTrans 服务器"
+                android:text="@string/settings_mode_imagetrans"
                 android:textSize="15sp" />
         </RadioGroup>
 
@@ -103,13 +114,13 @@
                 style="@style/SectionTitle"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="ImageTrans 服务器" />
+                android:text="@string/settings_server_section" />
 
             <TextView
                 style="@style/FieldLabel"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="服务器地址" />
+                android:text="@string/settings_server_url" />
 
             <EditText
                 android:id="@+id/editServerUrl"
@@ -123,7 +134,7 @@
                 style="@style/FieldLabel"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="项目名称（displayName，可留空）" />
+                android:text="@string/settings_display_name" />
 
             <EditText
                 android:id="@+id/editDisplayName"
@@ -137,7 +148,7 @@
                 style="@style/FieldLabel"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="服务器密码（可留空）" />
+                android:text="@string/settings_password" />
 
             <EditText
                 android:id="@+id/editPassword"
@@ -151,7 +162,7 @@
                 style="@style/FieldLabel"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="渲染方式" />
+                android:text="@string/settings_render_mode" />
 
             <Spinner
                 android:id="@+id/spinnerServerRender"
@@ -162,13 +173,13 @@
                 style="@style/Note"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="服务端渲染直接使用 ImageTrans 项目自身的排版，下面的“排版渲染”设置不参与；App 内渲染只取回文字框，使用下方 CSS、最小字号等设置排版。服务端渲染失败时会自动回退到文字框。" />
+                android:text="@string/settings_server_render_note" />
 
             <TextView
                 style="@style/Note"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="默认使用云端服务器 service.basiccat.org:51043。如需连接电脑上的 ImageTrans 服务器，请填写电脑的局域网地址，而不是 local.basiccat.org（在手机上会解析到手机自己）。局域网服务器若使用自签名 HTTPS 证书，请先在系统设置中把证书安装为受信任证书；也可以使用 HTTP 地址。" />
+                android:text="@string/settings_server_default_note" />
         </LinearLayout>
 
         <LinearLayout
@@ -182,13 +193,13 @@
                 style="@style/SectionTitle"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="MyMemory（免费）" />
+                android:text="@string/settings_mymemory_section" />
 
             <TextView
                 style="@style/FieldLabel"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="联系邮箱（可选）" />
+                android:text="@string/settings_mymemory_email" />
 
             <EditText
                 android:id="@+id/editMyMemoryEmail"
@@ -202,7 +213,7 @@
                 style="@style/Note"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="无需 API Key。单次请求最多 500 字节，App 会自动分段翻译。留空时使用应用内置邮箱（额度约 50000 字符/天），也可以填写自己的邮箱；邮箱只保存在本机，并会随请求发送给 MyMemory。与浏览器扩展一致：源语言选“自动检测”时按日语处理，目标语言选“自动检测”时按英语处理。" />
+                android:text="@string/settings_mymemory_note" />
         </LinearLayout>
 
         <LinearLayout
@@ -215,13 +226,13 @@
                 style="@style/SectionTitle"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="OpenAI 兼容 API" />
+                android:text="@string/settings_openai_section" />
 
             <TextView
                 style="@style/FieldLabel"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="API 地址" />
+                android:text="@string/settings_openai_url" />
 
             <EditText
                 android:id="@+id/editOpenAiUrl"
@@ -235,7 +246,7 @@
                 style="@style/FieldLabel"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="API Key" />
+                android:text="@string/settings_openai_key" />
 
             <EditText
                 android:id="@+id/editOpenAiKey"
@@ -249,7 +260,7 @@
                 style="@style/FieldLabel"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="模型名称" />
+                android:text="@string/settings_model" />
 
             <EditText
                 android:id="@+id/editOpenAiModel"
@@ -264,13 +275,13 @@
             style="@style/SectionTitle"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="排版渲染" />
+            android:text="@string/settings_render_section" />
 
         <TextView
             style="@style/FieldLabel"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="文本框 CSS" />
+            android:text="@string/settings_render_css" />
 
         <EditText
             android:id="@+id/editRenderCss"
@@ -286,7 +297,7 @@
             style="@style/FieldLabel"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="最小字号（px）" />
+            android:text="@string/settings_min_font" />
 
         <EditText
             android:id="@+id/editMinFontSize"
@@ -300,7 +311,7 @@
             style="@style/FieldLabel"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="原文背景处理" />
+            android:text="@string/settings_repair_mode" />
 
         <Spinner
             android:id="@+id/spinnerRepairMode"
@@ -311,7 +322,7 @@
             style="@style/Note"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="CSS 支持 text-align、font-family、font-weight、color、background-color、border-radius、writing-mode: vertical-rl、direction: rtl、text-shadow 等，与浏览器扩展的设置一致。" />
+            android:text="@string/settings_css_note" />
 
         <Button
             android:id="@+id/btnSave"
@@ -319,7 +330,7 @@
             android:layout_width="match_parent"
             android:layout_height="56dp"
             android:layout_marginTop="28dp"
-            android:text="保存设置" />
+            android:text="@string/settings_save" />
 
         <View
             android:layout_width="match_parent"

@@ -34,7 +34,7 @@ import java.util.concurrent.TimeUnit;
  *   pick image -> (ImageTrans server OCR/translate) or (local OCR + OpenAI)
  *   -> render boxes with the WebView renderer -> show / save / share.
  */
-public class TranslateActivity extends Activity {
+public class TranslateActivity extends LocalizedActivity {
     private static final String TAG = "TranslateActivity";
 
     private ZoomableImageView imageView;
@@ -131,7 +131,7 @@ public class TranslateActivity extends Activity {
 
         imageUri = getIntent().getData();
         if (imageUri == null) {
-            showError(new Exception("没有收到图片"));
+            showError(new Exception(getString(R.string.error_no_image_received)));
             return;
         }
         startTranslation();
@@ -143,7 +143,7 @@ public class TranslateActivity extends Activity {
         progressPanel.setVisibility(View.VISIBLE);
         progressBar.setVisibility(View.VISIBLE);
         setResultButtonsEnabled(false);
-        status("读取图片…");
+        status(getString(R.string.translate_status_reading));
 
         executor.execute(new Runnable() {
             @Override
@@ -151,7 +151,7 @@ public class TranslateActivity extends Activity {
                 try {
                     Bitmap bitmap = ImageUtils.decodeBitmap(TranslateActivity.this, imageUri);
                     if (bitmap == null) {
-                        throw new Exception("无法读取图片");
+                        throw new Exception(getString(R.string.error_cannot_read_image));
                     }
                     originalBitmap = bitmap;
                     mainHandler.post(new Runnable() {
@@ -175,7 +175,7 @@ public class TranslateActivity extends Activity {
     }
 
     private void translateWithServer(Bitmap bitmap) throws Exception {
-        status("正在请求 ImageTrans 服务器…");
+        status(getString(R.string.translate_status_server));
         String imageDataUrl = ImageUtils.bitmapToDataUrl(bitmap);
         ImageTransServer.Result result = ImageTransServer.translate(TranslateActivity.this, imageDataUrl);
 
@@ -191,18 +191,18 @@ public class TranslateActivity extends Activity {
         if (!useBoxes) pendingHitBoxes = result.boxes;
 
         if (useBoxes) {
-            status("WebView 渲染排版…");
+            status(getString(R.string.translate_status_render));
             renderBoxes(result.boxes, bitmap);
             return;
         }
         if (result.renderedImageDataUrl != null) {
-            status("显示 ImageTrans 渲染结果…");
+            status(getString(R.string.translate_status_show_server));
             // No boxes in the response: read them back from the renderer's
             // layout so text boxes are still tappable.
             fetchRenderedBoxes(bitmap, result.renderedImageDataUrl);
             Bitmap rendered = ImageUtils.dataUrlToBitmap(result.renderedImageDataUrl);
             if (rendered == null) {
-                throw new Exception("服务器返回的图片无法解码");
+                throw new Exception(getString(R.string.error_server_image_decode));
             }
             mainHandler.post(new Runnable() {
                 @Override
@@ -212,14 +212,14 @@ public class TranslateActivity extends Activity {
             });
             return;
         }
-        throw new Exception("服务器没有返回可用的结果");
+        throw new Exception(getString(R.string.error_server_no_result));
     }
 
     private void translateLocally(Bitmap bitmap, String mode) throws Exception {
         String sourceLang = Prefs.getSourceLang(TranslateActivity.this);
-        status(OcrEngine.usesYoloDetection(sourceLang)
-                ? "本地 OCR：检测文本行（YOLO）…"
-                : "本地 OCR 识别中…");
+        status(getString(OcrEngine.usesYoloDetection(sourceLang)
+                ? R.string.translate_status_ocr_yolo
+                : R.string.translate_status_ocr));
         OcrEngine engine = OcrEngine.getInstance(TranslateActivity.this);
         List<Box> boxes = engine.recognize(bitmap, sourceLang,
                 new RemoteOcrModels.ProgressListener() {
@@ -229,19 +229,18 @@ public class TranslateActivity extends Activity {
                     }
                 });
         if (boxes.isEmpty()) {
-            throw new Exception("没有识别到文字。本地 OCR 支持中、英、日、拉丁系语言，"
-                    + "以及首次联网下载模型的韩、阿、俄、泰语；其他语言请使用 ImageTrans 服务器模式。");
+            throw new Exception(getString(R.string.error_no_text_local_support));
         }
 
         // Same as doOCRYolo(): merge neighbouring lines into paragraphs before
         // translating/rendering.
-        status("合并文本框…");
+        status(getString(R.string.translate_status_merge));
         boxes = TextBoxMerger.merge(boxes, sourceLang, 15, 15);
 
         if (Prefs.MODE_OPENAI.equals(mode) || Prefs.MODE_MYMEMORY.equals(mode)) {
             boolean mymemory = Prefs.MODE_MYMEMORY.equals(mode);
-            status(mymemory ? "调用 MyMemory 免费翻译…"
-                    : "调用 OpenAI 兼容 API 翻译…");
+            status(getString(mymemory ? R.string.translate_status_mymemory
+                    : R.string.translate_status_openai));
             List<String> texts = new ArrayList<>();
             for (Box box : boxes) {
                 texts.add(box.source);
@@ -261,7 +260,7 @@ public class TranslateActivity extends Activity {
             }
         }
 
-        status("WebView 渲染排版…");
+        status(getString(R.string.translate_status_render));
         pendingHitBoxes = boxes;
         renderBoxes(boxes, bitmap);
     }
@@ -274,7 +273,7 @@ public class TranslateActivity extends Activity {
             }
         }
         if (renderable.isEmpty()) {
-            postError(new Exception("没有可渲染的译文"));
+            postError(new Exception(getString(R.string.error_no_renderable)));
             return;
         }
 
@@ -334,14 +333,15 @@ public class TranslateActivity extends Activity {
         try {
             result = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
         } catch (OutOfMemoryError error) {
-            postError(new Exception("图片过大，内存不足，无法渲染"));
+            postError(new Exception(getString(R.string.error_too_large)));
             return;
         }
         Canvas canvas = new Canvas(result);
 
         for (int i = 0; i < chunks.size(); i++) {
             final RenderChunks.Chunk chunk = chunks.get(i);
-            status("WebView 渲染排版…（" + (i + 1) + "/" + chunks.size() + "）");
+            status(getString(R.string.translate_status_render_progress,
+                    i + 1, chunks.size()));
 
             Bitmap region = Bitmap.createBitmap(bitmap, 0, chunk.top, width, chunk.height);
             final String dataUrl = ImageUtils.bitmapToDataUrl(region);
@@ -364,7 +364,8 @@ public class TranslateActivity extends Activity {
 
                             @Override
                             public void onError(String message) {
-                                error[0] = message == null ? "渲染失败" : message;
+                                error[0] = message == null
+                                        ? getString(R.string.error_render_failed) : message;
                                 latch.countDown();
                             }
                         });
@@ -377,11 +378,11 @@ public class TranslateActivity extends Activity {
 
             try {
                 if (!latch.await(120, TimeUnit.SECONDS)) {
-                    error[0] = "渲染超时";
+                    error[0] = getString(R.string.error_render_timeout);
                 }
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
-                error[0] = "渲染被中断";
+                error[0] = getString(R.string.error_render_interrupted);
             }
             if (error[0] != null) {
                 if (rendered[0] != null) rendered[0].recycle();
@@ -392,7 +393,7 @@ public class TranslateActivity extends Activity {
             Bitmap chunkBitmap = rendered[0];
             if (chunkBitmap == null) {
                 result.recycle();
-                postError(new Exception("渲染结果为空"));
+                postError(new Exception(getString(R.string.error_render_empty)));
                 return;
             }
             if (chunkBitmap.getWidth() != width || chunkBitmap.getHeight() != chunk.height) {
@@ -447,7 +448,9 @@ public class TranslateActivity extends Activity {
                 try {
                     ensureRenderer();
                     rendered = ImageUtils.dataUrlToBitmap(renderedDataUrl);
-                    if (rendered == null) throw new Exception("无法解码服务器图片");
+                    if (rendered == null) {
+                        throw new Exception(getString(R.string.error_server_image_decode));
+                    }
                     renderer.render(pendingHitBoxes, ImageUtils.bitmapToDataUrl(original),
                             buildRenderOptions(), new Renderer.Callback() {
                                 @Override
@@ -586,14 +589,13 @@ public class TranslateActivity extends Activity {
         busy = false;
         progressPanel.setVisibility(View.GONE);
         errorText.setVisibility(View.VISIBLE);
-        String message = "处理失败：" + ImageUtils.humanError(throwable);
+        String message = getString(R.string.translate_error_prefix,
+                ImageUtils.humanError(throwable));
         if (throwable.getCause() != null) {
-            message += "\n原因：" + throwable.getCause();
+            message += "\n" + getString(R.string.translate_error_cause, throwable.getCause());
         }
         if (Prefs.MODE_IMAGETRANS.equals(Prefs.getMode(this))) {
-            message += "\n提示：默认使用云端服务器 service.basiccat.org:51043；如需连接电脑上的服务器，"
-                    + "请填写电脑的局域网 IP（不是 local.basiccat.org）。"
-                    + "如果局域网服务器使用自签名证书，请先在系统设置中安装证书，或改用 HTTP 地址。";
+            message += "\n" + getString(R.string.translate_error_hint);
         }
         errorText.setText(message);
         setResultButtonsEnabled(translatedBitmap != null);
@@ -635,13 +637,15 @@ public class TranslateActivity extends Activity {
                     @Override
                     public void run() {
                         if (uri == null) {
-                            ImageUtils.toast(TranslateActivity.this, "保存失败");
+                            ImageUtils.toast(TranslateActivity.this,
+                                    getString(R.string.translate_save_failed));
                             return;
                         }
                         if (share) {
                             ImageUtils.shareImage(TranslateActivity.this, uri);
                         } else {
-                            ImageUtils.toast(TranslateActivity.this, "已保存到相册");
+                            ImageUtils.toast(TranslateActivity.this,
+                                    getString(R.string.translate_saved));
                         }
                     }
                 });

@@ -11,7 +11,7 @@ import android.util.Log;
  * start it from a background service), then hands the grant to the floating
  * service and disappears.
  */
-public class ProjectionPermissionActivity extends Activity {
+public class ProjectionPermissionActivity extends LocalizedActivity {
     private static final String TAG = "ScreenshotTranslate";
     private static final int REQUEST_CAPTURE = 1;
 

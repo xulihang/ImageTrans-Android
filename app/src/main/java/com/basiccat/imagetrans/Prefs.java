@@ -41,17 +41,21 @@ public final class Prefs {
             "ar", "pt", "it", "th", "vi", "id", "tr", "pl", "nl", "auto"
     };
 
-    public static final String[] LANG_NAMES = {
-            "中文", "日语", "英语", "韩语", "法语", "德语", "西班牙语", "俄语",
-            "阿拉伯语", "葡萄牙语", "意大利语", "泰语", "越南语", "印尼语", "土耳其语", "波兰语", "荷兰语", "自动检测"
-    };
-
     private Prefs() {
     }
 
     public static SharedPreferences get(Context context) {
         return context.getApplicationContext()
                 .getSharedPreferences(NAME, Context.MODE_PRIVATE);
+    }
+
+    /** UI language: "zh" or "en". */
+    public static String getUiLang(Context context) {
+        return get(context).getString("ui_lang", LocaleHelper.ZH);
+    }
+
+    public static void setUiLang(Context context, String value) {
+        get(context).edit().putString("ui_lang", value).apply();
     }
 
     public static String getMode(Context context) {
@@ -197,11 +201,10 @@ public final class Prefs {
         get(context).edit().putString("text_repair_mode", value).apply();
     }
 
-    public static String langName(String code) {
-        for (int i = 0; i < LANG_CODES.length; i++) {
-            if (LANG_CODES[i].equals(code)) {
-                return LANG_NAMES[i];
-            }
+    public static String langName(Context context, String code) {
+        String[] names = context.getResources().getStringArray(R.array.language_names);
+        for (int i = 0; i < LANG_CODES.length && i < names.length; i++) {
+            if (LANG_CODES[i].equals(code)) return names[i];
         }
         return code;
     }
@@ -298,10 +301,10 @@ public final class Prefs {
         get(context).edit().putInt("floating_panel_height", value).apply();
     }
 
-    public static String modeName(String mode) {
-        if (MODE_IMAGETRANS.equals(mode)) return "ImageTrans 服务器";
-        if (MODE_MYMEMORY.equals(mode)) return "本地 OCR + MyMemory";
-        if (MODE_OPENAI.equals(mode)) return "本地 OCR + OpenAI";
-        return "仅识别（不翻译）";
+    public static String modeName(Context context, String mode) {
+        if (MODE_IMAGETRANS.equals(mode)) return context.getString(R.string.mode_imagetrans);
+        if (MODE_MYMEMORY.equals(mode)) return context.getString(R.string.mode_mymemory);
+        if (MODE_OPENAI.equals(mode)) return context.getString(R.string.mode_openai);
+        return context.getString(R.string.mode_original);
     }
 }

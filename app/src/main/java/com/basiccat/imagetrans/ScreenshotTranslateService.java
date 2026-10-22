@@ -56,6 +56,11 @@ import java.util.concurrent.TimeUnit;
 public class ScreenshotTranslateService extends Service {
     private static final String TAG = "ScreenshotTranslate";
 
+    @Override
+    protected void attachBaseContext(Context newBase) {
+        super.attachBaseContext(LocaleHelper.wrap(newBase));
+    }
+
     static final String ACTION_SHOW = "com.basiccat.imagetrans.FLOATING_SHOW";
     static final String ACTION_HIDE = "com.basiccat.imagetrans.FLOATING_HIDE";
     static final String ACTION_BALL = "com.basiccat.imagetrans.FLOATING_BALL";
@@ -845,7 +850,7 @@ public class ScreenshotTranslateService extends Service {
         mainHandler.postDelayed(() -> {
             if (mediaProjection == null) {
                 release.run();
-                imageOnCaptured(null, "截屏授权已失效，请再点一次翻译");
+                imageOnCaptured(null, getString(R.string.floating_capture_auth_expired));
                 return;
             }
             try {
@@ -907,7 +912,7 @@ public class ScreenshotTranslateService extends Service {
                 image.close();
             }
         } else {
-            error = "没有收到图像";
+            error = getString(R.string.floating_no_image);
         }
         final Bitmap result = bitmap;
         final String message = error;
@@ -1021,7 +1026,8 @@ public class ScreenshotTranslateService extends Service {
         if (overlay != null) {
             overlay.showResult(null, getString(R.string.floating_capture_failed));
         }
-        ImageUtils.toast(this, "截屏失败：" + ImageUtils.humanError(throwable));
+        ImageUtils.toast(this, getString(R.string.floating_capture_error,
+                ImageUtils.humanError(throwable)));
         if (mediaProjection != null) {
             mediaProjection.stop();
             mediaProjection = null;
@@ -1288,9 +1294,13 @@ public class ScreenshotTranslateService extends Service {
                     latch.countDown();
                 }
             });
-            if (!latch.await(10, TimeUnit.SECONDS)) throw new Exception("渲染器初始化超时");
+            if (!latch.await(10, TimeUnit.SECONDS)) {
+                throw new Exception(getString(R.string.floating_renderer_timeout));
+            }
             if (error[0] != null) throw new Exception(ImageUtils.humanError(error[0]));
-            if (holder[0] == null) throw new Exception("无法创建渲染器");
+            if (holder[0] == null) {
+                throw new Exception(getString(R.string.floating_renderer_failed));
+            }
             this.renderer = holder[0];
         }
 

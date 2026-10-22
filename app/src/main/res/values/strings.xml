@@ -112,4 +112,126 @@
     <string name="main_open_settings">去设置</string>
     <string name="main_floating_started">截屏翻译已开启</string>
     <string name="main_floating_cancelled">未授权截屏，截屏翻译未开启</string>
+
+    <!-- UI language -->
+    <string name="settings_ui_language">界面语言</string>
+    <string name="language_chinese">中文</string>
+    <string name="language_english">English</string>
+
+    <!-- Main screen -->
+    <string name="main_current_config">当前配置</string>
+    <string name="main_mode_summary">翻译方式：%1$s</string>
+    <string name="main_lang_summary">语言：%1$s → %2$s</string>
+
+    <!-- Translation mode names -->
+    <string name="mode_imagetrans">ImageTrans 服务器</string>
+    <string name="mode_mymemory">本地 OCR + MyMemory</string>
+    <string name="mode_openai">本地 OCR + OpenAI</string>
+    <string name="mode_original">仅识别（不翻译）</string>
+
+    <!-- Settings screen -->
+    <string name="settings_language">语言</string>
+    <string name="settings_translation_mode">翻译方式</string>
+    <string name="settings_mode_mymemory">本地 OCR + MyMemory（免费）</string>
+    <string name="settings_mode_openai">本地 OCR + OpenAI 兼容 API</string>
+    <string name="settings_mode_original">仅识别，不翻译（调试）</string>
+    <string name="settings_mode_imagetrans">ImageTrans 服务器</string>
+    <string name="settings_server_section">ImageTrans 服务器</string>
+    <string name="settings_server_url">服务器地址</string>
+    <string name="settings_display_name">项目名称（displayName，可留空）</string>
+    <string name="settings_password">服务器密码（可留空）</string>
+    <string name="settings_render_mode">渲染方式</string>
+    <string name="settings_server_render_note">服务端渲染直接使用 ImageTrans 项目自身的排版，下面的“排版渲染”设置不参与；App 内渲染只取回文字框，使用下方 CSS、最小字号等设置排版。服务端渲染失败时会自动回退到文字框。</string>
+    <string name="settings_server_default_note">默认使用云端服务器 service.basiccat.org:51043。如需连接电脑上的 ImageTrans 服务器，请填写电脑的局域网地址，而不是 local.basiccat.org（在手机上会解析到手机自己）。局域网服务器若使用自签名 HTTPS 证书，请先在系统设置中把证书安装为受信任证书；也可以使用 HTTP 地址。</string>
+    <string name="settings_mymemory_section">MyMemory（免费）</string>
+    <string name="settings_mymemory_email">联系邮箱（可选）</string>
+    <string name="settings_mymemory_note">无需 API Key。单次请求最多 500 字节，App 会自动分段翻译。留空时使用应用内置邮箱（额度约 50000 字符/天），也可以填写自己的邮箱；邮箱只保存在本机，并会随请求发送给 MyMemory。与浏览器扩展一致：源语言选“自动检测”时按日语处理，目标语言选“自动检测”时按英语处理。</string>
+    <string name="settings_openai_section">OpenAI 兼容 API</string>
+    <string name="settings_openai_url">API 地址</string>
+    <string name="settings_openai_key">API Key</string>
+    <string name="settings_model">模型名称</string>
+    <string name="settings_render_section">排版渲染</string>
+    <string name="settings_render_css">文本框 CSS</string>
+    <string name="settings_min_font">最小字号（px）</string>
+    <string name="settings_repair_mode">原文背景处理</string>
+    <string name="settings_css_note">CSS 支持 text-align、font-family、font-weight、color、background-color、border-radius、writing-mode: vertical-rl、direction: rtl、text-shadow 等，与浏览器扩展的设置一致。</string>
+    <string name="settings_save">保存设置</string>
+    <string name="settings_server_url_required">请填写 ImageTrans 服务器地址</string>
+    <string name="settings_saved">设置已保存</string>
+
+    <!-- Translation status / errors -->
+    <string name="translate_status_reading">读取图片…</string>
+    <string name="translate_status_server">正在请求 ImageTrans 服务器…</string>
+    <string name="translate_status_render">WebView 渲染排版…</string>
+    <string name="translate_status_show_server">显示 ImageTrans 渲染结果…</string>
+    <string name="translate_status_ocr_yolo">本地 OCR：检测文本行（YOLO）…</string>
+    <string name="translate_status_ocr">本地 OCR 识别中…</string>
+    <string name="translate_status_merge">合并文本框…</string>
+    <string name="translate_status_mymemory">调用 MyMemory 免费翻译…</string>
+    <string name="translate_status_openai">调用 OpenAI 兼容 API 翻译…</string>
+    <string name="translate_status_decode_server">解码服务器渲染结果…</string>
+    <string name="translate_status_render_progress">渲染排版（%1$d/%2$d）…</string>
+    <string name="error_no_image_received">没有收到图片</string>
+    <string name="error_cannot_read_image">无法读取图片</string>
+    <string name="error_server_image_decode">服务器返回的图片无法解码</string>
+    <string name="error_server_no_result">服务器没有返回可用的结果</string>
+    <string name="error_no_text_local_support">没有识别到文字。本地 OCR 支持中、英、日、拉丁系语言，以及首次联网下载模型的韩、阿、俄、泰语；其他语言请使用 ImageTrans 服务器模式。</string>
+    <string name="error_no_renderable">没有可渲染的译文</string>
+    <string name="error_too_large">图片过大，内存不足，无法渲染</string>
+    <string name="error_render_failed">渲染失败</string>
+    <string name="error_render_timeout">渲染超时</string>
+    <string name="error_render_interrupted">渲染被中断</string>
+    <string name="error_render_empty">渲染结果为空</string>
+    <string name="error_cancelled">已取消</string>
+    <string name="translate_error_prefix">处理失败：%1$s</string>
+    <string name="translate_error_cause">原因：%1$s</string>
+    <string name="translate_error_hint">提示：默认使用云端服务器 service.basiccat.org:51043；如需连接电脑上的服务器，请填写电脑的局域网 IP（不是 local.basiccat.org）。如果局域网服务器使用自签名证书，请先在系统设置中安装证书，或改用 HTTP 地址。</string>
+    <string name="translate_share_chooser">分享翻译结果</string>
+    <string name="error_no_text">没有识别到文字</string>
+    <string name="error_unknown">未知错误</string>
+    <string name="error_image_dimensions">无法读取图片尺寸</string>
+    <string name="error_image_decode">无法解码图片</string>
+    <string name="folder_translate_cannot_read">无法读取该目录</string>
+    <string name="floating_capture_auth_expired">截屏授权已失效，请再点一次翻译</string>
+    <string name="floating_no_image">没有收到图像</string>
+    <string name="floating_capture_error">截屏失败：%1$s</string>
+    <string name="floating_renderer_timeout">渲染器初始化超时</string>
+    <string name="floating_renderer_failed">无法创建渲染器</string>
+
+    <string-array name="language_names">
+        <item>中文</item>
+        <item>日语</item>
+        <item>英语</item>
+        <item>韩语</item>
+        <item>法语</item>
+        <item>德语</item>
+        <item>西班牙语</item>
+        <item>俄语</item>
+        <item>阿拉伯语</item>
+        <item>葡萄牙语</item>
+        <item>意大利语</item>
+        <item>泰语</item>
+        <item>越南语</item>
+        <item>印尼语</item>
+        <item>土耳其语</item>
+        <item>波兰语</item>
+        <item>荷兰语</item>
+        <item>自动检测</item>
+    </string-array>
+
+    <string-array name="repair_mode_names">
+        <item>白色背景</item>
+        <item>取背景色</item>
+        <item>不处理</item>
+    </string-array>
+
+    <string-array name="render_mode_names">
+        <item>服务端渲染（ImageTrans 返回图片）</item>
+        <item>App 内渲染（返回文字框）</item>
+    </string-array>
+
+    <string-array name="ui_language_names">
+        <item>中文</item>
+        <item>English</item>
+    </string-array>
 </resources>

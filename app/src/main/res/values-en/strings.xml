@@ -1,0 +1,232 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">ImageTrans</string>
+    <string name="title_translate">Image Translation</string>
+    <string name="title_settings">Settings</string>
+    <string name="main_title">ImageTrans</string>
+    <string name="main_subtitle">Image text recognition and translation</string>
+    <string name="main_description">Pick an image and translate its text with local OCR or the ImageTrans server.</string>
+    <string name="main_pick_image">Translate an Image</string>
+    <string name="main_camera_translate">Photo Translation</string>
+    <string name="main_folder_translate">Folder Translation</string>
+    <string name="title_folder_translate">Folder Translation</string>
+    <string name="folder_translate_hint">Choose a folder and translate the images directly inside it (subfolders are not included). Results are saved as PNG in an "out" subfolder, keeping the original names (with a .png extension). Keep this screen open while processing; leaving the app stops the batch.</string>
+    <string name="folder_translate_pick">Choose Folder</string>
+    <string name="folder_translate_none">No folder selected</string>
+    <string name="folder_translate_selected">Selected: %1$s</string>
+    <string name="folder_translate_preparing">Preparing…</string>
+    <string name="folder_translate_progress">%1$d/%2$d Processing %3$s</string>
+    <string name="folder_translate_counts">Succeeded %1$d, failed %2$d</string>
+    <string name="folder_translate_reading">Reading image…</string>
+    <string name="folder_translate_cancel">Cancel</string>
+    <string name="folder_translate_cancelling">Cancelling…</string>
+    <string name="folder_translate_stopped">Stopped: folder translation cannot continue in the background.</string>
+    <string name="folder_translate_done">Done: %1$d succeeded, %2$d failed. Results saved in the out folder.</string>
+    <string name="folder_translate_partial">Finished: %1$d succeeded, %2$d failed. Completed images are saved in the out folder.</string>
+    <string name="folder_translate_no_images">There are no translatable images in this folder.</string>
+    <string name="folder_translate_no_write">No write permission; cannot create the out folder.</string>
+    <string name="folder_translate_out_not_dir">"out" exists but is not a folder.</string>
+    <string name="folder_translate_out_failed">Could not create the out folder.</string>
+    <string name="folder_translate_read_failed">Could not read the folder: %1$s</string>
+    <string name="folder_translate_pick_failed">Could not open the folder picker: %1$s</string>
+    <string name="folder_translate_failed">Folder translation failed: %1$s</string>
+    <string name="folder_translate_decode_failed">Could not read the image</string>
+    <string name="folder_translate_render_failed">No translated result was produced</string>
+    <string name="folder_translate_save_failed">Could not save %1$s</string>
+    <string name="folder_translate_open_out">Open Output Folder</string>
+    <string name="folder_translate_no_out_yet">No output folder yet.</string>
+    <string name="folder_translate_open_failed">Could not open a file manager: %1$s</string>
+    <string name="title_camera_translate">Photo Translation</string>
+    <string name="camera_capture">Capture &amp; Translate</string>
+    <string name="camera_capture_hint">Drag the frame to adjust the capture area</string>
+    <string name="camera_capturing">Grabbing the frame…</string>
+    <string name="camera_translating">Translating…</string>
+    <string name="camera_frame_failed">Could not get a camera frame. Try again.</string>
+    <string name="camera_need_permission">Photo translation needs camera permission. Allow it in system settings.</string>
+    <string name="camera_open_settings">Open Settings</string>
+    <string name="camera_start_failed">Camera failed to start: %1$s</string>
+    <string name="camera_capture_failed">Could not capture the frame: %1$s</string>
+    <string name="camera_translate_failed">Translation failed: %1$s</string>
+    <string name="camera_no_text">No translatable text found</string>
+    <string name="camera_crop_failed">The frame does not cover the image. Adjust it and try again.</string>
+    <string name="main_settings">Settings</string>
+    <string name="main_footer">Local OCR: rapidocr4j · Rendering: WebView</string>
+    <string name="translate_loading">Processing…</string>
+    <string name="translate_toggle_original">Show Original</string>
+    <string name="translate_toggle_translation">Show Translation</string>
+    <string name="translate_save">Save</string>
+    <string name="translate_share">Share</string>
+    <string name="translate_saved">Saved to gallery</string>
+    <string name="translate_save_failed">Save failed</string>
+    <string name="text_box_source">Source</string>
+    <string name="text_box_target">Translation</string>
+    <string name="text_box_title">Text box %1$d/%2$d</string>
+    <string name="text_box_empty">(empty)</string>
+    <string name="text_box_navigator_hint">Tap a text box to view its source and translation</string>
+    <string name="action_close">Close</string>
+    <string name="action_previous">Previous</string>
+    <string name="action_next">Next</string>
+    <string name="floating_ball_label">T</string>
+    <string name="floating_capture">Translate</string>
+    <string name="floating_preparing">Preparing screenshot translation…</string>
+    <string name="floating_translating">Translating screenshot…</string>
+    <string name="floating_loading">Translating…</string>
+    <string name="floating_no_text">No translatable text found</string>
+    <string name="floating_capture_failed">Screenshot failed</string>
+    <string name="floating_translate_failed">Translation failed: %1$s</string>
+    <string name="floating_channel_name">Screenshot Translation</string>
+    <string name="copied">Copied</string>
+    <string name="copy_selection">Copy Selection</string>
+    <string name="copy_all">Copy All</string>
+    <string name="select_text_first">Long-press to select text first</string>
+    <string name="floating_ball_channel_name">Screenshot Translation Ball</string>
+    <string name="floating_running">Screenshot Translation On</string>
+    <string name="floating_running_hint">Tap the ball to translate or close</string>
+    <string name="floating_need_notifications">Allow ImageTrans notifications in system settings; otherwise screenshots cannot be translated</string>
+    <string name="floating_need_overlay">Allow "Display over other apps" first</string>
+    <string name="selection_hint">Drag the frame to adjust the area; tap inside to translate</string>
+    <string name="main_server">Translation Server (for browser extensions)</string>
+    <string name="main_server_hint">Provides the ImageTrans server /translate endpoint (HTTP, port 51042) in the background. Use http://127.0.0.1:51042 in the browser extension on this phone or on a PC via adb reverse; no Wi-Fi is required. A PC on the same network can also use the phone’s LAN IP.</string>
+    <string name="main_server_on">Stop Server</string>
+    <string name="main_server_off">Start Server</string>
+    <string name="main_server_open">Open Server Settings</string>
+    <string name="main_server_state_on">Server status: On</string>
+    <string name="main_server_state_off">Server status: Off</string>
+    <string name="server_notification_title">ImageTrans Server Running</string>
+    <string name="server_notification_text">Enter %1$s in the extension</string>
+    <string name="server_notification_lan">From a PC browser: %1$s</string>
+    <string name="server_notification_unavailable">Server address unavailable</string>
+    <string name="server_start_failed">Server failed to start: %1$s</string>
+    <string name="main_server_running">Server started. Enter this in the browser extension’s "ImageTrans Server" mode:
+%1$s</string>
+    <string name="main_server_lan">A PC on the same network can also enter:
+%1$s</string>
+    <string name="main_server_not_running">The server is not running. Start it again.</string>
+    <string name="server_need_notifications">Allow ImageTrans notifications in system settings; otherwise the server cannot run in the background</string>
+    <string name="main_floating">Screenshot Translation Ball</string>
+    <string name="main_floating_hint">Adds a floating ball to the screen. Tap it to capture a screen area and translate it; the translation appears in the floating frame.</string>
+    <string name="main_floating_on">Turn Off Ball</string>
+    <string name="main_floating_off">Turn On Ball</string>
+    <string name="main_floating_need_permission">Screenshot translation needs the "Display over other apps" permission. Allow it first.</string>
+    <string name="main_floating_need_permission_short">Overlay permission is missing; cannot start screenshot translation</string>
+    <string name="main_open_settings">Open Settings</string>
+    <string name="main_floating_started">Screenshot translation turned on</string>
+    <string name="main_floating_cancelled">Screen capture was not authorized; screenshot translation is off</string>
+
+    <string name="settings_ui_language">UI Language</string>
+    <string name="language_chinese">中文</string>
+    <string name="language_english">English</string>
+
+    <string name="main_current_config">Current settings</string>
+    <string name="main_mode_summary">Translation: %1$s</string>
+    <string name="main_lang_summary">Language: %1$s → %2$s</string>
+
+    <string name="mode_imagetrans">ImageTrans Server</string>
+    <string name="mode_mymemory">Local OCR + MyMemory</string>
+    <string name="mode_openai">Local OCR + OpenAI</string>
+    <string name="mode_original">Recognize Only</string>
+
+    <string name="settings_language">Language</string>
+    <string name="settings_translation_mode">Translation Method</string>
+    <string name="settings_mode_mymemory">Local OCR + MyMemory (Free)</string>
+    <string name="settings_mode_openai">Local OCR + OpenAI-compatible API</string>
+    <string name="settings_mode_original">Recognize Only (Debug)</string>
+    <string name="settings_mode_imagetrans">ImageTrans Server</string>
+    <string name="settings_server_section">ImageTrans Server</string>
+    <string name="settings_server_url">Server URL</string>
+    <string name="settings_display_name">Project name (displayName, optional)</string>
+    <string name="settings_password">Server password (optional)</string>
+    <string name="settings_render_mode">Rendering</string>
+    <string name="settings_server_render_note">Server rendering uses the ImageTrans project’s own layout; the rendering settings below do not apply. In-app rendering requests only text boxes and lays them out with the CSS and minimum font size below. If server rendering fails, the app falls back to text boxes.</string>
+    <string name="settings_server_default_note">Uses the cloud server service.basiccat.org:51043 by default. To use ImageTrans on your computer, enter the computer’s LAN address, not local.basiccat.org (on a phone that resolves to the phone itself). If the LAN server uses a self-signed HTTPS certificate, install it as a trusted certificate in system settings first, or use an HTTP address.</string>
+    <string name="settings_mymemory_section">MyMemory (Free)</string>
+    <string name="settings_mymemory_email">Contact email (optional)</string>
+    <string name="settings_mymemory_note">No API key is required. Each request can contain at most 500 bytes, so the app splits long paragraphs automatically. Leave this empty to use the built-in contact email (about 50,000 characters/day), or enter your own. The email is stored only on this device and sent with each request to MyMemory. As in the browser extension, "Auto" as the source is treated as Japanese and as the target as English.</string>
+    <string name="settings_openai_section">OpenAI-compatible API</string>
+    <string name="settings_openai_url">API URL</string>
+    <string name="settings_openai_key">API Key</string>
+    <string name="settings_model">Model</string>
+    <string name="settings_render_section">Rendering</string>
+    <string name="settings_render_css">Text box CSS</string>
+    <string name="settings_min_font">Minimum font size (px)</string>
+    <string name="settings_repair_mode">Original background handling</string>
+    <string name="settings_css_note">CSS supports text-align, font-family, font-weight, color, background-color, border-radius, writing-mode: vertical-rl, direction: rtl, text-shadow, etc., matching the browser extension settings.</string>
+    <string name="settings_save">Save Settings</string>
+    <string name="settings_server_url_required">Enter an ImageTrans server URL</string>
+    <string name="settings_saved">Settings saved</string>
+
+    <string name="translate_status_reading">Reading image…</string>
+    <string name="translate_status_server">Contacting the ImageTrans server…</string>
+    <string name="translate_status_render">Rendering layout with WebView…</string>
+    <string name="translate_status_show_server">Showing the ImageTrans-rendered image…</string>
+    <string name="translate_status_ocr_yolo">Local OCR: detecting text lines (YOLO)…</string>
+    <string name="translate_status_ocr">Running local OCR…</string>
+    <string name="translate_status_merge">Merging text boxes…</string>
+    <string name="translate_status_mymemory">Translating with MyMemory…</string>
+    <string name="translate_status_openai">Translating with the OpenAI-compatible API…</string>
+    <string name="translate_status_decode_server">Decoding the server-rendered image…</string>
+    <string name="translate_status_render_progress">Rendering layout… (%1$d/%2$d)</string>
+    <string name="error_no_image_received">No image received</string>
+    <string name="error_cannot_read_image">Could not read the image</string>
+    <string name="error_server_image_decode">Could not decode the image returned by the server</string>
+    <string name="error_server_no_result">The server returned no usable result</string>
+    <string name="error_no_text_local_support">No text was recognized. Local OCR supports Chinese, English, Japanese, and Latin-script languages, plus Korean, Arabic, Russian, and Thai after their models are downloaded. Use ImageTrans server mode for other languages.</string>
+    <string name="error_no_renderable">There is no translated text to render</string>
+    <string name="error_too_large">The image is too large to render in memory</string>
+    <string name="error_render_failed">Rendering failed</string>
+    <string name="error_render_timeout">Rendering timed out</string>
+    <string name="error_render_interrupted">Rendering was interrupted</string>
+    <string name="error_render_empty">Rendering returned an empty image</string>
+    <string name="error_cancelled">Cancelled</string>
+    <string name="translate_error_prefix">Processing failed: %1$s</string>
+    <string name="translate_error_cause">Cause: %1$s</string>
+    <string name="translate_error_hint">Tip: the default is the cloud server service.basiccat.org:51043. To use a server on your computer, enter the computer’s LAN IP (not local.basiccat.org). If the LAN server uses a self-signed certificate, install it in system settings first or use an HTTP address.</string>
+    <string name="translate_share_chooser">Share translation result</string>
+    <string name="error_no_text">No text was recognized</string>
+    <string name="error_unknown">Unknown error</string>
+    <string name="error_image_dimensions">Could not read the image dimensions</string>
+    <string name="error_image_decode">Could not decode the image</string>
+    <string name="folder_translate_cannot_read">Could not read this folder</string>
+    <string name="floating_capture_auth_expired">Screen capture permission expired. Tap Translate again.</string>
+    <string name="floating_no_image">No image received</string>
+    <string name="floating_capture_error">Screenshot failed: %1$s</string>
+    <string name="floating_renderer_timeout">Renderer initialization timed out</string>
+    <string name="floating_renderer_failed">Could not create the renderer</string>
+
+    <string-array name="language_names">
+        <item>Chinese</item>
+        <item>Japanese</item>
+        <item>English</item>
+        <item>Korean</item>
+        <item>French</item>
+        <item>German</item>
+        <item>Spanish</item>
+        <item>Russian</item>
+        <item>Arabic</item>
+        <item>Portuguese</item>
+        <item>Italian</item>
+        <item>Thai</item>
+        <item>Vietnamese</item>
+        <item>Indonesian</item>
+        <item>Turkish</item>
+        <item>Polish</item>
+        <item>Dutch</item>
+        <item>Auto Detect</item>
+    </string-array>
+
+    <string-array name="repair_mode_names">
+        <item>White background</item>
+        <item>Sample background color</item>
+        <item>None</item>
+    </string-array>
+
+    <string-array name="render_mode_names">
+        <item>Server rendering (ImageTrans image)</item>
+        <item>In-app rendering (text boxes)</item>
+    </string-array>
+
+    <string-array name="ui_language_names">
+        <item>中文</item>
+        <item>English</item>
+    </string-array>
+</resources>

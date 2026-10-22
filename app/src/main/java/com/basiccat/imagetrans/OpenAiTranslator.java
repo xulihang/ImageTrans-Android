@@ -34,9 +34,9 @@ public final class OpenAiTranslator {
         String sourceLang = Prefs.getSourceLang(context);
         String targetLang = Prefs.getTargetLang(context);
         String sourceLabel = "auto".equals(sourceLang) ? "the source language"
-                : Prefs.langName(sourceLang);
+                : Prefs.langName(context, sourceLang);
         String targetLabel = "auto".equals(targetLang) ? "English"
-                : Prefs.langName(targetLang);
+                : Prefs.langName(context, targetLang);
 
         JSONArray textsJson = new JSONArray();
         for (String text : texts) textsJson.put(text == null ? "" : text);

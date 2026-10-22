@@ -53,7 +53,7 @@ final class BatchTranslator {
     }
 
     private Bitmap translateWithServer(Bitmap bitmap) throws Exception {
-        progress.onProgress("请求 ImageTrans 服务器…");
+        progress.onProgress(context.getString(R.string.translate_status_server));
         ImageTransServer.Result result =
                 ImageTransServer.translate(context, ImageUtils.bitmapToDataUrl(bitmap));
 
@@ -66,33 +66,36 @@ final class BatchTranslator {
                 ? result.renderedImageDataUrl == null && !result.boxes.isEmpty()
                 : !result.boxes.isEmpty();
         if (useBoxes) {
-            progress.onProgress("渲染排版…");
+            progress.onProgress(context.getString(R.string.translate_status_render));
             return renderBoxes(result.boxes, bitmap);
         }
         if (result.renderedImageDataUrl != null) {
-            progress.onProgress("解码服务器渲染结果…");
+            progress.onProgress(context.getString(R.string.translate_status_decode_server));
             Bitmap rendered = ImageUtils.dataUrlToBitmap(result.renderedImageDataUrl);
-            if (rendered == null) throw new Exception("服务器返回的图片无法解码");
+            if (rendered == null) {
+                throw new Exception(context.getString(R.string.error_server_image_decode));
+            }
             return rendered;
         }
-        throw new Exception("服务器没有返回可用的结果");
+        throw new Exception(context.getString(R.string.error_server_no_result));
     }
 
     private Bitmap translateLocally(Bitmap bitmap, String mode) throws Exception {
         String sourceLang = Prefs.getSourceLang(context);
-        progress.onProgress("本地 OCR 识别中…");
+        progress.onProgress(context.getString(R.string.translate_status_ocr));
         OcrEngine engine = OcrEngine.getInstance(context);
         List<Box> boxes = engine.recognize(bitmap, sourceLang,
                 message -> progress.onProgress(message));
-        if (boxes.isEmpty()) throw new Exception("没有识别到文字");
+        if (boxes.isEmpty()) throw new Exception(context.getString(R.string.error_no_text));
 
-        progress.onProgress("合并文本框…");
+        progress.onProgress(context.getString(R.string.translate_status_merge));
         boxes = TextBoxMerger.merge(boxes, sourceLang, 15, 15);
 
         if (Prefs.MODE_OPENAI.equals(mode) || Prefs.MODE_MYMEMORY.equals(mode)) {
             boolean mymemory = Prefs.MODE_MYMEMORY.equals(mode);
-            progress.onProgress(mymemory ? "调用 MyMemory 免费翻译…"
-                    : "调用 OpenAI 兼容 API 翻译…");
+            progress.onProgress(context.getString(mymemory
+                    ? R.string.translate_status_mymemory
+                    : R.string.translate_status_openai));
             List<String> texts = new ArrayList<>();
             for (Box box : boxes) texts.add(box.source);
             List<String> translations = mymemory
@@ -106,7 +109,7 @@ final class BatchTranslator {
             for (Box box : boxes) box.target = box.source;
         }
 
-        progress.onProgress("渲染排版…");
+        progress.onProgress(context.getString(R.string.translate_status_render));
         return renderBoxes(boxes, bitmap);
     }
 
@@ -115,7 +118,9 @@ final class BatchTranslator {
         for (Box box : boxes) {
             if (box.target != null && !box.target.trim().isEmpty()) renderable.add(box);
         }
-        if (renderable.isEmpty()) throw new Exception("没有可渲染的译文");
+        if (renderable.isEmpty()) {
+            throw new Exception(context.getString(R.string.error_no_renderable));
+        }
 
         JSONObject options = ImageUtils.buildRenderOptions(context);
         if (RenderChunks.needsSplit(bitmap)) {
@@ -133,12 +138,13 @@ final class BatchTranslator {
         try {
             result = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
         } catch (OutOfMemoryError error) {
-            throw new Exception("图片过大，内存不足，无法渲染");
+            throw new Exception(context.getString(R.string.error_too_large));
         }
         Canvas canvas = new Canvas(result);
         try {
             for (int i = 0; i < chunks.size(); i++) {
-                progress.onProgress("渲染排版（" + (i + 1) + "/" + chunks.size() + "）…");
+                progress.onProgress(context.getString(R.string.translate_status_render_progress,
+                        i + 1, chunks.size()));
                 RenderChunks.Chunk chunk = chunks.get(i);
                 Bitmap region = Bitmap.createBitmap(bitmap, 0, chunk.top, width, chunk.height);
                 Bitmap rendered;
@@ -190,14 +196,16 @@ final class BatchTranslator {
         });
         try {
             if (!latch.await(RENDER_TIMEOUT_MS, TimeUnit.MILLISECONDS)) {
-                throw new Exception("渲染超时");
+                throw new Exception(context.getString(R.string.error_render_timeout));
             }
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            throw new Exception("已取消");
+            throw new Exception(context.getString(R.string.error_cancelled));
         }
         if (error[0] != null) throw new Exception(error[0]);
-        if (output[0] == null) throw new Exception("渲染结果为空");
+        if (output[0] == null) {
+            throw new Exception(context.getString(R.string.error_render_empty));
+        }
         return output[0];
     }
 }

@@ -559,9 +559,9 @@ public final class ImageTransApiServer {
                 + "</code></p>"
                 + (lan != null ? "<p>同一网络中的电脑也可以填写局域网地址：</p>"
                         + "<p><code>" + lan + "</code></p>" : "")
-                + "<p>翻译方式：" + Prefs.modeName(Prefs.getMode(context)) + "<br>"
-                + "语言设置：" + Prefs.langName(Prefs.getSourceLang(context)) + " → "
-                + Prefs.langName(Prefs.getTargetLang(context)) + "</p>"
+                + "<p>翻译方式：" + Prefs.modeName(context, Prefs.getMode(context)) + "<br>"
+                + "语言设置：" + Prefs.langName(context, Prefs.getSourceLang(context)) + " → "
+                + Prefs.langName(context, Prefs.getTargetLang(context)) + "</p>"
                 + "<p>接口：<code>POST /translate</code></p>"
                 + "</body></html>";
     }

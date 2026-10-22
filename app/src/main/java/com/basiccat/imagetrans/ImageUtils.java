@@ -52,7 +52,7 @@ public final class ImageUtils {
             BitmapFactory.decodeStream(in, null, bounds);
         }
         if (bounds.outWidth <= 0 || bounds.outHeight <= 0) {
-            throw new Exception("无法读取图片尺寸");
+            throw new Exception(context.getString(R.string.error_image_dimensions));
         }
 
         int orientation = readOrientation(context, uri);
@@ -88,7 +88,7 @@ public final class ImageUtils {
             bitmap = BitmapFactory.decodeStream(in, null, options);
         }
         if (bitmap == null) {
-            throw new Exception("无法解码图片");
+            throw new Exception(context.getString(R.string.error_image_decode));
         }
 
         if (orientation != ExifInterface.ORIENTATION_NORMAL) {
@@ -257,7 +257,8 @@ public final class ImageUtils {
         intent.setType("image/png");
         intent.putExtra(Intent.EXTRA_STREAM, uri);
         intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
-        context.startActivity(Intent.createChooser(intent, "分享翻译结果"));
+        context.startActivity(Intent.createChooser(intent,
+                context.getString(R.string.translate_share_chooser)));
     }
 
     public static void toast(Context context, String message) {
@@ -304,7 +305,7 @@ public final class ImageUtils {
         } else {
             String sourceLang = Prefs.getSourceLang(context);
             boxes = OcrEngine.getInstance(context).recognize(bitmap, sourceLang, message -> { });
-            if (boxes.isEmpty()) throw new Exception("没有识别到文字");
+            if (boxes.isEmpty()) throw new Exception(context.getString(R.string.error_no_text));
             boxes = TextBoxMerger.merge(boxes, sourceLang, 15, 15);
             if (Prefs.MODE_OPENAI.equals(mode) || Prefs.MODE_MYMEMORY.equals(mode)) {
                 List<String> texts = new ArrayList<>();

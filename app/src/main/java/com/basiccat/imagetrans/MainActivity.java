@@ -16,7 +16,7 @@ import android.view.View;
 import android.widget.Button;
 import android.widget.TextView;
 
-public class MainActivity extends Activity {
+public class MainActivity extends LocalizedActivity {
     private static final int REQUEST_PICK_IMAGE = 1001;
     private static final int REQUEST_CAPTURE = 1002;
     private static final int REQUEST_OVERLAY = 1003;
@@ -125,9 +125,11 @@ public class MainActivity extends Activity {
 
     private void updateSummary() {
         String mode = Prefs.getMode(this);
-        modeSummary.setText("翻译方式：" + Prefs.modeName(mode));
-        langSummary.setText("语言：" + Prefs.langName(Prefs.getSourceLang(this))
-                + " → " + Prefs.langName(Prefs.getTargetLang(this)));
+        modeSummary.setText(getString(R.string.main_mode_summary,
+                Prefs.modeName(this, mode)));
+        langSummary.setText(getString(R.string.main_lang_summary,
+                Prefs.langName(this, Prefs.getSourceLang(this)),
+                Prefs.langName(this, Prefs.getTargetLang(this))));
     }
 
     private void updateFloatingButton() {

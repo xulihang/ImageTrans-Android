@@ -1,6 +1,7 @@
 package com.basiccat.imagetrans;
 
 import android.app.Activity;
+import android.content.Intent;
 import android.os.Bundle;
 import android.view.View;
 import android.widget.ArrayAdapter;
@@ -10,11 +11,9 @@ import android.widget.RadioButton;
 import android.widget.RadioGroup;
 import android.widget.Spinner;
 
-public class SettingsActivity extends Activity {
-    private static final String[] REPAIR_NAMES = {"白色背景", "取背景色", "不处理"};
+public class SettingsActivity extends LocalizedActivity {
+    private static final String[] UI_LANG_VALUES = {LocaleHelper.ZH, LocaleHelper.EN};
     private static final String[] REPAIR_VALUES = {"white", "background", "none"};
-    private static final String[] RENDER_NAMES = {
-            "服务端渲染（ImageTrans 返回图片）", "App 内渲染（返回文字框）"};
     private static final String[] RENDER_VALUES = {
             Prefs.SERVER_RENDER_SERVER, Prefs.SERVER_RENDER_APP};
 
@@ -30,6 +29,7 @@ public class SettingsActivity extends Activity {
     private EditText editDisplayName;
     private EditText editPassword;
     private Spinner spinnerServerRender;
+    private Spinner spinnerUiLang;
     private EditText editMyMemoryEmail;
     private EditText editOpenAiUrl;
     private EditText editOpenAiKey;
@@ -57,6 +57,7 @@ public class SettingsActivity extends Activity {
         editDisplayName = findViewById(R.id.editDisplayName);
         editPassword = findViewById(R.id.editPassword);
         spinnerServerRender = findViewById(R.id.spinnerServerRender);
+        spinnerUiLang = findViewById(R.id.spinnerUiLang);
         editMyMemoryEmail = findViewById(R.id.editMyMemoryEmail);
         editOpenAiUrl = findViewById(R.id.editOpenAiUrl);
         editOpenAiKey = findViewById(R.id.editOpenAiKey);
@@ -87,20 +88,29 @@ public class SettingsActivity extends Activity {
 
     private void setupSpinners() {
         ArrayAdapter<String> langAdapter = new ArrayAdapter<>(
-                this, android.R.layout.simple_spinner_item, Prefs.LANG_NAMES);
+                this, android.R.layout.simple_spinner_item,
+                getResources().getStringArray(R.array.language_names));
         langAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
         spinnerSource.setAdapter(langAdapter);
         spinnerTarget.setAdapter(langAdapter);
 
         ArrayAdapter<String> repairAdapter = new ArrayAdapter<>(
-                this, android.R.layout.simple_spinner_item, REPAIR_NAMES);
+                this, android.R.layout.simple_spinner_item,
+                getResources().getStringArray(R.array.repair_mode_names));
         repairAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
         spinnerRepairMode.setAdapter(repairAdapter);
 
         ArrayAdapter<String> renderAdapter = new ArrayAdapter<>(
-                this, android.R.layout.simple_spinner_item, RENDER_NAMES);
+                this, android.R.layout.simple_spinner_item,
+                getResources().getStringArray(R.array.render_mode_names));
         renderAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
         spinnerServerRender.setAdapter(renderAdapter);
+
+        ArrayAdapter<String> uiLangAdapter = new ArrayAdapter<>(
+                this, android.R.layout.simple_spinner_item,
+                getResources().getStringArray(R.array.ui_language_names));
+        uiLangAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+        spinnerUiLang.setAdapter(uiLangAdapter);
     }
 
     private void loadSettings() {
@@ -132,6 +142,7 @@ public class SettingsActivity extends Activity {
 
         spinnerSource.setSelection(indexOfCode(Prefs.getSourceLang(this)));
         spinnerTarget.setSelection(indexOfCode(Prefs.getTargetLang(this)));
+        spinnerUiLang.setSelection(indexOfUiLang(Prefs.getUiLang(this)));
         editRenderCss.setText(Prefs.getRenderCss(this));
         editMinFontSize.setText(String.valueOf(Prefs.getMinFontSize(this)));
 
@@ -171,7 +182,7 @@ public class SettingsActivity extends Activity {
 
         String serverUrl = editServerUrl.getText().toString().trim();
         if (Prefs.MODE_IMAGETRANS.equals(mode) && serverUrl.isEmpty()) {
-            ImageUtils.toast(this, "请填写 ImageTrans 服务器地址");
+            ImageUtils.toast(this, getString(R.string.settings_server_url_required));
             return;
         }
 
@@ -182,7 +193,11 @@ public class SettingsActivity extends Activity {
         }
         if (minFont <= 0) minFont = 14;
 
+        String newUiLang = UI_LANG_VALUES[spinnerUiLang.getSelectedItemPosition()];
+        boolean uiLanguageChanged = !newUiLang.equals(Prefs.getUiLang(this));
+
         Prefs.setMode(this, mode);
+        Prefs.setUiLang(this, newUiLang);
         Prefs.setServerUrl(this, serverUrl);
         Prefs.setDisplayName(this, editDisplayName.getText().toString().trim());
         Prefs.setPassword(this, editPassword.getText().toString());
@@ -198,13 +213,27 @@ public class SettingsActivity extends Activity {
         Prefs.setMinFontSize(this, minFont);
         Prefs.setTextRepairMode(this, REPAIR_VALUES[spinnerRepairMode.getSelectedItemPosition()]);
 
-        ImageUtils.toast(this, "设置已保存");
+        if (uiLanguageChanged) {
+            // Recreate the task so every screen picks up the new locale.
+            Intent intent = new Intent(this, MainActivity.class);
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
+            startActivity(intent);
+        } else {
+            ImageUtils.toast(this, getString(R.string.settings_saved));
+        }
         finish();
     }
 
     private int indexOfCode(String code) {
         for (int i = 0; i < Prefs.LANG_CODES.length; i++) {
             if (Prefs.LANG_CODES[i].equals(code)) return i;
+        }
+        return 0;
+    }
+
+    private int indexOfUiLang(String language) {
+        for (int i = 0; i < UI_LANG_VALUES.length; i++) {
+            if (UI_LANG_VALUES[i].equals(language)) return i;
         }
         return 0;
     }
