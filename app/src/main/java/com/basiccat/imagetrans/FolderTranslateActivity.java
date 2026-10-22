@@ -7,6 +7,7 @@ import android.net.Uri;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import android.provider.DocumentsContract;
 import android.util.Log;
 import android.view.View;
 import android.view.WindowManager;
@@ -41,6 +42,7 @@ public class FolderTranslateActivity extends Activity {
     private static final String OUT_DIR = "out";
 
     private Button btnPickFolder;
+    private Button btnOpenOutput;
     private Button btnCancel;
     private TextView folderPath;
     private TextView statusText;
@@ -57,6 +59,8 @@ public class FolderTranslateActivity extends Activity {
     private volatile boolean running;
     private volatile boolean cancelRequested;
     private volatile String cancelReason;
+    /** The out directory of the current (or last) batch, once created. */
+    private volatile DocumentFile outputDir;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -64,6 +68,7 @@ public class FolderTranslateActivity extends Activity {
         setContentView(R.layout.activity_folder_translate);
 
         btnPickFolder = findViewById(R.id.btnPickFolder);
+        btnOpenOutput = findViewById(R.id.btnOpenOutput);
         btnCancel = findViewById(R.id.btnCancel);
         folderPath = findViewById(R.id.folderPath);
         statusText = findViewById(R.id.folderStatus);
@@ -75,6 +80,7 @@ public class FolderTranslateActivity extends Activity {
 
         findViewById(R.id.btnBack).setOnClickListener(v -> finish());
         btnPickFolder.setOnClickListener(v -> pickDirectory());
+        btnOpenOutput.setOnClickListener(v -> openOutputDirectory());
         btnCancel.setOnClickListener(v -> cancelBatch(null));
     }
 
@@ -160,7 +166,9 @@ public class FolderTranslateActivity extends Activity {
         statusText.setText(R.string.folder_translate_preparing);
         countsText.setText("");
         btnPickFolder.setEnabled(false);
+        btnOpenOutput.setVisibility(View.GONE);
         btnCancel.setEnabled(true);
+        outputDir = null;
 
         running = true;
         cancelRequested = false;
@@ -185,6 +193,7 @@ public class FolderTranslateActivity extends Activity {
                 return;
             }
             DocumentFile outDir = ensureOutDir(root);
+            outputDir = outDir;
             Set<String> usedNames = new HashSet<>();
             int total = images.size();
             postProgress(0, total, "", null, 0, 0);
@@ -391,6 +400,48 @@ public class FolderTranslateActivity extends Activity {
                 : getString(R.string.folder_translate_cancelling));
     }
 
+    /**
+     * Opens the out folder in a file manager. Directory support is not
+     * standardized, so try the usual MIME types and fall back to the system
+     * folder picker positioned at the folder.
+     */
+    private void openOutputDirectory() {
+        DocumentFile out = outputDir;
+        if (out == null) {
+            ImageUtils.toast(this, getString(R.string.folder_translate_no_out_yet));
+            return;
+        }
+        Uri uri = out.getUri();
+        String[] types = {
+                DocumentsContract.Document.MIME_TYPE_DIR,
+                "resource/folder",
+                "inode/directory"
+        };
+        for (String type : types) {
+            try {
+                Intent intent = new Intent(Intent.ACTION_VIEW)
+                        .setDataAndType(uri, type)
+                        .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                startActivity(intent);
+                return;
+            } catch (Exception ignored) {
+                // Try the next MIME type.
+            }
+        }
+        try {
+            Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE)
+                    .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION
+                            | Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+                            | Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION
+                            | Intent.FLAG_GRANT_PREFIX_URI_PERMISSION)
+                    .putExtra(DocumentsContract.EXTRA_INITIAL_URI, uri);
+            startActivity(intent);
+        } catch (Exception exception) {
+            ImageUtils.toast(this, getString(R.string.folder_translate_open_failed,
+                    ImageUtils.humanError(exception)));
+        }
+    }
+
     // --- UI updates -------------------------------------------------------
 
     private void postProgress(int index, int total, String fileName, String message,
@@ -430,6 +481,7 @@ public class FolderTranslateActivity extends Activity {
             progressPanel.setVisibility(View.GONE);
             btnPickFolder.setEnabled(true);
             btnCancel.setEnabled(false);
+            btnOpenOutput.setVisibility(outputDir != null ? View.VISIBLE : View.GONE);
 
             StringBuilder text = new StringBuilder();
             if (headline != null) {

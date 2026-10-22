@@ -33,6 +33,9 @@
     <string name="folder_translate_decode_failed">无法读取图片</string>
     <string name="folder_translate_render_failed">没有生成翻译结果</string>
     <string name="folder_translate_save_failed">无法保存 %1$s</string>
+    <string name="folder_translate_open_out">打开输出目录</string>
+    <string name="folder_translate_no_out_yet">还没有生成输出目录。</string>
+    <string name="folder_translate_open_failed">无法打开文件管理器：%1$s</string>
     <string name="title_camera_translate">拍照翻译</string>
     <string name="camera_capture">拍摄并翻译</string>
     <string name="camera_capture_hint">拖动选框调整识别范围</string>
