@@ -264,7 +264,7 @@ public final class OcrEngine extends NativeInference {
             if (rec.getConfidence() < 0.30f) continue;
             Point[] points = rec.getDtBoxes();
             if (points == null || points.length == 0) continue;
-            Box box = boundingBox(points);
+            Box box = boundingBox(points, text.trim());
             if (box != null) boxes.add(box);
         }
         Log.i(TAG, "DB OCR finished in " + (System.currentTimeMillis() - start)
@@ -298,7 +298,7 @@ public final class OcrEngine extends NativeInference {
                 if (rec == null) continue;
                 Point[] points = rec.getDtBoxes();
                 if (points == null || points.length == 0) continue;
-                Box box = boundingBox(points);
+                Box box = boundingBox(points, "");
                 if (box == null || box.width < 10 || box.height < 10) continue;
                 regions.add(new float[]{(float) box.left(), (float) box.top(),
                         (float) box.right(), (float) box.bottom()});
@@ -320,8 +320,8 @@ public final class OcrEngine extends NativeInference {
         return boxes;
     }
 
-    /** Axis-aligned bounds of a quad, or null when it has no area. */
-    private static Box boundingBox(Point[] points) {
+    /** Axis-aligned bounds of a quad with its recognized text, or null when it has no area. */
+    private static Box boundingBox(Point[] points, String text) {
         double minX = Double.MAX_VALUE;
         double minY = Double.MAX_VALUE;
         double maxX = -Double.MAX_VALUE;
@@ -333,7 +333,7 @@ public final class OcrEngine extends NativeInference {
             maxY = Math.max(maxY, point.y);
         }
         if (maxX <= minX || maxY <= minY) return null;
-        return new Box(minX, minY, maxX - minX, maxY - minY, "");
+        return new Box(minX, minY, maxX - minX, maxY - minY, text);
     }
 
     private synchronized PaddleTextLineDetector textLineDetector() throws Exception {
