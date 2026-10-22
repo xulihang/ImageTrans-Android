@@ -89,6 +89,9 @@
     <string name="main_server_hint">在后台提供 ImageTrans 服务器的 /translate 接口（HTTP，端口 51042）。浏览器扩展填 http://127.0.0.1:51042（同一台手机，或电脑通过 adb reverse 转发），不需要连接 Wi-Fi；同一网络中的电脑也可以填手机的局域网 IP。</string>
     <string name="main_server_on">停止服务器</string>
     <string name="main_server_off">启动服务器</string>
+    <string name="main_server_open">打开服务器设置</string>
+    <string name="main_server_state_on">服务器状态：已开启</string>
+    <string name="main_server_state_off">服务器状态：未开启</string>
     <string name="server_notification_title">ImageTrans 服务器运行中</string>
     <string name="server_notification_text">扩展里填 %1$s</string>
     <string name="server_notification_lan">电脑上的浏览器可填：%1$s</string>

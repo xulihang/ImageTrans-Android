@@ -165,13 +165,22 @@
                 android:textColor="@color/text_secondary"
                 android:textSize="13sp" />
 
+            <TextView
+                android:id="@+id/serverState"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:text="@string/main_server_state_off"
+                android:textColor="@color/text_secondary"
+                android:textSize="13sp" />
+
             <Button
                 android:id="@+id/btnServer"
                 style="@style/SecondaryButton"
                 android:layout_width="match_parent"
                 android:layout_height="48dp"
-                android:layout_marginTop="12dp"
-                android:text="@string/main_server_off" />
+                android:layout_marginTop="8dp"
+                android:text="@string/main_server_open" />
         </LinearLayout>
 
         <TextView

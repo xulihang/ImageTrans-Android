@@ -24,6 +24,7 @@ public class MainActivity extends Activity {
 
     private TextView modeSummary;
     private TextView langSummary;
+    private TextView serverState;
     private Button btnFloating;
     /** While the button says "close", poll whether the service is still up. */
     private final Handler pollHandler = new Handler(Looper.getMainLooper());
@@ -33,6 +34,8 @@ public class MainActivity extends Activity {
             updateFloatingButton();
         }
     };
+    /** Refresh the server state after the start/stop request is handled. */
+    private final Runnable updateServerStateRunnable = this::updateServerState;
     /** The user is touching the screen, i.e. this activity is in front. */
     private boolean touching;
 
@@ -43,6 +46,7 @@ public class MainActivity extends Activity {
 
         modeSummary = findViewById(R.id.modeSummary);
         langSummary = findViewById(R.id.langSummary);
+        serverState = findViewById(R.id.serverState);
         btnFloating = findViewById(R.id.btnFloating);
         // Toggling screen capture requires visible UI: Android stops a
         // projection whose foreground service was started from the
@@ -85,6 +89,9 @@ public class MainActivity extends Activity {
         updateSummary();
         updateFloatingButton();
         restoreServerIfEnabled();
+        updateServerState();
+        pollHandler.removeCallbacks(updateServerStateRunnable);
+        pollHandler.postDelayed(updateServerStateRunnable, 1000);
     }
 
     /**
@@ -102,9 +109,17 @@ public class MainActivity extends Activity {
         }
     }
 
+    private void updateServerState() {
+        boolean enabled = Prefs.isServerEnabled(this);
+        serverState.setText(enabled
+                ? R.string.main_server_state_on : R.string.main_server_state_off);
+        serverState.setTextColor(getColor(enabled
+                ? R.color.primary : R.color.text_secondary));
+    }
+
     @Override
     protected void onDestroy() {
-        pollHandler.removeCallbacks(pollFloating);
+        pollHandler.removeCallbacksAndMessages(null);
         super.onDestroy();
     }
 
