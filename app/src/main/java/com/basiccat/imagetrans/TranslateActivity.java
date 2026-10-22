@@ -238,13 +238,17 @@ public class TranslateActivity extends Activity {
         status("合并文本框…");
         boxes = TextBoxMerger.merge(boxes, sourceLang, 15, 15);
 
-        if (Prefs.MODE_OPENAI.equals(mode)) {
-            status("调用 OpenAI 兼容 API 翻译…");
+        if (Prefs.MODE_OPENAI.equals(mode) || Prefs.MODE_MYMEMORY.equals(mode)) {
+            boolean mymemory = Prefs.MODE_MYMEMORY.equals(mode);
+            status(mymemory ? "调用 MyMemory 免费翻译…"
+                    : "调用 OpenAI 兼容 API 翻译…");
             List<String> texts = new ArrayList<>();
             for (Box box : boxes) {
                 texts.add(box.source);
             }
-            List<String> translations = OpenAiTranslator.translate(TranslateActivity.this, texts);
+            List<String> translations = mymemory
+                    ? MyMemoryTranslator.translate(TranslateActivity.this, texts)
+                    : OpenAiTranslator.translate(TranslateActivity.this, texts);
             for (int i = 0; i < boxes.size() && i < translations.size(); i++) {
                 boxes.get(i).target = translations.get(i);
             }

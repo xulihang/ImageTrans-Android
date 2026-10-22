@@ -435,10 +435,13 @@ public final class ImageTransApiServer {
             // extension translates what it gets.
             List<Box> boxes = TextBoxMerger.merge(
                     ImageUtils.detectOnly(context, bitmap, sourceLang), sourceLang, 15, 15);
-            if (Prefs.MODE_OPENAI.equals(Prefs.getMode(context))) {
+            String mode = Prefs.getMode(context);
+            if (Prefs.MODE_OPENAI.equals(mode) || Prefs.MODE_MYMEMORY.equals(mode)) {
                 List<String> texts = new ArrayList<>();
                 for (Box box : boxes) texts.add(box.source);
-                List<String> translations = OpenAiTranslator.translate(context, texts);
+                List<String> translations = Prefs.MODE_MYMEMORY.equals(mode)
+                        ? MyMemoryTranslator.translate(context, texts)
+                        : OpenAiTranslator.translate(context, texts);
                 for (int i = 0; i < boxes.size() && i < translations.size(); i++) {
                     boxes.get(i).target = translations.get(i);
                 }

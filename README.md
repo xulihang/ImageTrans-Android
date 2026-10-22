@@ -9,14 +9,15 @@ ImageTrans 的 Android 客户端，支持**图片翻译**、**拍照翻译**、*
 - **文件夹翻译**：通过 SAF 选择一个文件夹，直接翻译其中的图片（不包含子文件夹），结果以 PNG 保存到该文件夹的 `out` 子文件夹，文件名沿用原文件名（扩展名改为 `.png`）。处理结束后可以点「打开输出目录」在文件管理器中查看。处理在页面内进行，切到后台会停止。
 - **ImageTrans 服务器模式**：调用 `POST {serverURL}/translate`。默认由服务器渲染并直接显示返回的图片（使用 ImageTrans 项目自身的排版）；也可以在设置里改为 App 内渲染，此时传 `withoutImage=true` 取回文字框，再用 App 的 WebView 和 CSS/字号设置排版。任一结果缺失时自动回退到另一种。
 - **本地 OCR + OpenAI 兼容 API**：使用 rapidocr4j-android 在设备上做检测和识别，再把文本发给 OpenAI 兼容接口翻译。
+- **本地 OCR + MyMemory（免费）**：无需 API Key，使用 MyMemory 公共翻译接口。按接口限制自动把长段落切成 500 字节以内的请求；默认使用内置联系邮箱（额度约 50000 字符/天），也可以在设置里填写自己的邮箱。超出额度后会提示额度用完。源语言选「自动检测」时按日语处理，目标语言选「自动检测」时按英语处理（与浏览器扩展一致）。
 - **仅识别模式**：只做 OCR，把识别结果覆盖回图片，方便调试。
 - **长条漫**：解码时保留长图比例（不再压到最长边 3500px）；OCR 按扩展的规则以 4×宽度为一块切分识别；渲染也分块进行再纵向拼接，避开 WebView/Canvas 的尺寸和内存限制。
 - 译文保存到相册、分享。
 - 原文 / 译文切换。
 - **点击文字框查看原文/译文**：图片翻译页和截屏翻译的选框里，点击文字框弹出原文和译文；主界面里可长按选中部分文字复制（系统菜单），截屏翻译的浮窗里系统选择菜单不显示，改为“复制所选 / 复制全部”。
 - **截屏翻译悬浮窗**：悬浮球 + 选框常驻；点悬浮球上的「翻译」截取选框区域并翻译，译文显示在选框内；选框可拖动、缩放，框外屏幕不受影响、照常使用其他 App。
-- **翻译服务器（浏览器扩展用）**：在后台提供 `POST /translate`（HTTP，端口 51042），供 ImageTrans 浏览器扩展的「ImageTrans 服务器」模式调用。OCR 在手机上完成，文字行合并为段落后返回文字框；App 设为「本地 OCR + OpenAI」时同时返回译文，其他方式只返回原文，由扩展自己翻译。同一台手机上的 Edge/Firefox 扩展，或电脑上的浏览器通过 `adb reverse tcp:51042 tcp:51042` 转发后，直接填 `http://127.0.0.1:51042`，不依赖 Wi-Fi 或移动数据；同一网络中的电脑也可以使用手机的局域网 IP。通知栏常驻显示地址，可直接停止服务。
-- 设置：服务器地址、项目名称、密码、服务器渲染方式（服务端渲染 / App 内渲染）、OpenAI 地址/Key/模型、语言对、渲染 CSS、最小字号、原文背景处理方式。
+- **翻译服务器（浏览器扩展用）**：在后台提供 `POST /translate`（HTTP，端口 51042），供 ImageTrans 浏览器扩展的「ImageTrans 服务器」模式调用。OCR 在手机上完成，文字行合并为段落后返回文字框；App 设为「本地 OCR + OpenAI」或「本地 OCR + MyMemory」时同时返回译文，其他方式只返回原文，由扩展自己翻译。同一台手机上的 Edge/Firefox 扩展，或电脑上的浏览器通过 `adb reverse tcp:51042 tcp:51042` 转发后，直接填 `http://127.0.0.1:51042`，不依赖 Wi-Fi 或移动数据；同一网络中的电脑也可以使用手机的局域网 IP。通知栏常驻显示地址，可直接停止服务。
+- 设置：翻译方式（ImageTrans 服务器 / MyMemory / OpenAI / 仅识别）、服务器地址、项目名称、密码、服务器渲染方式（服务端渲染 / App 内渲染）、MyMemory 联系邮箱、OpenAI 地址/Key/模型、语言对、渲染 CSS、最小字号、原文背景处理方式。
 
 ## 架构
 
@@ -28,6 +29,7 @@ TranslateActivity
         ├─ OcrEngine（rapidocr4j-android）→ boxes
         │       └─ TextBoxMerger（移植自扩展的 mergeTextBoxes）
         ├─ OpenAiTranslator（OpenAI 兼容 chat/completions）
+        ├─ MyMemoryTranslator（免费接口，自动分段）
         └─ Renderer（隐藏 WebView）
                 ├─ assets/render.html
                 ├─ assets/render.js（来自扩展 getImage.js 的渲染逻辑）

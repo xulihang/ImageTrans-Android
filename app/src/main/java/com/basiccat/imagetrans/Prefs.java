@@ -13,6 +13,7 @@ public final class Prefs {
     private static final String NAME = "imagetrans_settings";
 
     public static final String MODE_IMAGETRANS = "imagetrans";
+    public static final String MODE_MYMEMORY = "mymemory";
     public static final String MODE_OPENAI = "openai";
     public static final String MODE_ORIGINAL = "original";
 
@@ -109,6 +110,29 @@ public final class Prefs {
 
     public static void setTargetLang(Context context, String value) {
         get(context).edit().putString("target_lang", value).apply();
+    }
+
+    /**
+     * MyMemory's optional "de" contact email. When the user has not entered
+     * one, the built-in address is used (it is never shown in the UI).
+     */
+    public static final String DEFAULT_MYMEMORY_EMAIL = "admin@basiccat.org";
+
+    /** The user-entered override, or "" when the built-in address is used. */
+    public static String getMyMemoryEmailOverride(Context context) {
+        String value = get(context).getString("mymemory_email", "");
+        return value == null ? "" : value;
+    }
+
+    /** The address actually sent to MyMemory. */
+    public static String getMyMemoryEmail(Context context) {
+        String value = getMyMemoryEmailOverride(context).trim();
+        return value.isEmpty() ? DEFAULT_MYMEMORY_EMAIL : value;
+    }
+
+    public static void setMyMemoryEmail(Context context, String value) {
+        get(context).edit().putString("mymemory_email",
+                value == null ? "" : value.trim()).apply();
     }
 
     public static String getOpenAiUrl(Context context) {
@@ -270,6 +294,7 @@ public final class Prefs {
 
     public static String modeName(String mode) {
         if (MODE_IMAGETRANS.equals(mode)) return "ImageTrans 服务器";
+        if (MODE_MYMEMORY.equals(mode)) return "本地 OCR + MyMemory";
         if (MODE_OPENAI.equals(mode)) return "本地 OCR + OpenAI";
         return "仅识别（不翻译）";
     }

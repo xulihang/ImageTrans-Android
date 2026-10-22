@@ -38,6 +38,13 @@
                 android:textSize="15sp" />
 
             <RadioButton
+                android:id="@+id/modeMyMemory"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="本地 OCR + MyMemory（免费）"
+                android:textSize="15sp" />
+
+            <RadioButton
                 android:id="@+id/modeOpenai"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
@@ -128,6 +135,40 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:text="默认使用云端服务器 service.basiccat.org:51043。如需连接电脑上的 ImageTrans 服务器，请填写电脑的局域网地址，而不是 local.basiccat.org（在手机上会解析到手机自己）。局域网服务器若使用自签名 HTTPS 证书，请先在系统设置中把证书安装为受信任证书；也可以使用 HTTP 地址。" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/mymemorySection"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:visibility="gone">
+
+            <TextView
+                style="@style/SectionTitle"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="MyMemory（免费）" />
+
+            <TextView
+                style="@style/FieldLabel"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="联系邮箱（可选）" />
+
+            <EditText
+                android:id="@+id/editMyMemoryEmail"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:hint="name@example.com"
+                android:inputType="textEmailAddress"
+                android:singleLine="true" />
+
+            <TextView
+                style="@style/Note"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="无需 API Key。单次请求最多 500 字节，App 会自动分段翻译。留空时使用应用内置邮箱（额度约 50000 字符/天），也可以填写自己的邮箱；邮箱只保存在本机，并会随请求发送给 MyMemory。与浏览器扩展一致：源语言选“自动检测”时按日语处理，目标语言选“自动检测”时按英语处理。" />
         </LinearLayout>
 
         <LinearLayout

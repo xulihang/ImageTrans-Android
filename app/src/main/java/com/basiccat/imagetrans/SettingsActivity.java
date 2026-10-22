@@ -20,14 +20,17 @@ public class SettingsActivity extends Activity {
 
     private RadioGroup modeGroup;
     private RadioButton modeImagetrans;
+    private RadioButton modeMyMemory;
     private RadioButton modeOpenai;
     private RadioButton modeOriginal;
     private LinearLayout serverSection;
+    private LinearLayout mymemorySection;
     private LinearLayout openaiSection;
     private EditText editServerUrl;
     private EditText editDisplayName;
     private EditText editPassword;
     private Spinner spinnerServerRender;
+    private EditText editMyMemoryEmail;
     private EditText editOpenAiUrl;
     private EditText editOpenAiKey;
     private EditText editOpenAiModel;
@@ -44,14 +47,17 @@ public class SettingsActivity extends Activity {
 
         modeGroup = findViewById(R.id.modeGroup);
         modeImagetrans = findViewById(R.id.modeImagetrans);
+        modeMyMemory = findViewById(R.id.modeMyMemory);
         modeOpenai = findViewById(R.id.modeOpenai);
         modeOriginal = findViewById(R.id.modeOriginal);
         serverSection = findViewById(R.id.serverSection);
+        mymemorySection = findViewById(R.id.mymemorySection);
         openaiSection = findViewById(R.id.openaiSection);
         editServerUrl = findViewById(R.id.editServerUrl);
         editDisplayName = findViewById(R.id.editDisplayName);
         editPassword = findViewById(R.id.editPassword);
         spinnerServerRender = findViewById(R.id.spinnerServerRender);
+        editMyMemoryEmail = findViewById(R.id.editMyMemoryEmail);
         editOpenAiUrl = findViewById(R.id.editOpenAiUrl);
         editOpenAiKey = findViewById(R.id.editOpenAiKey);
         editOpenAiModel = findViewById(R.id.editOpenAiModel);
@@ -99,7 +105,9 @@ public class SettingsActivity extends Activity {
 
     private void loadSettings() {
         String mode = Prefs.getMode(this);
-        if (Prefs.MODE_OPENAI.equals(mode)) {
+        if (Prefs.MODE_MYMEMORY.equals(mode)) {
+            modeMyMemory.setChecked(true);
+        } else if (Prefs.MODE_OPENAI.equals(mode)) {
             modeOpenai.setChecked(true);
         } else if (Prefs.MODE_ORIGINAL.equals(mode)) {
             modeOriginal.setChecked(true);
@@ -117,6 +125,7 @@ public class SettingsActivity extends Activity {
                 break;
             }
         }
+        editMyMemoryEmail.setText(Prefs.getMyMemoryEmailOverride(this));
         editOpenAiUrl.setText(Prefs.getOpenAiUrl(this));
         editOpenAiKey.setText(Prefs.getOpenAiKey(this));
         editOpenAiModel.setText(Prefs.getOpenAiModel(this));
@@ -140,15 +149,19 @@ public class SettingsActivity extends Activity {
     private void updateSections() {
         int checked = modeGroup.getCheckedRadioButtonId();
         boolean server = checked == R.id.modeImagetrans;
+        boolean mymemory = checked == R.id.modeMyMemory;
         boolean openai = checked == R.id.modeOpenai;
         serverSection.setVisibility(server ? View.VISIBLE : View.GONE);
+        mymemorySection.setVisibility(mymemory ? View.VISIBLE : View.GONE);
         openaiSection.setVisibility(openai ? View.VISIBLE : View.GONE);
     }
 
     private void saveSettings() {
         int checked = modeGroup.getCheckedRadioButtonId();
         String mode;
-        if (checked == R.id.modeOpenai) {
+        if (checked == R.id.modeMyMemory) {
+            mode = Prefs.MODE_MYMEMORY;
+        } else if (checked == R.id.modeOpenai) {
             mode = Prefs.MODE_OPENAI;
         } else if (checked == R.id.modeOriginal) {
             mode = Prefs.MODE_ORIGINAL;
@@ -175,6 +188,7 @@ public class SettingsActivity extends Activity {
         Prefs.setPassword(this, editPassword.getText().toString());
         Prefs.setServerRenderMode(this,
                 RENDER_VALUES[spinnerServerRender.getSelectedItemPosition()]);
+        Prefs.setMyMemoryEmail(this, editMyMemoryEmail.getText().toString());
         Prefs.setOpenAiUrl(this, editOpenAiUrl.getText().toString().trim());
         Prefs.setOpenAiKey(this, editOpenAiKey.getText().toString().trim());
         Prefs.setOpenAiModel(this, editOpenAiModel.getText().toString().trim());
