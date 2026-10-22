@@ -52,6 +52,7 @@
     <string name="main_settings">Settings</string>
     <string name="main_footer">Local OCR: rapidocr4j · Rendering: WebView</string>
     <string name="main_project_url">https://github.com/xulihang/ImageTrans-Android</string>
+    <string name="main_project_link">Project</string>
     <string name="main_version">Version %1$s</string>
     <string name="translate_loading">Processing…</string>
     <string name="translate_toggle_original">Show Original</string>

@@ -52,6 +52,7 @@
     <string name="main_settings">设置</string>
     <string name="main_footer">本地 OCR：rapidocr4j · 渲染：WebView</string>
     <string name="main_project_url">https://github.com/xulihang/ImageTrans-Android</string>
+    <string name="main_project_link">项目说明</string>
     <string name="main_version">版本 %1$s</string>
     <string name="translate_loading">正在处理…</string>
     <string name="translate_toggle_original">查看原文</string>
