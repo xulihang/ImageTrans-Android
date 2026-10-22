@@ -339,11 +339,19 @@ public final class ImageUtils {
     public static JSONObject buildRenderOptions(Context context) throws JSONException {
         JSONObject options = new JSONObject();
         options.put("renderMode", "dom");
-        options.put("renderTextCSS", Prefs.getRenderCss(context));
+        options.put("renderTextCSS", renderTextCss(context));
         options.put("minFontSize", Prefs.getMinFontSize(context));
         options.put("textRepairMode", Prefs.getTextRepairMode(context));
         options.put("sourceLang", Prefs.getSourceLang(context));
         options.put("targetLang", Prefs.getTargetLang(context));
         return options;
+    }
+
+    /** The user's text-box CSS with the vertical-layout option applied. */
+    private static String renderTextCss(Context context) {
+        String css = Prefs.getRenderCss(context);
+        if (!Prefs.isVerticalText(context)) return css;
+        if (css != null && !css.isEmpty() && !css.endsWith(";")) css += ";";
+        return (css == null ? "" : css) + "writing-mode: vertical-rl;";
     }
 }

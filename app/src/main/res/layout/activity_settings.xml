@@ -303,6 +303,13 @@
             android:minLines="3"
             android:padding="8dp" />
 
+        <CheckBox
+            android:id="@+id/checkVertical"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/settings_vertical_text"
+            android:textSize="15sp" />
+
         <TextView
             style="@style/FieldLabel"
             android:layout_width="match_parent"

@@ -158,6 +158,7 @@
     <string name="settings_prompt_needs_texts">提示词必须包含 {texts} 占位符</string>
     <string name="settings_render_section">排版渲染</string>
     <string name="settings_render_css">文本框 CSS</string>
+    <string name="settings_vertical_text">竖排文字</string>
     <string name="settings_min_font">最小字号（px）</string>
     <string name="settings_repair_mode">原文背景处理</string>
     <string name="settings_css_note">CSS 支持 text-align、font-family、font-weight、color、background-color、border-radius、writing-mode: vertical-rl、direction: rtl、text-shadow 等，与浏览器扩展的设置一致。</string>

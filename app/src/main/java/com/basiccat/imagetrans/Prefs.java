@@ -188,6 +188,15 @@ public final class Prefs {
         get(context).edit().putString("render_css", value).apply();
     }
 
+    /** Render translated text vertically (writing-mode: vertical-rl). */
+    public static boolean isVerticalText(Context context) {
+        return get(context).getBoolean("vertical_text", false);
+    }
+
+    public static void setVerticalText(Context context, boolean value) {
+        get(context).edit().putBoolean("vertical_text", value).apply();
+    }
+
     public static int getMinFontSize(Context context) {
         return get(context).getInt("min_font_size", 14);
     }

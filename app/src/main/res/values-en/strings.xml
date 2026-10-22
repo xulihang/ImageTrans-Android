@@ -154,6 +154,7 @@
     <string name="settings_prompt_needs_texts">The prompt must contain the {texts} placeholder</string>
     <string name="settings_render_section">Rendering</string>
     <string name="settings_render_css">Text box CSS</string>
+    <string name="settings_vertical_text">Vertical text</string>
     <string name="settings_min_font">Minimum font size (px)</string>
     <string name="settings_repair_mode">Original background handling</string>
     <string name="settings_css_note">CSS supports text-align, font-family, font-weight, color, background-color, border-radius, writing-mode: vertical-rl, direction: rtl, text-shadow, etc., matching the browser extension settings.</string>

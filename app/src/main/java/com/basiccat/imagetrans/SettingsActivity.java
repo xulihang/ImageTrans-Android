@@ -5,6 +5,7 @@ import android.content.Intent;
 import android.os.Bundle;
 import android.view.View;
 import android.widget.ArrayAdapter;
+import android.widget.CheckBox;
 import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.RadioButton;
@@ -39,6 +40,7 @@ public class SettingsActivity extends LocalizedActivity {
     private Spinner spinnerSource;
     private Spinner spinnerTarget;
     private EditText editRenderCss;
+    private CheckBox checkVertical;
     private EditText editMinFontSize;
     private Spinner spinnerRepairMode;
 
@@ -68,6 +70,7 @@ public class SettingsActivity extends LocalizedActivity {
         spinnerSource = findViewById(R.id.spinnerSource);
         spinnerTarget = findViewById(R.id.spinnerTarget);
         editRenderCss = findViewById(R.id.editRenderCss);
+        checkVertical = findViewById(R.id.checkVertical);
         editMinFontSize = findViewById(R.id.editMinFontSize);
         spinnerRepairMode = findViewById(R.id.spinnerRepairMode);
 
@@ -148,6 +151,7 @@ public class SettingsActivity extends LocalizedActivity {
         spinnerTarget.setSelection(indexOfCode(Prefs.getTargetLang(this)));
         spinnerUiLang.setSelection(indexOfUiLang(Prefs.getUiLang(this)));
         editRenderCss.setText(Prefs.getRenderCss(this));
+        checkVertical.setChecked(Prefs.isVerticalText(this));
         editMinFontSize.setText(String.valueOf(Prefs.getMinFontSize(this)));
 
         String repair = Prefs.getTextRepairMode(this);
@@ -223,6 +227,7 @@ public class SettingsActivity extends LocalizedActivity {
         Prefs.setSourceLang(this, Prefs.LANG_CODES[spinnerSource.getSelectedItemPosition()]);
         Prefs.setTargetLang(this, Prefs.LANG_CODES[spinnerTarget.getSelectedItemPosition()]);
         Prefs.setRenderCss(this, editRenderCss.getText().toString());
+        Prefs.setVerticalText(this, checkVertical.isChecked());
         Prefs.setMinFontSize(this, minFont);
         Prefs.setTextRepairMode(this, REPAIR_VALUES[spinnerRepairMode.getSelectedItemPosition()]);
 
