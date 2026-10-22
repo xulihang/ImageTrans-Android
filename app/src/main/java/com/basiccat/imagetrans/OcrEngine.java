@@ -7,11 +7,14 @@ import android.util.Log;
 import org.opencv.core.Point;
 
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
 import java.util.List;
 
 import io.github.hzkitty.RapidOCR;
 import io.github.hzkitty.entity.OcrConfig;
 import io.github.hzkitty.entity.OcrResult;
+import io.github.hzkitty.entity.ParamConfig;
 import io.github.hzkitty.entity.RecResult;
 
 /**
@@ -238,11 +241,16 @@ public final class OcrEngine extends NativeInference {
         return lines;
     }
 
-    /** DB-detector OCR (PP-OCRv6 det + language recognition model), one box per line. */
+    /** DB-detector OCR (PP-OCRv6 det + recognition), one box per line. */
     private List<Box> detectWithDb(Bitmap bitmap, String sourceLang,
                                    RemoteOcrModels.ProgressListener listener) throws Exception {
         initialize(sourceLang, listener);
         if (listener != null) listener.onProgress("本地 OCR 识别中…");
+        // Japanese: the built-in recognizer cannot handle vertical columns,
+        // so run detection only and recognize every detected line separately.
+        if ("ja".equals(sourceLang)) {
+            return detectJapaneseWithDb(bitmap);
+        }
         long start = System.currentTimeMillis();
         OcrResult result = rapidOCR.run(bitmap);
         List<Box> boxes = new ArrayList<>();
@@ -256,23 +264,76 @@ public final class OcrEngine extends NativeInference {
             if (rec.getConfidence() < 0.30f) continue;
             Point[] points = rec.getDtBoxes();
             if (points == null || points.length == 0) continue;
-
-            double minX = Double.MAX_VALUE;
-            double minY = Double.MAX_VALUE;
-            double maxX = -Double.MAX_VALUE;
-            double maxY = -Double.MAX_VALUE;
-            for (Point point : points) {
-                minX = Math.min(minX, point.x);
-                minY = Math.min(minY, point.y);
-                maxX = Math.max(maxX, point.x);
-                maxY = Math.max(maxY, point.y);
-            }
-            if (maxX <= minX || maxY <= minY) continue;
-            boxes.add(new Box(minX, minY, maxX - minX, maxY - minY, text.trim()));
+            Box box = boundingBox(points);
+            if (box != null) boxes.add(box);
         }
         Log.i(TAG, "DB OCR finished in " + (System.currentTimeMillis() - start)
                 + " ms, lines=" + boxes.size());
         return boxes;
+    }
+
+    /**
+     * PP-OCRv6's DB detector groups several vertical Japanese columns into
+     * one region and rapidocr4j's recognizer does not split them. Detection
+     * also runs with recognition turned off: {@code run()} otherwise drops
+     * every region whose recognized text is empty or scores below the
+     * global textScore, losing boxes even when detection is fine.
+     *
+     * Each detected region is then recognized line by line, as the YOLO path
+     * does (vertical crops are rotated first), and sorted in Japanese reading
+     * order: columns right to left, lines within a column top to bottom.
+     */
+    private List<Box> detectJapaneseWithDb(Bitmap bitmap) throws Exception {
+        long start = System.currentTimeMillis();
+        // Per-call overrides only; the engine's own config stays untouched.
+        ParamConfig params = new ParamConfig();
+        params.setUseDet(true);
+        params.setUseCls(false);
+        params.setUseRec(false);
+        OcrResult result = rapidOCR.run(bitmap, params);
+
+        List<float[]> regions = new ArrayList<>();
+        if (result != null && result.getRecRes() != null) {
+            for (RecResult rec : result.getRecRes()) {
+                if (rec == null) continue;
+                Point[] points = rec.getDtBoxes();
+                if (points == null || points.length == 0) continue;
+                Box box = boundingBox(points);
+                if (box == null || box.width < 10 || box.height < 10) continue;
+                regions.add(new float[]{(float) box.left(), (float) box.top(),
+                        (float) box.right(), (float) box.bottom()});
+            }
+        }
+        Log.d(TAG, "JA DB det: image=" + bitmap.getWidth() + "x" + bitmap.getHeight()
+                + " regions=" + regions.size());
+
+        List<Box> boxes = new ArrayList<>();
+        for (PaddleRecognizer.RecognizedLine line : getRecognizer().recognize(bitmap, regions)) {
+            boxes.add(new Box(line.x, line.y, line.width, line.height, line.text));
+            Log.d(TAG, "JA line: [" + Math.round(line.x) + "," + Math.round(line.y) + " "
+                    + Math.round(line.width) + "x" + Math.round(line.height) + "] rot="
+                    + line.rotation + " " + line.confidence + " " + line.text);
+        }
+        sortReadingOrder(boxes);
+        Log.i(TAG, "DB OCR (ja) finished in " + (System.currentTimeMillis() - start)
+                + " ms, regions=" + regions.size() + ", lines=" + boxes.size());
+        return boxes;
+    }
+
+    /** Axis-aligned bounds of a quad, or null when it has no area. */
+    private static Box boundingBox(Point[] points) {
+        double minX = Double.MAX_VALUE;
+        double minY = Double.MAX_VALUE;
+        double maxX = -Double.MAX_VALUE;
+        double maxY = -Double.MAX_VALUE;
+        for (Point point : points) {
+            minX = Math.min(minX, point.x);
+            minY = Math.min(minY, point.y);
+            maxX = Math.max(maxX, point.x);
+            maxY = Math.max(maxY, point.y);
+        }
+        if (maxX <= minX || maxY <= minY) return null;
+        return new Box(minX, minY, maxX - minX, maxY - minY, "");
     }
 
     private synchronized PaddleTextLineDetector textLineDetector() throws Exception {
@@ -288,5 +349,21 @@ public final class OcrEngine extends NativeInference {
             recognizer = new PaddleRecognizer(appContext);
         }
         return recognizer;
+    }
+
+    /**
+     * Reading order for vertical Japanese: columns right to left, lines within
+     * a column top to bottom (the order the YOLO detector returns).
+     */
+    private static void sortReadingOrder(List<Box> boxes) {
+        Collections.sort(boxes, new Comparator<Box>() {
+            @Override
+            public int compare(Box a, Box b) {
+                if (Math.abs(a.centerX() - b.centerX()) < (a.width + b.width) / 2) {
+                    return Double.compare(a.centerY(), b.centerY());
+                }
+                return Double.compare(b.centerX(), a.centerX());
+            }
+        });
     }
 }
