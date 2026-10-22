@@ -5,7 +5,7 @@
     <string name="title_settings">设置</string>
     <string name="main_title">ImageTrans</string>
     <string name="main_subtitle">图片文字识别与翻译</string>
-    <string name="main_description">选择一张图片，使用本地 OCR 或 ImageTrans 服务器识别文字并翻译。排版仍由 WebView 使用扩展的渲染逻辑完成。</string>
+    <string name="main_description">选择一张图片，使用本地 OCR 或 ImageTrans 服务器识别文字并翻译。</string>
     <string name="main_pick_image">选择图片翻译</string>
     <string name="main_camera_translate">拍照翻译</string>
     <string name="main_folder_translate">文件夹翻译</string>
