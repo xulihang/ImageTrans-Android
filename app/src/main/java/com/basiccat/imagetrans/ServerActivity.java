@@ -57,11 +57,19 @@ public class ServerActivity extends Activity {
     private void updateState() {
         boolean enabled = Prefs.isServerEnabled(this);
         toggle.setText(enabled ? R.string.main_server_on : R.string.main_server_off);
-        String url = ImageTransApiServer.get().address();
+        String local = ImageTransApiServer.get().address();
         if (enabled) {
-            address.setText(url != null
-                    ? getString(R.string.main_server_running, url)
-                    : getString(R.string.main_server_addr_unknown));
+            if (local == null) {
+                address.setText(R.string.main_server_not_running);
+            } else {
+                StringBuilder text = new StringBuilder(
+                        getString(R.string.main_server_running, local));
+                String lan = ImageTransApiServer.get().lanAddress();
+                if (lan != null) {
+                    text.append('\n').append(getString(R.string.main_server_lan, lan));
+                }
+                address.setText(text.toString());
+            }
             address.setTextIsSelectable(true);
         } else {
             address.setText(R.string.main_server_hint);

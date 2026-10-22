@@ -95,8 +95,10 @@ public final class ImageTransApiServer {
     }
 
     /**
-     * Starts listening. Returns the IPv4 address to use, or null when it
-     * cannot be determined. Throws when the port cannot be opened.
+     * Starts listening. Returns the loopback URL, or null when not running.
+     * The socket is bound to all interfaces, so loopback works without any
+     * Wi-Fi/mobile network and LAN clients can still connect when online.
+     * Throws when the port cannot be opened.
      */
     public synchronized String start(Context context) throws IOException {
         if (running.get()) return address();
@@ -143,8 +145,17 @@ public final class ImageTransApiServer {
         Log.i(TAG, "stopped");
     }
 
-    /** The address the browser extension should use. */
+    /**
+     * The address for a browser running on this phone (Edge/Firefox with the
+     * ImageTrans extension). Loopback works without Wi-Fi or mobile data.
+     */
     public String address() {
+        if (!running.get()) return null;
+        return "http://127.0.0.1:" + PORT;
+    }
+
+    /** The LAN address for a browser on another device, or null when offline. */
+    public String lanAddress() {
         if (!running.get()) return null;
         String ip = localIpv4();
         return ip == null ? null : "http://" + ip + ":" + PORT;
@@ -532,15 +543,19 @@ public final class ImageTransApiServer {
     }
 
     private String statusPage(Context context) {
-        String url = address();
+        String local = address();
+        String lan = lanAddress();
         return "<!DOCTYPE html><html lang=\"zh-CN\"><head><meta charset=\"utf-8\">"
                 + "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">"
                 + "<title>ImageTrans</title><style>body{font-family:sans-serif;margin:24px;"
                 + "line-height:1.7;color:#1F2933}code{background:#EEE;padding:2px 6px;"
                 + "border-radius:4px}</style></head><body>"
                 + "<h2>ImageTrans 图片翻译服务器运行中</h2>"
-                + "<p>在 ImageTrans 浏览器扩展的服务器地址中填写：</p>"
-                + "<p><code>" + (url == null ? "http://&lt;手机 IP&gt;:" + PORT : url) + "</code></p>"
+                + "<p>浏览器扩展填写（手机本机，或电脑经 adb reverse 转发）：</p>"
+                + "<p><code>" + (local == null ? "http://127.0.0.1:" + PORT : local)
+                + "</code></p>"
+                + (lan != null ? "<p>同一网络中的电脑也可以填写局域网地址：</p>"
+                        + "<p><code>" + lan + "</code></p>" : "")
                 + "<p>翻译方式：" + Prefs.modeName(Prefs.getMode(context)) + "<br>"
                 + "语言设置：" + Prefs.langName(Prefs.getSourceLang(context)) + " → "
                 + Prefs.langName(Prefs.getTargetLang(context)) + "</p>"

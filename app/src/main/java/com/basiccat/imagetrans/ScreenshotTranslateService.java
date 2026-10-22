@@ -446,9 +446,7 @@ public class ScreenshotTranslateService extends Service {
                 .putExtra(EXTRA_SERVER_ONLY, true);
         PendingIntent stopPending = PendingIntent.getService(this, 0, stop,
                 PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
-        String url = ImageTransApiServer.get().address();
-        String text = url != null ? getString(R.string.server_notification_text, url)
-                : getString(R.string.server_notification_text_no_ip);
+        String text = serverNotificationText();
         return new Notification.Builder(this, CHANNEL_SERVER_ID)
                 .setSmallIcon(R.mipmap.ic_launcher)
                 .setContentTitle(getString(R.string.server_notification_title))
@@ -458,6 +456,19 @@ public class ScreenshotTranslateService extends Service {
                 .addAction(0, getString(R.string.main_server_on), stopPending)
                 .setOngoing(true)
                 .build();
+    }
+
+    /** Loopback address plus, when online, the LAN address for a PC browser. */
+    private String serverNotificationText() {
+        String local = ImageTransApiServer.get().address();
+        if (local == null) return getString(R.string.server_notification_unavailable);
+        StringBuilder text = new StringBuilder(
+                getString(R.string.server_notification_text, local));
+        String lan = ImageTransApiServer.get().lanAddress();
+        if (lan != null) {
+            text.append('\n').append(getString(R.string.server_notification_lan, lan));
+        }
+        return text.toString();
     }
 
     /** Foreground service with the server's ongoing notification. */
@@ -483,11 +494,8 @@ public class ScreenshotTranslateService extends Service {
     private void showServerNotification() {
         if (!ballShown && overlay == null) return;
         NotificationManager manager = getSystemService(NotificationManager.class);
-        String url = ImageTransApiServer.get().address();
-        String text = url != null
-                ? getString(R.string.server_notification_title) + " · "
-                        + getString(R.string.server_notification_text, url)
-                : getString(R.string.server_notification_text_no_ip);
+        String text = getString(R.string.server_notification_title) + " · "
+                + serverNotificationText();
         Intent content = new Intent(this, MainActivity.class);
         PendingIntent open = PendingIntent.getActivity(this, 0, content,
                 PendingIntent.FLAG_IMMUTABLE);
