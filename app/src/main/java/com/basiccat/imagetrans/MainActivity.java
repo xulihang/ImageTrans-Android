@@ -65,6 +65,8 @@ public class MainActivity extends Activity {
                 pickImage();
             }
         });
+        findViewById(R.id.btnCameraTranslate).setOnClickListener(v ->
+                startActivity(new Intent(MainActivity.this, CameraTranslateActivity.class)));
         findViewById(R.id.btnSettings).setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {

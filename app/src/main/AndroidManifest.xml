@@ -4,6 +4,10 @@
 
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-feature
+        android:name="android.hardware.camera.any"
+        android:required="false" />
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION" />
@@ -38,6 +42,11 @@
             android:exported="false"
             android:label="@string/title_translate"
             android:windowSoftInputMode="adjustResize" />
+
+        <activity
+            android:name=".CameraTranslateActivity"
+            android:exported="false"
+            android:label="@string/title_camera_translate" />
 
         <activity
             android:name=".SettingsActivity"
