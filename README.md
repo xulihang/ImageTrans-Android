@@ -1,6 +1,6 @@
 # ImageTrans Android
 
-ImageTrans 的 Android 客户端，支持**图片翻译**、**拍照翻译**、**文件夹翻译**和**截屏翻译**。
+ImageTrans 的 Android 客户端，支持**图片翻译**、**拍照翻译**、**文件夹翻译**和**截屏翻译**。可以和[ImageTrans桌面版](https://www.basiccat.org/zh/imagetrans/)和[ImageTrans浏览器插件](https://github.com/xulihang/ImageTrans_chrome_extension)搭配使用。
 
 ## 已实现
 
