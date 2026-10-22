@@ -643,7 +643,7 @@ public class SelectionOverlay extends View {
         if (topMoves) {
             top = Math.max(0, Math.min(top, bottom - minFrame));
             bottom = startBottom;
-        } else if (dragCorner == 2 || dragCorner == 5) {
+        } else if (dragCorner == 2 || dragCorner == 3 || dragCorner == 5) {
             bottom = Math.min(screenHeight, Math.max(bottom, top + minFrame));
             top = startTop;
         } else {
