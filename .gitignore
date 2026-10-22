@@ -10,6 +10,7 @@
 .tmp-aar
 app/libs/*
 app/build
+/dist
 !app/libs/.gitkeep
 app/src/main/assets/ocr/
 !app/src/main/assets/ocr/.gitkeep
