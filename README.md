@@ -2,7 +2,7 @@
 
 [中文](README_zh.md) | English
 
-The Android version of ImageTrans, supporting **image translation**, **camera translation**, **folder translation** and **screenshot translation**. It works together with [ImageTrans Desktop](https://www.basiccat.org/imagetrans/) and the [ImageTrans browser extension](https://github.com/xulihang/ImageTrans_chrome_extension).
+The Android version of ImageTrans, supporting **image translation**, **camera translation**, **folder translation** and **screenshot translation**. It can also work together with [ImageTrans Desktop](https://www.basiccat.org/imagetrans/) and the [ImageTrans browser extension](https://github.com/xulihang/ImageTrans_chrome_extension).
 
 ## Download
 
