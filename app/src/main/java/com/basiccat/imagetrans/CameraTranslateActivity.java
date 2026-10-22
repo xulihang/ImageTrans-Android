@@ -5,6 +5,7 @@ import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.ClipData;
 import android.content.ClipboardManager;
+import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
@@ -371,14 +372,10 @@ public class CameraTranslateActivity extends Activity implements LifecycleOwner 
                     .setView(content)
                     .setPositiveButton(R.string.action_close, null);
             if (textBoxes.size() > 1) {
-                builder.setNegativeButton(R.string.action_previous, (dialog, which) -> {
-                    boxIndex = (boxIndex - 1 + textBoxes.size()) % textBoxes.size();
-                    updateTextBoxDialog();
-                });
-                builder.setNeutralButton(R.string.action_next, (dialog, which) -> {
-                    boxIndex = (boxIndex + 1) % textBoxes.size();
-                    updateTextBoxDialog();
-                });
+                // Listeners are installed on the buttons after show(), so
+                // clicking them does not dismiss the dialog.
+                builder.setNegativeButton(R.string.action_previous, null);
+                builder.setNeutralButton(R.string.action_next, null);
             }
             resultDialog = builder.create();
             resultDialog.setOnDismissListener(dialog -> {
@@ -389,6 +386,18 @@ public class CameraTranslateActivity extends Activity implements LifecycleOwner 
             });
             updateTextBoxDialog();
             resultDialog.show();
+            if (textBoxes.size() > 1) {
+                resultDialog.getButton(DialogInterface.BUTTON_NEGATIVE)
+                        .setOnClickListener(v -> {
+                            boxIndex = (boxIndex - 1 + textBoxes.size()) % textBoxes.size();
+                            updateTextBoxDialog();
+                        });
+                resultDialog.getButton(DialogInterface.BUTTON_NEUTRAL)
+                        .setOnClickListener(v -> {
+                            boxIndex = (boxIndex + 1) % textBoxes.size();
+                            updateTextBoxDialog();
+                        });
+            }
             return;
         }
         updateTextBoxDialog();
