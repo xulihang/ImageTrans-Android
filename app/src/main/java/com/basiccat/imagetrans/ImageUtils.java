@@ -351,7 +351,12 @@ public final class ImageUtils {
     private static String renderTextCss(Context context) {
         String css = Prefs.getRenderCss(context);
         if (!Prefs.isVerticalText(context)) return css;
-        if (css != null && !css.isEmpty() && !css.endsWith(";")) css += ";";
-        return (css == null ? "" : css) + "writing-mode: vertical-rl;";
+        // Override text-align because it aligns horizontally in horizontal
+        // mode, but would align vertically (start = top) here.
+        css = css == null ? "" : css.replaceAll("(?i)text-align\\s*:[^;]*;?", "");
+        if (!css.isEmpty() && !css.endsWith(";")) css += ";";
+        // In vertical mode text-align aligns the columns vertically, so
+        // "start" is vertical-align: top.
+        return css + "writing-mode: vertical-rl!important;text-align: start!important;";
     }
 }
