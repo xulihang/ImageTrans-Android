@@ -67,6 +67,8 @@ public class MainActivity extends Activity {
         });
         findViewById(R.id.btnCameraTranslate).setOnClickListener(v ->
                 startActivity(new Intent(MainActivity.this, CameraTranslateActivity.class)));
+        findViewById(R.id.btnFolderTranslate).setOnClickListener(v ->
+                startActivity(new Intent(MainActivity.this, FolderTranslateActivity.class)));
         findViewById(R.id.btnSettings).setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {

@@ -49,6 +49,12 @@
             android:label="@string/title_camera_translate" />
 
         <activity
+            android:name=".FolderTranslateActivity"
+            android:exported="false"
+            android:label="@string/title_folder_translate"
+            android:configChanges="orientation|screenSize|keyboardHidden" />
+
+        <activity
             android:name=".SettingsActivity"
             android:exported="false"
             android:label="@string/title_settings"
