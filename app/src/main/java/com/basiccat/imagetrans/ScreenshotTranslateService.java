@@ -186,13 +186,35 @@ public class ScreenshotTranslateService extends Service {
     public int onStartCommand(Intent intent, int flags, int startId) {
         String action = intent == null ? null : intent.getAction();
         Log.i(TAG, "onStartCommand " + action);
-        if (ACTION_HIDE.equals(action)) {
+        if (intent == null) {
+            // START_STICKY restart after the system killed the process:
+            // restore the server and its notification instead of treating
+            // the missing action as a stale start.
             if (Prefs.isServerEnabled(this)) {
-                if (intent.getBooleanExtra(EXTRA_SERVER_ONLY, false)) {
-                    // "Stop server": the server and its windows all go.
-                    shutdown();
-                    return START_NOT_STICKY;
+                serverOnly = true;
+                enterServerForeground();
+                return START_STICKY;
+            }
+            shutdown();
+            return START_NOT_STICKY;
+        }
+        if (ACTION_HIDE.equals(action)) {
+            if (intent.getBooleanExtra(EXTRA_SERVER_ONLY, false)) {
+                // "Stop server": the server goes; floating windows (if any)
+                // stay. Flip the flag here as well, so a quick app launch
+                // cannot see the old value and start the service again.
+                Prefs.setServerEnabled(this, false);
+                stopApiServer();
+                if (ballShown || overlay != null) {
+                    showWindows();
+                } else {
+                    // Nothing else is running: stop the whole service.
+                    stopForeground(STOP_FOREGROUND_REMOVE);
+                    stopSelf();
                 }
+                return START_NOT_STICKY;
+            }
+            if (Prefs.isServerEnabled(this)) {
                 // Closing the windows: the server keeps running.
                 Prefs.setFloatingEnabled(this, false);
                 removeWindows();
@@ -203,17 +225,6 @@ public class ScreenshotTranslateService extends Service {
                 startForeground(NOTIFICATION_ID, buildServerNotification());
                 enterServerForeground();
                 return START_STICKY;
-            }
-            if (intent.getBooleanExtra(EXTRA_SERVER_ONLY, false)) {
-                stopApiServer();
-                if (serverOnly) {
-                    // Nothing else is running: stop the whole service.
-                    stopForeground(STOP_FOREGROUND_REMOVE);
-                    stopSelf();
-                } else {
-                    showWindows();
-                }
-                return START_NOT_STICKY;
             }
             shutdown();
             return START_NOT_STICKY;

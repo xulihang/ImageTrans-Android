@@ -84,6 +84,22 @@ public class MainActivity extends Activity {
         super.onResume();
         updateSummary();
         updateFloatingButton();
+        restoreServerIfEnabled();
+    }
+
+    /**
+     * The process (and its foreground notification) may have been killed
+     * while the "server enabled" flag stayed set. Start the foreground
+     * service again so the server and its notification come back.
+     */
+    private void restoreServerIfEnabled() {
+        if (!Prefs.isServerEnabled(this)) return;
+        try {
+            ScreenshotTranslateService.startServer(this);
+        } catch (Throwable throwable) {
+            ImageUtils.toast(this, getString(R.string.server_start_failed,
+                    ImageUtils.humanError(throwable)));
+        }
     }
 
     @Override

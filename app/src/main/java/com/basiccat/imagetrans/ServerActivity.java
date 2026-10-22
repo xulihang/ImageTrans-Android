@@ -32,9 +32,12 @@ public class ServerActivity extends Activity {
             @Override
             public void onClick(View v) {
                 if (Prefs.isServerEnabled(ServerActivity.this)) {
+                    // Flip the intent now so a quick leave/resume cannot see
+                    // the old "enabled" value and start the service again.
+                    Prefs.setServerEnabled(ServerActivity.this, false);
                     ScreenshotTranslateService.stopServer(ServerActivity.this);
                 } else {
-                    ScreenshotTranslateService.startServer(ServerActivity.this);
+                    startServer();
                 }
                 // The service starts/stops asynchronously; show the new
                 // address shortly afterwards.
@@ -48,10 +51,23 @@ public class ServerActivity extends Activity {
     protected void onResume() {
         super.onResume();
         if (Prefs.isServerEnabled(this)) {
-            // Reopen the port if the server stopped listening somehow.
-            ImageTransApiServer.get().ensureRunning(this);
+            // The process (and with it the foreground service notification)
+            // may have been killed while the enabled flag stayed set: start
+            // the service again instead of only reopening the socket.
+            startServer();
+            toggle.postDelayed(this::updateState, 800);
+            toggle.postDelayed(this::updateState, 2500);
         }
         updateState();
+    }
+
+    private void startServer() {
+        try {
+            ScreenshotTranslateService.startServer(this);
+        } catch (Throwable throwable) {
+            ImageUtils.toast(this, getString(R.string.server_start_failed,
+                    ImageUtils.humanError(throwable)));
+        }
     }
 
     private void updateState() {
