@@ -59,7 +59,8 @@ public final class Prefs {
     }
 
     public static String getMode(Context context) {
-        return get(context).getString("mode", MODE_IMAGETRANS);
+        // Default: local OCR + MyMemory, with no server involved.
+        return get(context).getString("mode", MODE_MYMEMORY);
     }
 
     public static void setMode(Context context, String mode) {
