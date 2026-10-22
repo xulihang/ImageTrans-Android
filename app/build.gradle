@@ -26,6 +26,11 @@ android {
         }
     }
 
+    buildFeatures {
+        // Only BuildConfig.VERSION_NAME is needed (shown on the home screen).
+        buildConfig true
+    }
+
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_17
         targetCompatibility JavaVersion.VERSION_17

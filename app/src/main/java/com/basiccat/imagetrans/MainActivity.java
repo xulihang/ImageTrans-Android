@@ -48,6 +48,18 @@ public class MainActivity extends LocalizedActivity {
         langSummary = findViewById(R.id.langSummary);
         serverState = findViewById(R.id.serverState);
         btnFloating = findViewById(R.id.btnFloating);
+
+        TextView appVersion = findViewById(R.id.appVersion);
+        appVersion.setText(getString(R.string.main_version, BuildConfig.VERSION_NAME));
+        findViewById(R.id.projectUrl).setOnClickListener(v -> {
+            Intent browser = new Intent(Intent.ACTION_VIEW,
+                    Uri.parse(getString(R.string.main_project_url)));
+            try {
+                startActivity(browser);
+            } catch (Exception ignored) {
+                // No browser installed.
+            }
+        });
         // Toggling screen capture requires visible UI: Android stops a
         // projection whose foreground service was started from the
         // background, and the floating service keeps its session alive.

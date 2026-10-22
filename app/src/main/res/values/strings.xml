@@ -51,6 +51,8 @@
     <string name="camera_crop_failed">选框没有覆盖到画面，请重新调整</string>
     <string name="main_settings">设置</string>
     <string name="main_footer">本地 OCR：rapidocr4j · 渲染：WebView</string>
+    <string name="main_project_url">https://github.com/xulihang/ImageTrans-Android</string>
+    <string name="main_version">版本 %1$s</string>
     <string name="translate_loading">正在处理…</string>
     <string name="translate_toggle_original">查看原文</string>
     <string name="translate_toggle_translation">查看译文</string>

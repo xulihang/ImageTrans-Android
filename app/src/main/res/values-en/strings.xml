@@ -51,6 +51,8 @@
     <string name="camera_crop_failed">The frame does not cover the image. Adjust it and try again.</string>
     <string name="main_settings">Settings</string>
     <string name="main_footer">Local OCR: rapidocr4j · Rendering: WebView</string>
+    <string name="main_project_url">https://github.com/xulihang/ImageTrans-Android</string>
+    <string name="main_version">Version %1$s</string>
     <string name="translate_loading">Processing…</string>
     <string name="translate_toggle_original">Show Original</string>
     <string name="translate_toggle_translation">Show Translation</string>
