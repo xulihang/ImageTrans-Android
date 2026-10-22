@@ -226,6 +226,7 @@
     </string-array>
 
     <string-array name="ui_language_names">
+        <item>Follow System</item>
         <item>中文</item>
         <item>English</item>
     </string-array>

@@ -49,9 +49,9 @@ public final class Prefs {
                 .getSharedPreferences(NAME, Context.MODE_PRIVATE);
     }
 
-    /** UI language: "zh" or "en". */
+    /** UI language: "system", "zh" or "en". */
     public static String getUiLang(Context context) {
-        return get(context).getString("ui_lang", LocaleHelper.ZH);
+        return get(context).getString("ui_lang", LocaleHelper.SYSTEM);
     }
 
     public static void setUiLang(Context context, String value) {

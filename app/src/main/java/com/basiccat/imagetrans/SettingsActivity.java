@@ -12,7 +12,8 @@ import android.widget.RadioGroup;
 import android.widget.Spinner;
 
 public class SettingsActivity extends LocalizedActivity {
-    private static final String[] UI_LANG_VALUES = {LocaleHelper.ZH, LocaleHelper.EN};
+    private static final String[] UI_LANG_VALUES = {
+            LocaleHelper.SYSTEM, LocaleHelper.ZH, LocaleHelper.EN};
     private static final String[] REPAIR_VALUES = {"white", "background", "none"};
     private static final String[] RENDER_VALUES = {
             Prefs.SERVER_RENDER_SERVER, Prefs.SERVER_RENDER_APP};
