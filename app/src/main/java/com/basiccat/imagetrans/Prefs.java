@@ -170,7 +170,9 @@ public final class Prefs {
     }
 
     public static String getOpenAiPrompt(Context context) {
-        return get(context).getString("openai_prompt", DEFAULT_PROMPT);
+        String value = get(context).getString("openai_prompt", DEFAULT_PROMPT);
+        // An empty prompt cannot send the texts; fall back to the default.
+        return value == null || value.trim().isEmpty() ? DEFAULT_PROMPT : value;
     }
 
     public static void setOpenAiPrompt(Context context, String value) {

@@ -35,6 +35,7 @@ public class SettingsActivity extends LocalizedActivity {
     private EditText editOpenAiUrl;
     private EditText editOpenAiKey;
     private EditText editOpenAiModel;
+    private EditText editOpenAiPrompt;
     private Spinner spinnerSource;
     private Spinner spinnerTarget;
     private EditText editRenderCss;
@@ -63,6 +64,7 @@ public class SettingsActivity extends LocalizedActivity {
         editOpenAiUrl = findViewById(R.id.editOpenAiUrl);
         editOpenAiKey = findViewById(R.id.editOpenAiKey);
         editOpenAiModel = findViewById(R.id.editOpenAiModel);
+        editOpenAiPrompt = findViewById(R.id.editOpenAiPrompt);
         spinnerSource = findViewById(R.id.spinnerSource);
         spinnerTarget = findViewById(R.id.spinnerTarget);
         editRenderCss = findViewById(R.id.editRenderCss);
@@ -140,6 +142,7 @@ public class SettingsActivity extends LocalizedActivity {
         editOpenAiUrl.setText(Prefs.getOpenAiUrl(this));
         editOpenAiKey.setText(Prefs.getOpenAiKey(this));
         editOpenAiModel.setText(Prefs.getOpenAiModel(this));
+        editOpenAiPrompt.setText(Prefs.getOpenAiPrompt(this));
 
         spinnerSource.setSelection(indexOfCode(Prefs.getSourceLang(this)));
         spinnerTarget.setSelection(indexOfCode(Prefs.getTargetLang(this)));
@@ -194,6 +197,14 @@ public class SettingsActivity extends LocalizedActivity {
         }
         if (minFont <= 0) minFont = 14;
 
+        // The {texts} placeholder is how the texts reach the model; without
+        // it nothing can be translated.
+        String prompt = editOpenAiPrompt.getText().toString().trim();
+        if (!prompt.isEmpty() && !prompt.contains("{texts}")) {
+            ImageUtils.toast(this, getString(R.string.settings_prompt_needs_texts));
+            return;
+        }
+
         String newUiLang = UI_LANG_VALUES[spinnerUiLang.getSelectedItemPosition()];
         boolean uiLanguageChanged = !newUiLang.equals(Prefs.getUiLang(this));
 
@@ -208,6 +219,7 @@ public class SettingsActivity extends LocalizedActivity {
         Prefs.setOpenAiUrl(this, editOpenAiUrl.getText().toString().trim());
         Prefs.setOpenAiKey(this, editOpenAiKey.getText().toString().trim());
         Prefs.setOpenAiModel(this, editOpenAiModel.getText().toString().trim());
+        Prefs.setOpenAiPrompt(this, prompt.isEmpty() ? Prefs.DEFAULT_PROMPT : prompt);
         Prefs.setSourceLang(this, Prefs.LANG_CODES[spinnerSource.getSelectedItemPosition()]);
         Prefs.setTargetLang(this, Prefs.LANG_CODES[spinnerTarget.getSelectedItemPosition()]);
         Prefs.setRenderCss(this, editRenderCss.getText().toString());

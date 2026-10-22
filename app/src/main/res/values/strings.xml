@@ -150,6 +150,9 @@
     <string name="settings_openai_url">API 地址</string>
     <string name="settings_openai_key">API Key</string>
     <string name="settings_model">模型名称</string>
+    <string name="settings_openai_prompt">提示词</string>
+    <string name="settings_openai_prompt_note">可用占位符：{sourceLang}、{targetLang}、{texts}。{texts} 是待翻译文本的 JSON 数组，必须保留；结果需返回与输入顺序一致的 JSON 数组。留空则使用默认提示词。</string>
+    <string name="settings_prompt_needs_texts">提示词必须包含 {texts} 占位符</string>
     <string name="settings_render_section">排版渲染</string>
     <string name="settings_render_css">文本框 CSS</string>
     <string name="settings_min_font">最小字号（px）</string>

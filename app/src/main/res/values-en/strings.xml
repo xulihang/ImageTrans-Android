@@ -146,6 +146,9 @@
     <string name="settings_openai_url">API URL</string>
     <string name="settings_openai_key">API Key</string>
     <string name="settings_model">Model</string>
+    <string name="settings_openai_prompt">Prompt</string>
+    <string name="settings_openai_prompt_note">Placeholders: {sourceLang}, {targetLang}, {texts}. {texts} is the JSON array of texts to translate and is required; the reply must be a JSON array in the same order. Leave empty to use the default prompt.</string>
+    <string name="settings_prompt_needs_texts">The prompt must contain the {texts} placeholder</string>
     <string name="settings_render_section">Rendering</string>
     <string name="settings_render_css">Text box CSS</string>
     <string name="settings_min_font">Minimum font size (px)</string>
