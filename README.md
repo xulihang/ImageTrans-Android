@@ -72,6 +72,13 @@ Local AARs are placed in `app/libs/`:
 - `opencv-4.9.0.aar`
 - `onnxruntime-android-1.18.0.aar`
 
+Files not committed to the repository can be downloaded from the GitHub Release assets:
+
+- [rapidocr4j-android-1.0.0.aar](https://github.com/xulihang/ImageTrans-Android/releases/download/assets/rapidocr4j-android-1.0.0.aar)
+- [opencv-4.9.0.aar](https://github.com/xulihang/ImageTrans-Android/releases/download/assets/opencv-4.9.0.aar)
+- [onnxruntime-android-1.18.0.aar](https://github.com/xulihang/ImageTrans-Android/releases/download/assets/onnxruntime-android-1.18.0.aar)
+- [ocr-models.zip](https://github.com/xulihang/ImageTrans-Android/releases/download/assets/ocr-models.zip): OCR models to extract into `app/src/main/assets/ocr/`
+
 > These three AARs only contain `arm64-v8a` native libraries, so `abiFilters` keeps only `arm64-v8a`. OCR cannot run on x86_64 emulators (the UI runs, but initializing OpenCV/ONNX will fail). Please test on a real arm64 device.
 
 ## Configuration

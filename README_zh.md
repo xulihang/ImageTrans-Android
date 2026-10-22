@@ -72,6 +72,13 @@ app/build/outputs/apk/debug/app-debug.apk
 - `opencv-4.9.0.aar`
 - `onnxruntime-android-1.18.0.aar`
 
+不在仓库里的文件可以从 GitHub Release 的 assets 下载：
+
+- [rapidocr4j-android-1.0.0.aar](https://github.com/xulihang/ImageTrans-Android/releases/download/assets/rapidocr4j-android-1.0.0.aar)
+- [opencv-4.9.0.aar](https://github.com/xulihang/ImageTrans-Android/releases/download/assets/opencv-4.9.0.aar)
+- [onnxruntime-android-1.18.0.aar](https://github.com/xulihang/ImageTrans-Android/releases/download/assets/onnxruntime-android-1.18.0.aar)
+- [ocr-models.zip](https://github.com/xulihang/ImageTrans-Android/releases/download/assets/ocr-models.zip)：OCR 模型，解压到 `app/src/main/assets/ocr/`
+
 > 这三个 AAR 只包含 `arm64-v8a` 的 native 库，因此 `abiFilters` 只保留 `arm64-v8a`。x86_64 模拟器无法运行 OCR（可运行界面，但初始化 OpenCV/ONNX 会失败）。请使用 arm64 真机测试。
 
 ## 配置
