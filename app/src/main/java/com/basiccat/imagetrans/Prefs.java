@@ -104,7 +104,7 @@ public final class Prefs {
     }
 
     public static String getSourceLang(Context context) {
-        return get(context).getString("source_lang", "zh");
+        return get(context).getString("source_lang", "ja");
     }
 
     public static void setSourceLang(Context context, String value) {
@@ -112,7 +112,7 @@ public final class Prefs {
     }
 
     public static String getTargetLang(Context context) {
-        return get(context).getString("target_lang", "zh");
+        return get(context).getString("target_lang", "en");
     }
 
     public static void setTargetLang(Context context, String value) {
