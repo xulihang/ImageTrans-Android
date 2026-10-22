@@ -6,6 +6,7 @@ import android.graphics.Canvas;
 import android.graphics.Paint;
 import android.graphics.PixelFormat;
 import android.graphics.Rect;
+import android.graphics.RectF;
 import android.graphics.Typeface;
 import android.text.TextPaint;
 import android.view.Gravity;
@@ -27,8 +28,10 @@ import android.view.WindowManager;
  * - Select state: drag inside the frame to move it, corner handles to resize
  *   it. Tapping inside does nothing: the floating ball starts translation.
  * - Translating: shows progress; touches are ignored.
- * - Result: tap text for its dialog; "×" clears the result. The frame itself
- *   never goes away, it is closed together with the floating ball.
+ * - Result: pinch to zoom the image (1× = fitted in the frame), drag with
+ *   one finger to look around, tap text for its dialog; "×" clears the
+ *   result. The frame itself never goes away, it is closed together with
+ *   the floating ball.
  */
 public class SelectionOverlay extends View {
     public interface Callback {
@@ -37,8 +40,13 @@ public class SelectionOverlay extends View {
     }
 
     public interface TapListener {
-        /** @return true when the tap was handled (a text dialog opened). */
-        boolean onTap(float x, float y);
+        /**
+         * @param x,y          the tap in bitmap/image pixels
+         * @param displayScale screen pixels per image pixel at the tap, so
+         *                     the listener can size its hit targets in dp
+         * @return true when the tap was handled (a text dialog opened).
+         */
+        boolean onTap(float x, float y, float displayScale);
     }
 
     private static final int STATE_SELECT = 0;
@@ -46,6 +54,8 @@ public class SelectionOverlay extends View {
     private static final int STATE_RESULT = 2;
 
     private static final int MIN_FRAME_DP = 64;
+    /** How far the result image can be zoomed past the fitted size. */
+    private static final float MAX_ZOOM = 4f;
 
     private final Callback callback;
     private final WindowManager windowManager;
@@ -59,6 +69,8 @@ public class SelectionOverlay extends View {
     private final Paint bubblePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint strokePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final TextPaint hintPaint = new TextPaint(Paint.ANTI_ALIAS_FLAG);
+    /** Smooths the result image when it is zoomed in. */
+    private final Paint imagePaint = new Paint(Paint.FILTER_BITMAP_FLAG);
 
     /** The frame, in the overlay's (screen) coordinates. */
     private final Rect frame = new Rect();
@@ -74,11 +86,22 @@ public class SelectionOverlay extends View {
     private Bitmap translated;
     private TapListener tapListener;
 
+    // Result image transform: 1× is fitted in the frame, pan is in screen px.
+    private float zoom = 1f;
+    private float panX, panY;
+    private float startPanX, startPanY;
+    private boolean pinching;
+    private float pinchStartSpan;
+    private float pinchStartZoom;
+    /** Image pixel under the pinch focus when the pinch began. */
+    private float pinchAnchorX, pinchAnchorY;
+    private final Rect baseDrawRect = new Rect();
+    private final RectF scaledDrawRect = new RectF();
+
     // Touch tracking
     private boolean dragged;
     private boolean clearing;
     private int dragCorner = -1;
-    private float downX, downY;
     private float downRawX, downRawY;
     private int startLeft, startTop, startRight, startBottom;
 
@@ -277,19 +300,115 @@ public class SelectionOverlay extends View {
         invalidate();
     }
 
-    /** Where the translated image is drawn: fitted (and centred) in the frame. */
-    private Rect imageRect() {
-        Rect dst = new Rect(frame);
+    /**
+     * The translated image at 1×: fitted (and centred) in the frame. The
+     * returned rect is reused; do not keep it across calls.
+     */
+    private Rect baseImageRect() {
+        baseDrawRect.set(frame);
         if (translated == null || translated.getWidth() == 0 || translated.getHeight() == 0) {
-            return dst;
+            return baseDrawRect;
         }
         float scale = Math.min(frame.width() / (float) translated.getWidth(),
                 frame.height() / (float) translated.getHeight());
         int w = Math.round(translated.getWidth() * scale);
         int h = Math.round(translated.getHeight() * scale);
-        dst.set(frame.left + (frame.width() - w) / 2, frame.top + (frame.height() - h) / 2,
-                frame.left + (frame.width() + w) / 2, frame.top + (frame.height() + h) / 2);
-        return dst;
+        baseDrawRect.set(frame.left + (frame.width() - w) / 2,
+                frame.top + (frame.height() - h) / 2,
+                frame.left + (frame.width() + w) / 2,
+                frame.top + (frame.height() + h) / 2);
+        return baseDrawRect;
+    }
+
+    /** Where the result image is drawn now (fitted rect, zoomed and panned). */
+    private RectF resultDestRect() {
+        Rect base = baseImageRect();
+        float w = base.width() * zoom;
+        float h = base.height() * zoom;
+        float cx = base.exactCenterX() + panX;
+        float cy = base.exactCenterY() + panY;
+        scaledDrawRect.set(cx - w / 2, cy - h / 2, cx + w / 2, cy + h / 2);
+        return scaledDrawRect;
+    }
+
+    /** Screen pixels per image pixel at the current zoom. */
+    private float displayScale() {
+        if (translated == null || translated.getWidth() == 0) return 1f;
+        Rect base = baseImageRect();
+        return base.width() / (float) translated.getWidth() * zoom;
+    }
+
+    /** Resets the result image to fitted, un-panned. */
+    private void resetResultTransform() {
+        zoom = 1f;
+        panX = 0;
+        panY = 0;
+        pinching = false;
+    }
+
+    /**
+     * Keeps the zoomed image from exposing the frame's background: an axis
+     * that is larger than the frame may not show a gap, a smaller one is
+     * centred (which is always the case at 1×).
+     */
+    private void clampPan() {
+        Rect base = baseImageRect();
+        float w = base.width() * zoom;
+        float h = base.height() * zoom;
+        float cx = base.exactCenterX() + panX;
+        float cy = base.exactCenterY() + panY;
+        if (w <= frame.width()) {
+            cx = frame.exactCenterX();
+        } else {
+            // The image's left edge may be between frame.left - (w - width)
+            // and frame.left, i.e. its centre between these two bounds.
+            cx = Math.max(frame.right - w / 2f, Math.min(frame.left + w / 2f, cx));
+        }
+        if (h <= frame.height()) {
+            cy = frame.exactCenterY();
+        } else {
+            cy = Math.max(frame.bottom - h / 2f, Math.min(frame.top + h / 2f, cy));
+        }
+        panX = cx - base.exactCenterX();
+        panY = cy - base.exactCenterY();
+    }
+
+    /** Starts a pinch: the image point under the focus is pinned to it. */
+    private void startPinch(MotionEvent event) {
+        dragged = true;
+        pinching = true;
+        pinchStartSpan = pointerSpan(event);
+        pinchStartZoom = zoom;
+        float focusX = (event.getRawX(0) + event.getRawX(1)) / 2f;
+        float focusY = (event.getRawY(0) + event.getRawY(1)) / 2f;
+        Rect base = baseImageRect();
+        float scale = base.width() / (float) translated.getWidth() * zoom;
+        pinchAnchorX = (focusX - base.exactCenterX() - panX) / scale
+                + translated.getWidth() / 2f;
+        pinchAnchorY = (focusY - base.exactCenterY() - panY) / scale
+                + translated.getHeight() / 2f;
+    }
+
+    /** Zooms around the moving pinch focus and pans with its midpoint. */
+    private void updatePinch(MotionEvent event) {
+        float focusX = (event.getRawX(0) + event.getRawX(1)) / 2f;
+        float focusY = (event.getRawY(0) + event.getRawY(1)) / 2f;
+        zoom = Math.max(1f, Math.min(MAX_ZOOM,
+                pinchStartZoom * pointerSpan(event) / pinchStartSpan));
+        Rect base = baseImageRect();
+        float scale = base.width() / (float) translated.getWidth() * zoom;
+        panX = focusX - base.exactCenterX()
+                - scale * (pinchAnchorX - translated.getWidth() / 2f);
+        panY = focusY - base.exactCenterY()
+                - scale * (pinchAnchorY - translated.getHeight() / 2f);
+        clampPan();
+        invalidate();
+    }
+
+    private static float pointerSpan(MotionEvent event) {
+        float dx = event.getRawX(1) - event.getRawX(0);
+        float dy = event.getRawY(1) - event.getRawY(0);
+        return Math.max(1f, (float) Math.hypot(dx, dy));
     }
 
     private Rect inflate(Rect rect) {
@@ -343,6 +462,7 @@ public class SelectionOverlay extends View {
         if (translated != null && translated != bitmap) translated.recycle();
         translated = bitmap;
         status = message;
+        resetResultTransform();
         state = bitmap != null ? STATE_RESULT : STATE_SELECT;
         invalidate();
     }
@@ -359,6 +479,7 @@ public class SelectionOverlay extends View {
             translated = null;
         }
         status = null;
+        resetResultTransform();
         state = STATE_SELECT;
         invalidate();
     }
@@ -379,12 +500,12 @@ public class SelectionOverlay extends View {
         // Draw with the frame's top-left as origin.
         canvas.translate(-contentOffsetX, -contentOffsetY);
         if (state == STATE_RESULT && translated != null) {
-            // Fitted into the frame without distortion; the leftover bands
-            // are left transparent.
-            Rect dst = imageRect();
+            // Fitted (1×) or zoomed/panned; never drawn outside the frame,
+            // so it cannot cover the border, the handles or the "×".
+            RectF dst = resultDestRect();
             canvas.save();
-            canvas.clipRect(dst);
-            canvas.drawBitmap(translated, null, dst, null);
+            canvas.clipRect(frame);
+            canvas.drawBitmap(translated, null, dst, imagePaint);
             canvas.restore();
         }
         canvas.drawRect(frame, borderPaint);
@@ -471,8 +592,6 @@ public class SelectionOverlay extends View {
         float rawY = event.getRawY();
         switch (event.getActionMasked()) {
             case MotionEvent.ACTION_DOWN:
-                downX = x;
-                downY = y;
                 downRawX = rawX;
                 downRawY = rawY;
                 dragged = false;
@@ -483,6 +602,9 @@ public class SelectionOverlay extends View {
                 startRight = frame.right;
                 startBottom = frame.bottom;
                 if (state == STATE_RESULT) {
+                    pinching = false;
+                    startPanX = panX;
+                    startPanY = panY;
                     int size = clearButtonSize();
                     if (inflate(clearButtonRect(size)).contains((int) x, (int) y)) {
                         clearing = true;
@@ -494,8 +616,22 @@ public class SelectionOverlay extends View {
                 return true;
             case MotionEvent.ACTION_MOVE: {
                 if (clearing) return true;
-                float dx = x - downX;
-                float dy = y - downY;
+                if (state == STATE_RESULT) {
+                    if (pinching) {
+                        if (event.getPointerCount() >= 2) updatePinch(event);
+                        return true;
+                    }
+                    if (!dragged && Math.hypot(rawX - downRawX, rawY - downRawY) < touchSlop) {
+                        return true;
+                    }
+                    // One finger pans the (possibly zoomed) result image.
+                    dragged = true;
+                    panX = startPanX + (rawX - downRawX);
+                    panY = startPanY + (rawY - downRawY);
+                    clampPan();
+                    invalidate();
+                    return true;
+                }
                 if (!dragged && Math.hypot(rawX - downRawX, rawY - downRawY) < touchSlop) {
                     return true;
                 }
@@ -521,8 +657,29 @@ public class SelectionOverlay extends View {
                 followFrame();
                 return true;
             }
+            case MotionEvent.ACTION_POINTER_DOWN:
+                if (state == STATE_RESULT && translated != null
+                        && event.getPointerCount() == 2) {
+                    startPinch(event);
+                    return true;
+                }
+                return true;
+            case MotionEvent.ACTION_POINTER_UP:
+                if (pinching) {
+                    // The gesture continues as a one-finger pan from here,
+                    // without a jump: rebase at the remaining finger.
+                    pinching = false;
+                    int remaining = event.getActionIndex() == 0 ? 1 : 0;
+                    downRawX = event.getRawX(remaining);
+                    downRawY = event.getRawY(remaining);
+                    startPanX = panX;
+                    startPanY = panY;
+                    return true;
+                }
+                return true;
             case MotionEvent.ACTION_CANCEL:
                 clearing = false;
+                pinching = false;
                 return true;
             case MotionEvent.ACTION_UP:
                 try {
@@ -543,18 +700,20 @@ public class SelectionOverlay extends View {
         }
         if (dragged) return true;
         // Only text in the result reacts to a tap; starting the translation
-        // is the ball's job. The bitmap is fitted into the frame.
-        Rect image = imageRect();
-        if (state == STATE_RESULT && image.contains((int) x, (int) y)) {
-            float scale = Math.min(frame.width() / (float) translated.getWidth(),
-                    frame.height() / (float) translated.getHeight());
-            newResultTap((x - image.left) / scale, (y - image.top) / scale);
+        // is the ball's job. Map through the current zoom/pan.
+        if (state != STATE_RESULT || translated == null) return true;
+        RectF image = resultDestRect();
+        if (image.contains(x, y) && frame.contains((int) x, (int) y)) {
+            float scale = displayScale();
+            if (scale > 0f) {
+                newResultTap((x - image.left) / scale, (y - image.top) / scale, scale);
+            }
         }
         return true;
     }
 
-    private void newResultTap(float imageX, float imageY) {
-        if (tapListener != null) tapListener.onTap(imageX, imageY);
+    private void newResultTap(float imageX, float imageY, float displayScale) {
+        if (tapListener != null) tapListener.onTap(imageX, imageY, displayScale);
     }
 
     /** Corner handles 0-3, edge handles 4 (top) and 5 (bottom). */

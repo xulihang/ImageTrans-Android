@@ -1044,10 +1044,12 @@ public class ScreenshotTranslateService extends Service {
     }
 
     /** A tap on the frame's content. Returns true when it opened a dialog. */
-    private boolean onOverlayTap(float x, float y) {
+    private boolean onOverlayTap(float x, float y, float displayScale) {
         if (hitBoxes.isEmpty() || overlay == null) return false;
-        float scale = 1f;
-        float minSize = dp(44) / Math.max(scale, 0.01f);
+        // The boxes are in image pixels; keep the touch target at 44dp on
+        // screen whatever the image is zoomed to.
+        float scale = Math.max(displayScale, 0.01f);
+        float minSize = dp(44) / scale;
         int best = -1;
         double bestArea = Double.MAX_VALUE;
         for (int i = 0; i < hitBoxes.size(); i++) {
