@@ -27,7 +27,9 @@ public final class Prefs {
     /** Old default; on a phone it resolves to the phone itself, so migrate it. */
     private static final String LEGACY_DEFAULT_SERVER_URL = "https://local.basiccat.org:51043";
     public static final String DEFAULT_OPENAI_URL = "https://api.deepseek.com/v1";
-    public static final String DEFAULT_OPENAI_MODEL = "deepseek-v4-flash";
+    public static final String DEFAULT_OPENAI_MODEL = "deepseek-flash";
+    /** The previous default, replaced automatically for settings saved before. */
+    private static final String LEGACY_DEFAULT_OPENAI_MODEL = "deepseek-v4-flash";
     public static final String DEFAULT_RENDER_CSS = "text-align: center;\nborder-radius: 10%;";
     public static final String DEFAULT_PROMPT =
             "Translate the following texts from {sourceLang} to {targetLang}. " +
@@ -152,7 +154,11 @@ public final class Prefs {
     }
 
     public static String getOpenAiModel(Context context) {
-        return get(context).getString("openai_model", DEFAULT_OPENAI_MODEL);
+        String value = get(context).getString("openai_model", DEFAULT_OPENAI_MODEL);
+        // Settings saved by older builds contain the old default; switch them
+        // to the new one unless the user picks another model.
+        if (LEGACY_DEFAULT_OPENAI_MODEL.equals(value)) return DEFAULT_OPENAI_MODEL;
+        return value;
     }
 
     public static void setOpenAiModel(Context context, String value) {
