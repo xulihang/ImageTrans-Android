@@ -157,6 +157,7 @@
     <string name="settings_vertical_text">Vertical text</string>
     <string name="settings_min_font">Minimum font size (px)</string>
     <string name="settings_repair_mode">Original background handling</string>
+    <string name="settings_ja_detection">Japanese text detection</string>
     <string name="settings_css_note">CSS supports text-align, font-family, font-weight, color, background-color, border-radius, writing-mode: vertical-rl, direction: rtl, text-shadow, etc., matching the browser extension settings.</string>
     <string name="settings_save">Save Settings</string>
     <string name="settings_server_url_required">Enter an ImageTrans server URL</string>
@@ -225,6 +226,11 @@
         <item>White background</item>
         <item>Sample background color</item>
         <item>None</item>
+    </string-array>
+
+    <string-array name="ja_detection_names">
+        <item>YOLO</item>
+        <item>PaddleOCR</item>
     </string-array>
 
     <string-array name="render_mode_names">

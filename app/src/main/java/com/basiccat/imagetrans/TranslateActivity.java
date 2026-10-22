@@ -217,7 +217,7 @@ public class TranslateActivity extends LocalizedActivity {
 
     private void translateLocally(Bitmap bitmap, String mode) throws Exception {
         String sourceLang = Prefs.getSourceLang(TranslateActivity.this);
-        status(getString(OcrEngine.usesYoloDetection(sourceLang)
+        status(getString(OcrEngine.usesYoloDetection(TranslateActivity.this, sourceLang)
                 ? R.string.translate_status_ocr_yolo
                 : R.string.translate_status_ocr));
         OcrEngine engine = OcrEngine.getInstance(TranslateActivity.this);

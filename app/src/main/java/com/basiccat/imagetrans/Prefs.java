@@ -213,6 +213,25 @@ public final class Prefs {
         get(context).edit().putString("text_repair_mode", value).apply();
     }
 
+    /**
+     * Japanese text-line detection: YOLO (default) or PP-OCRv6's DB
+     * detector, i.e. plain rapidocr4j.
+     */
+    public static final String JP_DETECT_YOLO = "yolo";
+    public static final String JP_DETECT_PADDLE = "paddle";
+
+    public static String getJapaneseDetection(Context context) {
+        return get(context).getString("ja_detection", JP_DETECT_YOLO);
+    }
+
+    public static void setJapaneseDetection(Context context, String value) {
+        get(context).edit().putString("ja_detection", value).apply();
+    }
+
+    public static boolean isJapaneseYolo(Context context) {
+        return !JP_DETECT_PADDLE.equals(getJapaneseDetection(context));
+    }
+
     public static String langName(Context context, String code) {
         String[] names = context.getResources().getStringArray(R.array.language_names);
         for (int i = 0; i < LANG_CODES.length && i < names.length; i++) {

@@ -161,6 +161,7 @@
     <string name="settings_vertical_text">竖排文字</string>
     <string name="settings_min_font">最小字号（px）</string>
     <string name="settings_repair_mode">原文背景处理</string>
+    <string name="settings_ja_detection">日语文字定位方式</string>
     <string name="settings_css_note">CSS 支持 text-align、font-family、font-weight、color、background-color、border-radius、writing-mode: vertical-rl、direction: rtl、text-shadow 等，与浏览器扩展的设置一致。</string>
     <string name="settings_save">保存设置</string>
     <string name="settings_server_url_required">请填写 ImageTrans 服务器地址</string>
@@ -230,6 +231,11 @@
         <item>白色背景</item>
         <item>取背景色</item>
         <item>不处理</item>
+    </string-array>
+
+    <string-array name="ja_detection_names">
+        <item>YOLO</item>
+        <item>PaddleOCR</item>
     </string-array>
 
     <string-array name="render_mode_names">

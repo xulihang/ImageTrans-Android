@@ -16,6 +16,8 @@ public class SettingsActivity extends LocalizedActivity {
     private static final String[] UI_LANG_VALUES = {
             LocaleHelper.SYSTEM, LocaleHelper.ZH, LocaleHelper.EN};
     private static final String[] REPAIR_VALUES = {"white", "background", "none"};
+    private static final String[] JA_DETECTION_VALUES = {
+            Prefs.JP_DETECT_YOLO, Prefs.JP_DETECT_PADDLE};
     private static final String[] RENDER_VALUES = {
             Prefs.SERVER_RENDER_SERVER, Prefs.SERVER_RENDER_APP};
 
@@ -43,6 +45,7 @@ public class SettingsActivity extends LocalizedActivity {
     private CheckBox checkVertical;
     private EditText editMinFontSize;
     private Spinner spinnerRepairMode;
+    private Spinner spinnerJaDetection;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -73,6 +76,7 @@ public class SettingsActivity extends LocalizedActivity {
         checkVertical = findViewById(R.id.checkVertical);
         editMinFontSize = findViewById(R.id.editMinFontSize);
         spinnerRepairMode = findViewById(R.id.spinnerRepairMode);
+        spinnerJaDetection = findViewById(R.id.spinnerJaDetection);
 
         setupSpinners();
         loadSettings();
@@ -105,6 +109,12 @@ public class SettingsActivity extends LocalizedActivity {
                 getResources().getStringArray(R.array.repair_mode_names));
         repairAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
         spinnerRepairMode.setAdapter(repairAdapter);
+
+        ArrayAdapter<String> jaDetectionAdapter = new ArrayAdapter<>(
+                this, android.R.layout.simple_spinner_item,
+                getResources().getStringArray(R.array.ja_detection_names));
+        jaDetectionAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+        spinnerJaDetection.setAdapter(jaDetectionAdapter);
 
         ArrayAdapter<String> renderAdapter = new ArrayAdapter<>(
                 this, android.R.layout.simple_spinner_item,
@@ -158,6 +168,14 @@ public class SettingsActivity extends LocalizedActivity {
         for (int i = 0; i < REPAIR_VALUES.length; i++) {
             if (REPAIR_VALUES[i].equals(repair)) {
                 spinnerRepairMode.setSelection(i);
+                break;
+            }
+        }
+
+        String jaDetection = Prefs.getJapaneseDetection(this);
+        for (int i = 0; i < JA_DETECTION_VALUES.length; i++) {
+            if (JA_DETECTION_VALUES[i].equals(jaDetection)) {
+                spinnerJaDetection.setSelection(i);
                 break;
             }
         }
@@ -230,6 +248,8 @@ public class SettingsActivity extends LocalizedActivity {
         Prefs.setVerticalText(this, checkVertical.isChecked());
         Prefs.setMinFontSize(this, minFont);
         Prefs.setTextRepairMode(this, REPAIR_VALUES[spinnerRepairMode.getSelectedItemPosition()]);
+        Prefs.setJapaneseDetection(this,
+                JA_DETECTION_VALUES[spinnerJaDetection.getSelectedItemPosition()]);
 
         if (uiLanguageChanged) {
             // Recreate the task so every screen picks up the new locale.

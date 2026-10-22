@@ -22,6 +22,7 @@ import io.github.hzkitty.entity.RecResult;
  *   followed by PP-OCRv6 recognition ({@code rec.onnx}) per region;
  * - Japanese: the YOLO text-line detector ({@code model.onnx}) followed by
  *   PP-OCRv6 recognition, matching the extension's default for that language;
+ *   the DB detector can be selected instead in settings;
  * - Korean, Arabic, Russian and Thai: the bundled DB detector with a
  *   language-specific PP-OCRv5 recognizer downloaded on first use (see
  *   RemoteOcrModels), matching the extension's dedicated models.
@@ -70,9 +71,13 @@ public final class OcrEngine extends NativeInference {
         return instance;
     }
 
-    /** Whether local OCR runs YOLO line detection (the extension's default for Japanese). */
-    static boolean usesYoloDetection(String sourceLang) {
-        return "ja".equals(sourceLang);
+    /**
+     * Whether local OCR runs YOLO line detection. Japanese defaults to YOLO
+     * (the extension's default) and can be switched to PP-OCRv6's DB
+     * detector in settings; other languages always use the DB detector.
+     */
+    static boolean usesYoloDetection(Context context, String sourceLang) {
+        return "ja".equals(sourceLang) && Prefs.isJapaneseYolo(context);
     }
 
     public synchronized void initialize(String sourceLang,
@@ -164,7 +169,7 @@ public final class OcrEngine extends NativeInference {
 
     private List<Box> recognizePart(Bitmap bitmap, String sourceLang,
                                     RemoteOcrModels.ProgressListener listener) throws Exception {
-        return usesYoloDetection(sourceLang)
+        return usesYoloDetection(appContext, sourceLang)
                 ? detectWithYolo(bitmap)
                 : detectWithDb(bitmap, sourceLang, listener);
     }

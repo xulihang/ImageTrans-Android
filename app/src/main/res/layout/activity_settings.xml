@@ -336,6 +336,17 @@
             android:layout_height="wrap_content" />
 
         <TextView
+            style="@style/FieldLabel"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/settings_ja_detection" />
+
+        <Spinner
+            android:id="@+id/spinnerJaDetection"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content" />
+
+        <TextView
             style="@style/Note"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
