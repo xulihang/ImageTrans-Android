@@ -4,6 +4,10 @@
 
 The Android client for ImageTrans, supporting **image translation**, **camera translation**, **folder translation** and **screenshot translation**. It works together with [ImageTrans Desktop](https://www.basiccat.org/imagetrans/) and the [ImageTrans browser extension](https://github.com/xulihang/ImageTrans_chrome_extension).
 
+## Download
+
+[Download APK v0.1.0](https://github.com/xulihang/ImageTrans-Android/releases/tag/v0.1.0)
+
 ## Features
 
 - Pick an image from the gallery / file picker and translate it.
