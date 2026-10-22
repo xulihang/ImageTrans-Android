@@ -195,16 +195,15 @@ public class SelectionOverlay extends View {
             moveWindow(params.x, params.y);
             return;
         }
-        // The window keeps a fixed size while the frame moves or resizes; a
-        // size change mid-gesture would move the window (and the touch
-        // coordinates) under the finger.
+        // The window is placed around the frame with room for the handles on
+        // every side, so none of them are drawn outside it.
         Rect staged = new Rect(frame);
         int left = clampInt(staged.left - sideInset(), 0, screenWidth);
         int top = clampInt(staged.top - topInset(), 0, screenHeight);
         params.x = left;
         params.y = top;
-        params.width = Math.max(1, Math.min(screenWidth, frameWidth(staged)));
-        params.height = Math.max(1, Math.min(screenHeight, frameHeight(staged)));
+        params.width = Math.max(1, Math.min(screenWidth - left, frameWidth(staged)));
+        params.height = Math.max(1, Math.min(screenHeight - top, frameHeight(staged)));
         contentOffsetX = left;
         contentOffsetY = top;
         if (!attached) return;
@@ -217,9 +216,9 @@ public class SelectionOverlay extends View {
     }
 
     /**
-     * Resizes the window to the frame after a gesture ended. During the drag
-     * the window stays fixed (so coordinates do not drift); when the finger
-     * lifts, the window is trimmed so it only covers the frame.
+     * Fits the window around the frame (plus the insets that keep the border
+     * and the handles visible). Called while resizing and when a gesture
+     * ends; raw screen coordinates make it safe to move the window mid-drag.
      */
     private void fitWindowToFrame() {
         if (!attached || screenHeight == 0) return;
@@ -305,13 +304,21 @@ public class SelectionOverlay extends View {
         return Math.round(50 * density);
     }
 
+    /**
+     * Margin below the frame. Without it the bottom border and the bottom
+     * handles would be cut off at the window's edge (they are drawn centred
+     * on the frame's sides).
+     */
+    private int bottomInset() {
+        return Math.round(12 * density);
+    }
+
     private int frameWidth(Rect f) {
         return f.width() + 2 * sideInset();
     }
 
     private int frameHeight(Rect f) {
-        // No margin below: the window must stay clear of everything else.
-        return f.height() + topInset();
+        return f.height() + topInset() + bottomInset();
     }
 
     private static int clampInt(int value, int min, int max) {
@@ -622,7 +629,7 @@ public class SelectionOverlay extends View {
         bottom = clampInt(bottom, 0, screenHeight);
         // The opposite side is the anchor: it must not move.
         boolean leftMoves = dragCorner == 0 || dragCorner == 3;
-        boolean topMoves = dragCorner == 0 || dragCorner == 1;
+        boolean topMoves = dragCorner == 0 || dragCorner == 1 || dragCorner == 4;
         if (leftMoves) {
             left = Math.max(0, Math.min(left, right - minFrame));
             right = startRight;
@@ -648,32 +655,27 @@ public class SelectionOverlay extends View {
                 || frame.right != right || frame.bottom != bottom;
         if (changed) {
             frame.set(left, top, right, bottom);
+            // Keep the window around the frame while it is being resized,
+            // otherwise sides that grow past the old window are clipped.
+            // Deltas are measured in raw screen coordinates, so moving or
+            // resizing the window here cannot make the gesture drift.
+            fitWindowToFrame();
+            // The window may already be as large as the screen allows, in
+            // which case fitWindowToFrame() does not repaint by itself.
             invalidate();
         }
     }
 
-    /** Moves the window by the same offset as the frame moved. */
+    /**
+     * Pans the window along with the frame while the frame is dragged, and
+     * restores the margins the frame needs. A window that was trimmed at a
+     * screen edge earlier would otherwise keep clipping the opposite side
+     * (e.g. the right border) until the finger is lifted.
+     */
     private void followFrame() {
-        int left = clampInt(frame.left - sideInset(), 0, screenWidth);
-        int top = clampInt(frame.top - topInset(), 0, screenHeight);
-        // Keep the window inside the screen without shrinking it.
-        int maxX = Math.max(0, screenWidth - params.width);
-        int maxY = Math.max(0, screenHeight - params.height);
-        left = Math.min(left, maxX);
-        top = Math.min(top, maxY);
-        if (left == params.x && top == params.y) {
-            invalidate();
-            return;
-        }
-        params.x = left;
-        params.y = top;
-        contentOffsetX = left;
-        contentOffsetY = top;
-        try {
-            windowManager.updateViewLayout(this, params);
-        } catch (IllegalArgumentException | IllegalStateException ignored) {
-            // Detached.
-        }
+        fitWindowToFrame();
+        // The geometry may not change (the window is already clamped at the
+        // screen edge) while the frame itself still moves.
         invalidate();
     }
 }
