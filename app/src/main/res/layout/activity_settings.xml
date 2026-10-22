@@ -53,17 +53,6 @@
         </LinearLayout>
 
         <TextView
-            style="@style/FieldLabel"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="@string/settings_ui_language" />
-
-        <Spinner
-            android:id="@+id/spinnerUiLang"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content" />
-
-        <TextView
             style="@style/SectionTitle"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -323,6 +312,17 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:text="@string/settings_css_note" />
+
+        <TextView
+            style="@style/SectionTitle"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/settings_ui_language" />
+
+        <Spinner
+            android:id="@+id/spinnerUiLang"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content" />
 
         <Button
             android:id="@+id/btnSave"
