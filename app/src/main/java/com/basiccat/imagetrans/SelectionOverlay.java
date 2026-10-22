@@ -450,9 +450,18 @@ public class SelectionOverlay extends View {
 
     private boolean attached;
 
-    /** The frame on screen: the capture region. */
-    Rect getFrameRect() {
-        return new Rect(frame);
+    /**
+     * The frame in real screen coordinates. The frame is kept in the
+     * overlay window's own space, which starts below the status bar (the
+     * system lays overlay windows out inside the app area), so the window's
+     * position on screen has to be added for the capture.
+     */
+    Rect getFrameRectOnScreen() {
+        int[] location = new int[2];
+        getLocationOnScreen(location);
+        Rect screen = new Rect(frame);
+        screen.offset(location[0] - contentOffsetX, location[1] - contentOffsetY);
+        return screen;
     }
 
     // --- state ------------------------------------------------------------

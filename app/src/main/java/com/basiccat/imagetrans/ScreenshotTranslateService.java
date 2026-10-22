@@ -736,7 +736,9 @@ public class ScreenshotTranslateService extends Service {
             onCaptureError(throwable);
             return;
         }
-        capture(overlay.getFrameRect());
+        // The overlay's frame is in the window's coordinate space, which
+        // starts below the status bar; the projection is screen-sized.
+        capture(overlay.getFrameRectOnScreen());
     }
 
     /**
@@ -810,13 +812,31 @@ public class ScreenshotTranslateService extends Service {
         captureProjection(rect);
     }
 
+    /** Display size including the system bars, i.e. the projection's size. */
+    @SuppressWarnings("deprecation")
+    private DisplayMetrics realDisplayMetrics() {
+        DisplayMetrics metrics = new DisplayMetrics();
+        DisplayManager manager = getSystemService(DisplayManager.class);
+        android.view.Display display = manager.getDisplay(android.view.Display.DEFAULT_DISPLAY);
+        if (display != null) {
+            display.getRealMetrics(metrics);
+        } else {
+            metrics.setTo(getResources().getDisplayMetrics());
+        }
+        return metrics;
+    }
+
     /**
      * Mirrors the whole screen into an ImageReader (the only size a
      * projection reliably accepts) and cuts out the requested region in
      * memory; the full-screen bitmap is recycled immediately.
      */
     private void captureProjection(Rect rect) {
-        final DisplayMetrics metrics = getResources().getDisplayMetrics();
+        // The real display size, not the app area: getResources() reports
+        // the area without the system bars here, and a virtual display of
+        // that size would mirror the whole screen scaled down, so the crop
+        // would cover more than the frame and the text would look smaller.
+        final DisplayMetrics metrics = realDisplayMetrics();
         final int screenWidth = metrics.widthPixels;
         final int screenHeight = metrics.heightPixels;
         // The overlay is hidden (not removed) rather than going invisible:
