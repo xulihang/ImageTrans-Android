@@ -19,8 +19,9 @@ import java.util.ArrayList;
 /**
  * Self-contained zoomable, pannable image view. It needs no parent
  * ScrollView: it handles pinch-to-zoom, double-tap to toggle zoom,
- * one-finger panning, fling and edge clamping, including images taller than
- * the screen (webtoon strips).
+ * one-finger panning and edge clamping, including images taller than the
+ * screen (webtoon strips). Dragging moves the image 1:1 with the finger; it
+ * does not coast after the finger is lifted.
  *
  * The image opens fitted inside the view, whole if it fits at screen width
  * (tall images are fitted to the height, landscape ones to the width), and
@@ -33,7 +34,6 @@ public class ZoomableImageView extends View {
     private static final float MAX_PIXELS_ON_SCREEN = 3f;
     private static final float DOUBLE_TAP_SCALE = 2.5f;
     private static final int SETTLE_DURATION_MS = 220;
-    private static final int FLING_DURATION_MS = 450;
 
     private final Matrix draw = new Matrix();
     private final Matrix from = new Matrix();
@@ -57,6 +57,9 @@ public class ZoomableImageView extends View {
     private long doubleTapHandledAt = -1;
     private static final long DOUBLE_TAP_TIMEOUT_MS = 300;
     private static final int DOUBLE_TAP_SLOP_DP = 100;
+
+    /** Distance the finger travelled during the current gesture. */
+    private float dragX, dragY;
 
     /** Fired for a horizontal swipe at the fitted scale. */
     public interface OnSwipeListener {
@@ -110,6 +113,20 @@ public class ZoomableImageView extends View {
             @Override
             public boolean onDown(MotionEvent e) {
                 stopAnimation();
+                dragX = 0;
+                dragY = 0;
+                return true;
+            }
+
+            @Override
+            public boolean onSingleTapUp(MotionEvent e) {
+                // A mostly sideways drag at the fitted scale asks for the other
+                // image; the image may pan a little (or not at all) on the way.
+                if (swipeListener != null && scale() <= fitWidthScale + 0.01f
+                        && Math.abs(dragX) > getWidth() * 0.2f
+                        && Math.abs(dragX) > Math.abs(dragY) * 2f) {
+                    swipeListener.onSwipe(dragX < 0);
+                }
                 return true;
             }
 
@@ -125,23 +142,13 @@ public class ZoomableImageView extends View {
 
             @Override
             public boolean onScroll(MotionEvent e1, MotionEvent e2, float dx, float dy) {
+                // The image moves exactly as far as the finger (1:1) and
+                // stops when the finger is lifted.
+                dragX += -dx;
+                dragY += -dy;
                 draw.postTranslate(-dx, -dy);
                 constrain();
                 invalidate();
-                return true;
-            }
-
-            @Override
-            public boolean onFling(MotionEvent e1, MotionEvent e2, float velocityX, float velocityY) {
-                float dx = e2.getX() - e1.getX();
-                float dy = e2.getY() - e1.getY();
-                if (swipeListener != null && scale() <= fitWidthScale + 0.01f
-                        && Math.abs(dx) > getWidth() * 0.2f && Math.abs(dx) > Math.abs(dy) * 2f) {
-                    swipeListener.onSwipe(dx < 0);
-                    return true;
-                }
-                if (Math.abs(velocityX) < 150 && Math.abs(velocityY) < 150) return false;
-                startFling(velocityX, velocityY);
                 return true;
             }
         });
@@ -209,7 +216,7 @@ public class ZoomableImageView extends View {
             return true;
         }
         // GestureDetector reports the whole swipe once: at the fitted scale a
-        // mostly-horizontal fling means "flip to the other image".
+        // mostly-horizontal swipe means "flip to the other image".
         gestureDetector.onTouchEvent(event);
         scaleDetector.onTouchEvent(event);
         return true;
@@ -384,16 +391,6 @@ public class ZoomableImageView extends View {
         Matrix end = new Matrix(draw);
         draw.set(start);
         animateTo(start, end, SETTLE_DURATION_MS);
-    }
-
-    /** Glides in the fling direction, stopping at the image edge. */
-    private void startFling(float velocityX, float velocityY) {
-        Matrix start = new Matrix(draw);
-        draw.postTranslate(velocityX * FLING_DURATION_MS / 2000f, velocityY * FLING_DURATION_MS / 2000f);
-        constrain();
-        Matrix end = new Matrix(draw);
-        draw.set(start);
-        animateTo(start, end, FLING_DURATION_MS);
     }
 
     /** Animates translation while interpolating scale geometrically. */
