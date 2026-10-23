@@ -22,10 +22,10 @@ import java.util.ArrayList;
  * one-finger panning, fling and edge clamping, including images taller than
  * the screen (webtoon strips).
  *
- * The image opens fitted to the view's width (short images are shown
- * centred, never enlarged), and can be zoomed out to see the whole picture or
- * in until one image pixel covers {@link #MAX_PIXELS_ON_SCREEN} device
- * pixels.
+ * The image opens fitted inside the view, whole if it fits at screen width
+ * (tall images are fitted to the height, landscape ones to the width), and
+ * can be zoomed out to see the whole picture or in until one image pixel
+ * covers {@link #MAX_PIXELS_ON_SCREEN} device pixels.
  */
 public class ZoomableImageView extends View {
 
@@ -47,6 +47,8 @@ public class ZoomableImageView extends View {
     private float minScale = 1f;
     private float initialScale = 1f;
     private float maxScale = 4f;
+    /** Fit-to-width scale, the reference for "is this a sideways swipe". */
+    private float fitWidthScale = 1f;
 
     private ValueAnimator animator;
     // Recent taps, for detecting double taps ourselves: GestureDetector alone
@@ -133,7 +135,7 @@ public class ZoomableImageView extends View {
             public boolean onFling(MotionEvent e1, MotionEvent e2, float velocityX, float velocityY) {
                 float dx = e2.getX() - e1.getX();
                 float dy = e2.getY() - e1.getY();
-                if (swipeListener != null && scale() <= minScale + 0.01f
+                if (swipeListener != null && scale() <= fitWidthScale + 0.01f
                         && Math.abs(dx) > getWidth() * 0.2f && Math.abs(dx) > Math.abs(dy) * 2f) {
                     swipeListener.onSwipe(dx < 0);
                     return true;
@@ -173,7 +175,7 @@ public class ZoomableImageView extends View {
         fitToView();
     }
 
-    /** True when the image is larger than its initial (fit-to-view) size. */
+    /** True when the image is zoomed past the size it opened at. */
     public boolean isZoomedIn() {
         return bitmap != null && scale() > initialScale * 1.01f;
     }
@@ -269,13 +271,13 @@ public class ZoomableImageView extends View {
         return false;
     }
 
-    /** Cycles fit width → zoomed in → fit entire image → fit width. */
+    /** Cycles fit inside → zoomed in → fit inside. */
     private void onDoubleTapAt(float x, float y) {
         stopAnimation();
         float s = scale();
         if (s > Math.max(minScale, initialScale) + 0.01f) {
-            // Zoomed in: if the whole picture is visible at a smaller scale,
-            // show it all; otherwise go back to fit width.
+            // Zoomed in: show the whole picture again; its side is then at
+            // full width for a tall image.
             settleTo(Math.max(minScale, initialScale), x, y);
         } else if (s > minScale + 0.01f) {
             fitToView();
@@ -302,11 +304,15 @@ public class ZoomableImageView extends View {
 
     private void computeScaleRange() {
         if (getWidth() == 0 || getHeight() == 0) return;
-        // Open at "fit width". It may be zoomed out to "fit inside" so a tall
-        // photo can be seen whole, and in from there.
+        // Open at "fit inside": the whole image is visible without panning.
+        // Tall images are fitted to the height, so their sides no longer run
+        // off the screen; the image can still be zoomed out only to "fit
+        // inside" and in from there. A landscape image is fitted to the width.
         float fitWidth = getWidth() / (float) bitmap.getWidth();
-        minScale = Math.min(fitWidth, getHeight() / (float) bitmap.getHeight());
-        initialScale = fitWidth;
+        fitWidthScale = fitWidth;
+        float fitInside = Math.min(fitWidth, getHeight() / (float) bitmap.getHeight());
+        minScale = fitInside;
+        initialScale = fitInside;
         // Drawing more than MAX_PIXELS_ON_SCREEN device pixels per image pixel
         // only blurs, so stop zooming there.
         float nativeScale = MAX_PIXELS_ON_SCREEN * getResources().getDisplayMetrics().density;
@@ -316,8 +322,8 @@ public class ZoomableImageView extends View {
     private void fitToView() {
         if (bitmap == null || getWidth() == 0 || getHeight() == 0) return;
         draw.reset();
-        // Width fills the view; if the image is shorter than the view, it is
-        // shown centred above/below with its full width visible.
+        // The whole image is scaled to fit inside the view and centred; the
+        // side that does not fill it stays blank.
         draw.postScale(initialScale, initialScale);
         draw.postTranslate(
                 (getWidth() - bitmap.getWidth() * initialScale) / 2f,
