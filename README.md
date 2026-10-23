@@ -8,20 +8,24 @@ The Android version of ImageTrans, supporting **image translation**, **camera tr
 
 [Download APK v0.1.1](https://github.com/xulihang/ImageTrans-Android/releases/tag/v0.1.1)
 
+Requires Android 8.0 (API 26) or later; the native libraries are arm64-v8a only.
+
 ## Features
 
 - Pick an image from the gallery / file picker and translate it.
-- **Camera translation**: A draggable, corner-resizable selection box is overlaid on the CameraX preview. Tapping "Capture and Translate" grabs a frame directly from the preview (no shutter, no photo saved), crops the selection and translates it; results are shown in the same original/translation dialog as image translation. The camera pauses while the dialog is open and resumes when it closes.
+- **Camera translation**: A draggable, corner-resizable selection box is overlaid on the CameraX preview. Tapping "Capture and Translate" grabs a frame directly from the preview (no shutter, no photo saved) and unbinds the camera right away, so the preview freezes while the selection is cropped and translated; results are shown in the same original/translation dialog as image translation. The camera resumes when the dialog closes.
 - **Folder translation**: Select a folder via SAF and translate the images in it directly (subfolders are not included). Results are saved as PNG files in an `out` subfolder, keeping the original file names (extension changed to `.png`). When processing finishes, tap "Open output folder" to view it in the file manager. Processing runs within the page and stops if you switch to the background.
 - **ImageTrans server mode**: Calls `POST {serverURL}/translate`. By default the server renders and directly returns the image (using the layout of the ImageTrans project itself); you can switch to in-app rendering in settings, in which case `withoutImage=true` is sent to get the text boxes back, and the App's WebView lays them out using its CSS / font size settings. If either result is missing, it automatically falls back to the other.
-- **Local OCR + OpenAI-compatible API**: Uses rapidocr4j-android for on-device detection and recognition, then sends the text to an OpenAI-compatible endpoint for translation.
+- **Local OCR + OpenAI-compatible API**: Uses the rapidocr4j sources bundled in this repository for on-device detection and recognition, then sends the text to an OpenAI-compatible endpoint for translation.
 - **Local OCR + MyMemory (free)**: No API key needed; uses the public MyMemory translation API. Long paragraphs are automatically split into requests under 500 bytes to comply with the API limits; a built-in contact email is used by default (quota of about 50,000 characters/day), and you can enter your own email in settings. You are notified when the quota is exhausted. With source language "Auto", Japanese is assumed; with target language "Auto", English is assumed (same as the browser extension).
 - **Recognize-only mode**: Performs OCR only and draws the recognized text back onto the image, useful for debugging.
 - **Long webtoon strips**: Aspect ratio is preserved when decoding (no longer downscaled to a 3500px longest side); OCR splits the image into blocks of 4× width following the extension's rules; rendering is also done block by block and stitched vertically, avoiding WebView/Canvas size and memory limits.
-- Save translated images to the gallery and share them.
+- Save translated images to the gallery and share them (below Android 10 the image is shared from the app cache instead, since the gallery write needs scoped storage).
 - Toggle between original and translated text.
 - **Tap a text box to view original/translation**: On the image translation page and inside the screenshot translation selection, tapping a text box shows the original and translated text; on the main screen you can long-press to select and copy part of the text (system menu), while in the screenshot translation overlay the system selection menu is not shown — instead "Copy selected / Copy all" is provided.
 - **Screenshot translation overlay**: A floating button plus a persistent selection box; tapping "Translate" on the floating button captures the selected area and translates it, with the translation displayed inside the selection. The selection can be dragged and resized, and the rest of the screen is unaffected so you can keep using other apps.
+  - **Android 11+** captures through an accessibility service (`AccessibilityService.takeScreenshot`). Turn on "ImageTrans" once in the system accessibility settings; after that you can switch apps freely and capture at any time without a prompt. The service is used only for screenshots and does not read screen content.
+  - **Android 10** has no accessibility screenshots, so it uses the screen-capture (MediaProjection) consent instead: one grant when the floating button is turned on, reused for a while.
 - **Translation server (for the browser extension)**: Provides `POST /translate` in the background (HTTP, port 51042) for the extension's "ImageTrans Server" mode. OCR is done on the phone, text lines are merged into paragraphs, and text boxes are returned; when the App is set to "Local OCR + OpenAI" or "Local OCR + MyMemory", translations are returned as well, otherwise only the original text is returned and the extension translates it itself. For Edge/Firefox extensions on the same phone, or a browser on a computer forwarded via `adb reverse tcp:51042 tcp:51042`, enter `http://127.0.0.1:51042` directly — no Wi-Fi or mobile data required; a computer on the same network can also use the phone's LAN IP. The address is shown persistently in the notification, from which the server can be stopped.
 - **Interface language**: Settings offer "Follow system / 中文 / English", defaulting to the system language (English on English systems, Chinese otherwise); switching restarts the main screen so it takes effect everywhere.
 - Settings: translation method (ImageTrans server / MyMemory / OpenAI / recognize only), server address, project name, password, rendering mode (server-side / in-app), MyMemory contact email, OpenAI endpoint/key/model, language pair, interface language, rendering CSS, minimum font size, original text background handling.
@@ -33,7 +37,7 @@ MainActivity (pick image / settings)
         ↓
 TranslateActivity
         ├─ ImageTrans Server (HTTP form) → boxes or server-rendered image
-        ├─ OcrEngine (rapidocr4j-android) → boxes
+        ├─ OcrEngine (bundled rapidocr4j) → boxes
         │       └─ TextBoxMerger (ported from the extension's mergeTextBoxes)
         ├─ OpenAiTranslator (OpenAI-compatible chat/completions)
         ├─ MyMemoryTranslator (free API, automatic chunking)
@@ -43,7 +47,8 @@ TranslateActivity
                 └─ assets/html-to-image.js
 ```
 
-- **All OCR / inference happens natively**: rapidocr4j-android + OpenCV Android + ONNX Runtime Android.
+- **All OCR / inference happens natively**: rapidocr4j (sources in `app/src/main/java/com/basiccat/imagetrans/rapidocr/`) + OpenCV Android + ONNX Runtime Android.
+- **Screenshot capture**: `ScreenshotAccessibilityService` (`takeScreenshot`, Android 11+), or MediaProjection through `ProjectionPermissionActivity` on Android 10.
 - **The WebView only handles layout and rasterization**: reuses the extension's DOM rendering (`renderTranslatedImageDOM`) and Canvas fallback (`renderTranslatedImageCanvas`), supporting the extension's CSS (vertical writing, RTL, rounded corners, stroke, shadow, background color sampling, etc.).
 - Rendering results are returned to native code as data URLs via the `AndroidRenderer` JavascriptInterface, then displayed, saved or shared.
 
@@ -51,37 +56,39 @@ TranslateActivity
 
 Environment:
 
-- Android Studio (on this machine: `G:\android-studio`)
-- JDK 17 (on this machine: `C:\Users\admin\.jdks\jbr-17.0.9`)
-- Android SDK (on this machine: `C:\Users\admin\AppData\Local\Android\Sdk`)
+- Android Studio
+- JDK 17 or later (the Android Studio bundled JBR works)
+- Android SDK with platform 36 and build-tools 36
 - Gradle 8.11.1 (wrapper configured)
-- AGP 8.1.4
+- AGP 8.9.1
 
 Command-line build:
 
 ```bat
-set JAVA_HOME=C:\Users\admin\.jdks\jbr-17.0.9
-G:\git\ImageTrans-Android\gradlew.bat -p G:\git\ImageTrans-Android assembleDebug
+set JAVA_HOME=<path to a JDK 17+>
+gradlew.bat assembleRelease
 ```
 
-APK:
+APK (unsigned; sign it before installing):
 
 ```
-app/build/outputs/apk/debug/app-debug.apk
+app/build/outputs/apk/release/app-release-unsigned.apk
 ```
 
 Local AARs are placed in `app/libs/`:
 
-- `rapidocr4j-android-1.0.0.aar`
 - `opencv-4.14.0.aar`
 - `onnxruntime-android-1.31.0.aar`
 
+rapidocr4j is not taken from an AAR: its sources are part of the app module.
+
 Files not committed to the repository can be downloaded from:
 
-- [rapidocr4j-android-1.0.0.aar](https://github.com/xulihang/ImageTrans-Android/releases/download/assets/rapidocr4j-android-1.0.0.aar)
 - [opencv-4.14.0.aar](https://repo1.maven.org/maven2/org/opencv/opencv/4.14.0/opencv-4.14.0.aar) (Maven Central)
 - [onnxruntime-android-1.31.0.aar](https://repo1.maven.org/maven2/com/microsoft/onnxruntime/onnxruntime-android/1.31.0/onnxruntime-android-1.31.0.aar) (Maven Central)
 - [ocr-models.zip](https://github.com/xulihang/ImageTrans-Android/releases/download/assets/ocr-models.zip): OCR models to extract into `app/src/main/assets/ocr/`
+
+> The rapidocr4j sources (`io.github.hzkitty`, `de.lighti.clipper`, compiled at minSdk 26) are bundled in `app/src/main/java/com/basiccat/imagetrans/rapidocr/` instead of the published `rapidocr4j-android` AAR, which requires Android 10. They share the app's OpenCV and ONNX Runtime native libraries.
 
 > OpenCV 4.14.0 and ONNX Runtime 1.31.0 are 16 KB page aligned, as is CameraX 1.6.2 (resolved from Google Maven). This requires AGP 8.9.1+ and compileSdk 36. The Maven Central AARs contain several ABIs, but `abiFilters` keeps only `arm64-v8a` in the APK. OCR cannot run on x86_64 emulators (the UI runs, but initializing OpenCV/ONNX will fail). Please test on a real arm64 device.
 
@@ -161,7 +168,7 @@ adb shell dumpsys deviceidle whitelist +com.basiccat.imagetrans
 
 - Local OCR: Chinese, English, Japanese and Latin-script languages use the built-in PP-OCRv6; Korean, Arabic, Russian and Thai use PP-OCRv5 recognition models downloaded on first use. Other languages still require adding the corresponding models in the extension.
 - Long webtoon strips (height greater than 8× width):
-  - Decoding no longer scales by a 3500px longest side; instead the width is preserved (max 2000px) with a total pixel cap of 12 million, using `ImageDecoder` to scale directly during decoding.
+  - Decoding no longer scales by a 3500px longest side; instead the width is preserved (max 2000px) with a total pixel cap of 12 million, using `ImageDecoder` to scale directly during decoding (Android 9+; older releases fall back to `BitmapFactory`, so very long strips can run out of memory).
   - OCR: split into blocks of `4 × width` (same as the extension), each block scaled to a 1500px longest side and recognized separately, then coordinates are mapped back to the full image. Since the block's long side is fixed at 1500px, the block's height-to-width ratio directly determines the width of each block during recognition (1500 / ratio); with 8× width the block width would be only about 187px, and small text such as Korean would be misrecognized. Text on block boundaries is split into two parts.
   - Rendering picks split points based on gaps between text boxes, with each block no more than 6 million pixels and a longest side no more than 4096px; blocks are rendered by the WebView one by one and stitched on the native side, preventing the full long image from exhausting canvas memory.
   - The final output image is still limited to 12 million pixels; extremely long images are scaled down proportionally.

@@ -8,20 +8,24 @@ ImageTrans 的 Android 版本，支持**图片翻译**、**拍照翻译**、**�
 
 [下载 APK v0.1.1](https://github.com/xulihang/ImageTrans-Android/releases/tag/v0.1.1)
 
+需要 Android 8.0（API 26）或更高版本，原生库仅支持 arm64-v8a。
+
 ## 已实现
 
 - 从相册 / 文件选择一张图片并翻译。
-- **拍照翻译**：CameraX 相机预览上有一个可拖动、可缩放四个角的选框；点「拍摄并翻译」后直接截取预览画面的一帧（不触发相机快门、不保存照片），裁剪选框区域并翻译，识别结果用与图片翻译相同的原文/译文对话框显示。对话框打开期间相机暂停，关闭后恢复。
+- **拍照翻译**：CameraX 相机预览上有一个可拖动、可缩放四个角的选框；点「拍摄并翻译」后直接截取预览画面的一帧（不触发相机快门、不保存照片）并立即暂停相机，画面定格后再裁剪选框区域并翻译；识别结果用与图片翻译相同的原文/译文对话框显示，关闭对话框后相机恢复。
 - **文件夹翻译**：通过 SAF 选择一个文件夹，直接翻译其中的图片（不包含子文件夹），结果以 PNG 保存到该文件夹的 `out` 子文件夹，文件名沿用原文件名（扩展名改为 `.png`）。处理结束后可以点「打开输出目录」在文件管理器中查看。处理在页面内进行，切到后台会停止。
 - **ImageTrans 服务器模式**：调用 `POST {serverURL}/translate`。默认由服务器渲染并直接显示返回的图片（使用 ImageTrans 项目自身的排版）；也可以在设置里改为 App 内渲染，此时传 `withoutImage=true` 取回文字框，再用 App 的 WebView 和 CSS/字号设置排版。任一结果缺失时自动回退到另一种。
-- **本地 OCR + OpenAI 兼容 API**：使用 rapidocr4j-android 在设备上做检测和识别，再把文本发给 OpenAI 兼容接口翻译。
+- **本地 OCR + OpenAI 兼容 API**：使用内置在仓库中的 rapidocr4j 源码在设备上做检测和识别，再把文本发给 OpenAI 兼容接口翻译。
 - **本地 OCR + MyMemory（免费）**：无需 API Key，使用 MyMemory 公共翻译接口。按接口限制自动把长段落切成 500 字节以内的请求；默认使用内置联系邮箱（额度约 50000 字符/天），也可以在设置里填写自己的邮箱。超出额度后会提示额度用完。源语言选「自动检测」时按日语处理，目标语言选「自动检测」时按英语处理（与浏览器扩展一致）。
 - **仅识别模式**：只做 OCR，把识别结果覆盖回图片，方便调试。
 - **长条漫**：解码时保留长图比例（不再压到最长边 3500px）；OCR 按扩展的规则以 4×宽度为一块切分识别；渲染也分块进行再纵向拼接，避开 WebView/Canvas 的尺寸和内存限制。
-- 译文保存到相册、分享。
+- 译文保存到相册、分享（Android 10 以下无法写入相册，改为从应用缓存中分享）。
 - 原文 / 译文切换。
 - **点击文字框查看原文/译文**：图片翻译页和截屏翻译的选框里，点击文字框弹出原文和译文；主界面里可长按选中部分文字复制（系统菜单），截屏翻译的浮窗里系统选择菜单不显示，改为“复制所选 / 复制全部”。
 - **截屏翻译悬浮窗**：悬浮球 + 选框常驻；点悬浮球上的「翻译」截取选框区域并翻译，译文显示在选框内；选框可拖动、缩放，框外屏幕不受影响、照常使用其他 App。
+  - **Android 11 及以上**通过无障碍服务（`AccessibilityService.takeScreenshot`）截屏：只需在系统无障碍设置里开启一次「ImageTrans」，之后可以随意切换应用、随时截屏，不再弹授权。该服务只用于截屏，不读取屏幕内容。
+  - **Android 10** 没有无障碍截屏，使用系统的屏幕捕获（MediaProjection）授权：打开悬浮球时授权一次，之后再复用一段时间。
 - **翻译服务器（浏览器扩展用）**：在后台提供 `POST /translate`（HTTP，端口 51042），供 ImageTrans 浏览器扩展的「ImageTrans 服务器」模式调用。OCR 在手机上完成，文字行合并为段落后返回文字框；App 设为「本地 OCR + OpenAI」或「本地 OCR + MyMemory」时同时返回译文，其他方式只返回原文，由扩展自己翻译。同一台手机上的 Edge/Firefox 扩展，或电脑上的浏览器通过 `adb reverse tcp:51042 tcp:51042` 转发后，直接填 `http://127.0.0.1:51042`，不依赖 Wi-Fi 或移动数据；同一网络中的电脑也可以使用手机的局域网 IP。通知栏常驻显示地址，可直接停止服务。
 - **界面语言**：设置里可以选择「跟随系统 / 中文 / English」，默认跟随系统（系统为英文时显示英文，其他语言显示中文）；切换后会重启主界面使所有页面生效。
 - 设置：翻译方式（ImageTrans 服务器 / MyMemory / OpenAI / 仅识别）、服务器地址、项目名称、密码、服务器渲染方式（服务端渲染 / App 内渲染）、MyMemory 联系邮箱、OpenAI 地址/Key/模型、语言对、界面语言、渲染 CSS、最小字号、原文背景处理方式。
@@ -33,7 +37,7 @@ MainActivity（选择图片 / 设置）
         ↓
 TranslateActivity
         ├─ ImageTrans 服务器（HTTP 表单）→ boxes 或服务端渲染图
-        ├─ OcrEngine（rapidocr4j-android）→ boxes
+        ├─ OcrEngine（内置 rapidocr4j）→ boxes
         │       └─ TextBoxMerger（移植自扩展的 mergeTextBoxes）
         ├─ OpenAiTranslator（OpenAI 兼容 chat/completions）
         ├─ MyMemoryTranslator（免费接口，自动分段）
@@ -43,7 +47,8 @@ TranslateActivity
                 └─ assets/html-to-image.js
 ```
 
-- **OCR / 推理全部在原生侧完成**：rapidocr4j-android + OpenCV Android + ONNX Runtime Android。
+- **OCR / 推理全部在原生侧完成**：rapidocr4j（源码在 `app/src/main/java/com/basiccat/imagetrans/rapidocr/`）+ OpenCV Android + ONNX Runtime Android。
+- **截屏**：`ScreenshotAccessibilityService`（`takeScreenshot`，Android 11+）；Android 10 通过 `ProjectionPermissionActivity` 走 MediaProjection。
 - **WebView 只负责排版和栅格化**：复用扩展的 DOM 渲染（`renderTranslatedImageDOM`）和 Canvas 回退（`renderTranslatedImageCanvas`），支持扩展里的 CSS（竖排、RTL、圆角、描边、阴影、背景取色等）。
 - 渲染结果通过 `AndroidRenderer` JavascriptInterface 以 data URL 返回原生，再显示、保存或分享。
 
@@ -51,37 +56,39 @@ TranslateActivity
 
 环境：
 
-- Android Studio（本机：`G:\android-studio`）
-- JDK 17（本机：`C:\Users\admin\.jdks\jbr-17.0.9`）
-- Android SDK（本机：`C:\Users\admin\AppData\Local\Android\Sdk`）
+- Android Studio
+- JDK 17 或更高（Android Studio 自带的 JBR 即可）
+- Android SDK，包含 platform 36 和 build-tools 36
 - Gradle 8.11.1（wrapper 已配置）
-- AGP 8.1.4
+- AGP 8.9.1
 
 命令行构建：
 
 ```bat
-set JAVA_HOME=C:\Users\admin\.jdks\jbr-17.0.9
-G:\git\ImageTrans-Android\gradlew.bat -p G:\git\ImageTrans-Android assembleDebug
+set JAVA_HOME=<JDK 17 或更高版本的路径>
+gradlew.bat assembleRelease
 ```
 
-APK：
+APK（未签名，安装前需要先签名）：
 
 ```
-app/build/outputs/apk/debug/app-debug.apk
+app/build/outputs/apk/release/app-release-unsigned.apk
 ```
 
 本地 AAR 放在 `app/libs/`：
 
-- `rapidocr4j-android-1.0.0.aar`
 - `opencv-4.14.0.aar`
 - `onnxruntime-android-1.31.0.aar`
 
+rapidocr4j 不再使用 AAR，而是以源码形式放在 app 模块中。
+
 不在仓库里的文件可以从以下地址下载：
 
-- [rapidocr4j-android-1.0.0.aar](https://github.com/xulihang/ImageTrans-Android/releases/download/assets/rapidocr4j-android-1.0.0.aar)
 - [opencv-4.14.0.aar](https://repo1.maven.org/maven2/org/opencv/opencv/4.14.0/opencv-4.14.0.aar)（Maven Central）
 - [onnxruntime-android-1.31.0.aar](https://repo1.maven.org/maven2/com/microsoft/onnxruntime/onnxruntime-android/1.31.0/onnxruntime-android-1.31.0.aar)（Maven Central）
 - [ocr-models.zip](https://github.com/xulihang/ImageTrans-Android/releases/download/assets/ocr-models.zip)：OCR 模型，解压到 `app/src/main/assets/ocr/`
+
+> rapidocr4j 的源码（`io.github.hzkitty`、`de.lighti.clipper`，按 minSdk 26 编译）已内置在 `app/src/main/java/com/basiccat/imagetrans/rapidocr/` 中，替代要求 Android 10 的 `rapidocr4j-android` AAR，并与 App 共用同一套 OpenCV、ONNX Runtime 原生库。
 
 > OpenCV 4.14.0、ONNX Runtime 1.31.0 和 CameraX 1.6.2（从 Google Maven 解析）均已按 16 KB 页面大小对齐，构建需要 AGP 8.9.1+ 和 compileSdk 36。Maven Central 的 AAR 包含多个 ABI，但 `abiFilters` 只会在 APK 中保留 `arm64-v8a`。x86_64 模拟器无法运行 OCR（可运行界面，但初始化 OpenCV/ONNX 会失败）。请使用 arm64 真机测试。
 
@@ -161,7 +168,7 @@ adb shell dumpsys deviceidle whitelist +com.basiccat.imagetrans
 
 - 本地 OCR：中、英、日及拉丁系语言使用内置 PP-OCRv6；韩、阿、俄、泰使用首次联网下载的 PP-OCRv5 识别模型。其他语种仍需在扩展中补充对应模型。
 - 长条漫（高度大于宽度 8 倍）：
-  - 解码不再按最长边 3500px 缩放，而是保留宽度（上限 2000px）、总像素上限 1200 万，使用 `ImageDecoder` 在解码阶段直接缩放。
+  - 解码不再按最长边 3500px 缩放，而是保留宽度（上限 2000px）、总像素上限 1200 万，使用 `ImageDecoder` 在解码阶段直接缩放（Android 9 及以上；更低版本回退到 `BitmapFactory`，超长图可能内存不足）。
   - OCR：按 `4 × 宽度` 为一块切分（与扩展一致），每块缩到最长边 1500px 后单独识别，再把坐标映射回整图。切块长边固定为 1500px，因此块高与宽度的比例直接决定识别时每块的宽度（1500 / 比例）；用 8×宽度时块宽只有约 187px，韩语等小字号文字会识别错误。切块边界上的文字会被拆成两段识别。
   - 渲染按文本框之间的空隙选择切点，单块不超过 600 万像素且最长边不超过 4096px，逐块交给 WebView 渲染后在原生侧拼接，避免整张长图撑爆 canvas 内存。
   - 最终输出图仍受 1200 万像素上限约束；极端长图会按比例缩小。
