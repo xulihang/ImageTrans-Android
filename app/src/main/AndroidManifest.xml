@@ -79,8 +79,9 @@
             android:exported="false"
             android:foregroundServiceType="dataSync|mediaProjection" />
 
-        <!-- Takes the floating windows' screenshots. Enabled by the user in
-             the system accessibility settings; no consent per capture. -->
+        <!-- Takes the floating windows' screenshots. Listed as "ImageTrans" in
+             the accessibility settings, where the user enables it once; no
+             consent per capture. Not a background data-collection service. -->
         <service
             android:name=".ScreenshotAccessibilityService"
             android:exported="true"
@@ -92,6 +93,9 @@
             <meta-data
                 android:name="android.accessibilityservice"
                 android:resource="@xml/accessibility_service" />
+            <meta-data
+                android:name="android.accessibilityservice.isAccessibilityTool"
+                android:value="true" />
         </service>
     </application>
 
