@@ -20,16 +20,17 @@ Requires Android 8.0 (API 26) or later; the native libraries are arm64-v8a only.
 - **Local OCR + MyMemory (free)**: No API key needed; uses the public MyMemory translation API. Long paragraphs are automatically split into requests under 500 bytes to comply with the API limits; a built-in contact email is used by default (quota of about 50,000 characters/day), and you can enter your own email in settings. You are notified when the quota is exhausted. With source language "Auto", Japanese is assumed; with target language "Auto", English is assumed (same as the browser extension).
 - **Recognize-only mode**: Performs OCR only and draws the recognized text back onto the image, useful for debugging.
 - **Long webtoon strips**: Aspect ratio is preserved when decoding (no longer downscaled to a 3500px longest side); OCR splits the image into blocks of 4× width following the extension's rules; rendering is also done block by block and stitched vertically, avoiding WebView/Canvas size and memory limits.
-- Save translated images to the gallery (`Pictures/ImageTrans`) and share them.
+- Save translated images to the gallery (`Pictures/ImageTrans`, which also shows up there right away on Android 8/9) and share them.
+- **Font scale** in settings (default 100%): the font size fitted for each text box is multiplied by it; a larger value grows the box around the text.
 - Toggle between original and translated text.
-- Open the result fitted inside the screen (the whole image is visible); pinch or double-tap to zoom, swipe sideways to flip original/translation while it is fitted. At the fitted size a fast sideways flick switches original/translation; a slow drag does nothing. When zoomed in, dragging moves the image with the finger and a fast flick coasts further (up to two screens).
+- Open the result fitted inside the screen (the whole image is visible); pinch or double-tap to zoom. At the fitted size a fast sideways flick (or drag) switches original/translation and a slow drag does nothing; zoomed in, dragging moves the image with the finger and a fast flick coasts further (up to two screens).
 - **Tap a text box to view original/translation**: On the image translation page and inside the screenshot translation selection, tapping a text box shows the original and translated text; on the main screen you can long-press to select and copy part of the text (system menu), while in the screenshot translation overlay the system selection menu is not shown — instead "Copy selected / Copy all" is provided.
 - **Screenshot translation overlay**: A floating button plus a persistent selection box; tapping "Translate" on the floating button captures the selected area and translates it, with the translation displayed inside the selection. The selection can be dragged and resized, and the rest of the screen is unaffected so you can keep using other apps.
   - **Android 11+** captures through an accessibility service (`AccessibilityService.takeScreenshot`). Turn on "ImageTrans" once in the system accessibility settings; after that you can switch apps freely and capture at any time without a prompt. The service is used only for screenshots and does not read screen content.
   - **Android 10** has no accessibility screenshots, so it uses the screen-capture (MediaProjection) consent instead: one grant when the floating button is turned on, reused for a while.
 - **Translation server (for the browser extension)**: Provides `POST /translate` in the background (HTTP, port 51042) for the extension's "ImageTrans Server" mode. OCR is done on the phone, text lines are merged into paragraphs, and text boxes are returned; when the App is set to "Local OCR + OpenAI" or "Local OCR + MyMemory", translations are returned as well, otherwise only the original text is returned and the extension translates it itself. For Edge/Firefox extensions on the same phone, or a browser on a computer forwarded via `adb reverse tcp:51042 tcp:51042`, enter `http://127.0.0.1:51042` directly — no Wi-Fi or mobile data required; a computer on the same network can also use the phone's LAN IP. The address is shown persistently in the notification, from which the server can be stopped.
 - **Interface language**: Settings offer "Follow system / 中文 / English", defaulting to the system language (English on English systems, Chinese otherwise); switching restarts the main screen so it takes effect everywhere.
-- Settings: translation method (ImageTrans server / MyMemory / OpenAI / recognize only), server address, project name, password, rendering mode (server-side / in-app), MyMemory contact email, OpenAI endpoint/key/model, language pair, interface language, rendering CSS, minimum font size, original text background handling.
+- Settings: translation method (ImageTrans server / MyMemory / OpenAI / recognize only), server address, project name, password, rendering mode (server-side / in-app), MyMemory contact email, OpenAI endpoint/key/model, language pair, interface language, rendering CSS, minimum font size, font scale, original text background handling.
 
 ## Architecture
 
@@ -143,6 +144,8 @@ border-radius: 10%;
 ```
 
 Supported properties include `font-family`, `font-weight`, `font-style`, `color`, `background-color`, `border-radius`, `text-shadow`, `-webkit-text-stroke-*`, `text-transform`, `writing-mode: vertical-rl`, `direction: rtl`, etc. Vertical writing and RTL in translations are handled by the WebView's DOM rendering, with Canvas only as a fallback.
+
+Font size is fitted to each text box automatically. Two settings adjust it: the minimum font size (px, used when the fitted size would be smaller) and the font scale (%, default 100, multiplied after fitting; 120 makes the text 20% larger and the box grows to fit it). Both apply to in-app rendering, not to images rendered by the ImageTrans server.
 
 ## Known limitations / future work
 
