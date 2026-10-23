@@ -328,6 +328,20 @@
             style="@style/FieldLabel"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
+            android:text="@string/settings_font_scale" />
+
+        <EditText
+            android:id="@+id/editFontScale"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="100"
+            android:inputType="number"
+            android:singleLine="true" />
+
+        <TextView
+            style="@style/FieldLabel"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
             android:text="@string/settings_repair_mode" />
 
         <Spinner

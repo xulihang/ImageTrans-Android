@@ -44,6 +44,7 @@ public class SettingsActivity extends LocalizedActivity {
     private EditText editRenderCss;
     private CheckBox checkVertical;
     private EditText editMinFontSize;
+    private EditText editFontScale;
     private Spinner spinnerRepairMode;
     private Spinner spinnerJaDetection;
 
@@ -76,6 +77,7 @@ public class SettingsActivity extends LocalizedActivity {
         editRenderCss = findViewById(R.id.editRenderCss);
         checkVertical = findViewById(R.id.checkVertical);
         editMinFontSize = findViewById(R.id.editMinFontSize);
+        editFontScale = findViewById(R.id.editFontScale);
         spinnerRepairMode = findViewById(R.id.spinnerRepairMode);
         spinnerJaDetection = findViewById(R.id.spinnerJaDetection);
 
@@ -164,6 +166,7 @@ public class SettingsActivity extends LocalizedActivity {
         editRenderCss.setText(Prefs.getRenderCss(this));
         checkVertical.setChecked(Prefs.isVerticalText(this));
         editMinFontSize.setText(String.valueOf(Prefs.getMinFontSize(this)));
+        editFontScale.setText(String.valueOf(Prefs.getFontScale(this)));
 
         String repair = Prefs.getTextRepairMode(this);
         for (int i = 0; i < REPAIR_VALUES.length; i++) {
@@ -220,6 +223,13 @@ public class SettingsActivity extends LocalizedActivity {
         }
         if (minFont <= 0) minFont = 14;
 
+        int fontScale = 100;
+        try {
+            fontScale = Integer.parseInt(editFontScale.getText().toString().trim());
+        } catch (Exception ignored) {
+        }
+        fontScale = Math.max(20, Math.min(400, fontScale));
+
         // The {texts} placeholder is how the texts reach the model; without
         // it nothing can be translated.
         String prompt = editOpenAiPrompt.getText().toString().trim();
@@ -248,6 +258,7 @@ public class SettingsActivity extends LocalizedActivity {
         Prefs.setRenderCss(this, editRenderCss.getText().toString());
         Prefs.setVerticalText(this, checkVertical.isChecked());
         Prefs.setMinFontSize(this, minFont);
+        Prefs.setFontScale(this, fontScale);
         Prefs.setTextRepairMode(this, REPAIR_VALUES[spinnerRepairMode.getSelectedItemPosition()]);
         Prefs.setJapaneseDetection(this,
                 JA_DETECTION_VALUES[spinnerJaDetection.getSelectedItemPosition()]);

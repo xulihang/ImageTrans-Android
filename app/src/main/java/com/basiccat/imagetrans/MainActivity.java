@@ -265,8 +265,13 @@ public class MainActivity extends LocalizedActivity {
                 Prefs.setFloatingEnabled(this, true);
                 ScreenshotTranslateService.show(this, resultCode, data);
                 ImageUtils.toast(this, getString(R.string.main_floating_started));
-            } else {
-                ImageUtils.toast(this, getString(R.string.floating_capture_denied));
+            } else if (resultCode == RESULT_CANCELED) {
+                // Only a tap on "deny" (or leaving the prompt) cancels; the
+                // system restarts this activity while a grant prompt is open
+                // (e.g. when returning from the "display over other apps"
+                // settings), which arrives here with RESULT_CANCELED but is
+                // not a refusal. Say nothing then: the user can tap again.
+                ImageUtils.toast(this, getString(R.string.main_floating_cancelled));
             }
             updateFloatingButton();
             return;

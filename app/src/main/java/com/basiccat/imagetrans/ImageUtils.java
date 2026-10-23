@@ -399,6 +399,7 @@ public final class ImageUtils {
         options.put("renderMode", "dom");
         options.put("renderTextCSS", renderTextCss(context));
         options.put("minFontSize", Prefs.getMinFontSize(context));
+        options.put("fontScale", Prefs.getFontScale(context) / 100f);
         options.put("textRepairMode", Prefs.getTextRepairMode(context));
         options.put("sourceLang", Prefs.getSourceLang(context));
         options.put("targetLang", Prefs.getTargetLang(context));

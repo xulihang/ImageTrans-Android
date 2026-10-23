@@ -162,6 +162,7 @@
     <string name="settings_render_css">文本框 CSS</string>
     <string name="settings_vertical_text">竖排文字</string>
     <string name="settings_min_font">最小字号（px）</string>
+    <string name="settings_font_scale">字体缩放（%）：在自动计算的字号基础上放大或缩小</string>
     <string name="settings_repair_mode">原文背景处理</string>
     <string name="settings_ja_detection">日语文字定位方式</string>
     <string name="settings_css_note">CSS 支持 text-align、font-family、font-weight、color、background-color、border-radius、writing-mode: vertical-rl、direction: rtl、text-shadow 等，与浏览器扩展的设置一致。</string>
@@ -206,7 +207,7 @@
     <string name="floating_no_image">没有收到图像</string>
     <string name="floating_need_accessibility">请在系统设置中开启 ImageTrans 的无障碍服务（用于截屏）</string>
     <string name="floating_capture_error">截屏失败：%1$s</string>
-    <string name="floating_capture_denied">没有获得截屏授权</string>
+    <string name="main_floating_cancelled">未授权截屏，截屏翻译未开启</string>
     <string name="floating_renderer_timeout">渲染器初始化超时</string>
     <string name="floating_renderer_failed">无法创建渲染器</string>
 

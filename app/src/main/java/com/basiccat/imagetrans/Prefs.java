@@ -214,6 +214,15 @@ public final class Prefs {
         get(context).edit().putInt("min_font_size", value).apply();
     }
 
+    /** Percent applied to the fitted font size (100 = as computed). */
+    public static int getFontScale(Context context) {
+        return get(context).getInt("font_scale_percent", 100);
+    }
+
+    public static void setFontScale(Context context, int percent) {
+        get(context).edit().putInt("font_scale_percent", percent).apply();
+    }
+
     public static String getTextRepairMode(Context context) {
         return get(context).getString("text_repair_mode", "white");
     }

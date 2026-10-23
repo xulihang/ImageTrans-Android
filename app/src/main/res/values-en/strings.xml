@@ -158,6 +158,7 @@
     <string name="settings_render_css">Text box CSS</string>
     <string name="settings_vertical_text">Vertical text</string>
     <string name="settings_min_font">Minimum font size (px)</string>
+    <string name="settings_font_scale">Font scale (%): enlarge or shrink the automatically fitted font size</string>
     <string name="settings_repair_mode">Original background handling</string>
     <string name="settings_ja_detection">Japanese text detection</string>
     <string name="settings_css_note">CSS supports text-align, font-family, font-weight, color, background-color, border-radius, writing-mode: vertical-rl, direction: rtl, text-shadow, etc., matching the browser extension settings.</string>
@@ -201,7 +202,7 @@
     <string name="floating_no_image">No image received</string>
     <string name="floating_need_accessibility">Turn on the ImageTrans accessibility service (used for screenshots) in system settings</string>
     <string name="floating_capture_error">Screenshot failed: %1$s</string>
-    <string name="floating_capture_denied">Screen capture was not granted</string>
+    <string name="main_floating_cancelled">Screen capture was not authorized; screenshot translation is off</string>
     <string name="floating_renderer_timeout">Renderer initialization timed out</string>
     <string name="floating_renderer_failed">Could not create the renderer</string>
 

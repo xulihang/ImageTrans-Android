@@ -14,6 +14,8 @@
         renderMode: 'dom',              // 'dom' | 'canvas'
         renderTextCSS: 'text-align: center;\nborder-radius: 10%;',
         minFontSize: 14,
+        // Multiplier for the fitted font size (1 = as calculated).
+        fontScale: 1,
         textRepairMode: 'white',        // 'white' | 'background' | 'none'
         sourceLang: 'auto',
         targetLang: 'zh'
@@ -265,7 +267,11 @@
         return detectTextDirection(text);
     }
 
-    function fitBoxFontSize(el, upperBound, minimum) {
+    /**
+     * Fits the font to the box, then applies options.fontScale. The scaled
+     * size may overflow the box; the caller then grows the box to fit it.
+     */
+    function fitBoxFontSize(el, upperBound, minimum, fontScale) {
         var cw = el.clientWidth;
         var ch = el.clientHeight;
         var tol = 1;
@@ -285,7 +291,8 @@
             if (hi - lo < 0.5) break;
         }
         var fit = Math.floor(best);
-        var used = Math.max(min, fit);
+        var scale = (typeof fontScale === 'number' && fontScale > 0) ? fontScale : 1;
+        var used = Math.max(min, Math.round(fit * scale));
         el.style.setProperty('font-size', used + 'px', 'important');
         return { fit: fit, used: used };
     }
@@ -382,7 +389,10 @@
                 el.textContent = targetText;
                 container.appendChild(el);
 
-                var sized = fitBoxFontSize(el, userFontSize, options.minFontSize);
+                var sized = fitBoxFontSize(el, userFontSize, options.minFontSize,
+                        options.fontScale);
+                // Larger than the box either because of the minimum size or
+                // because of fontScale: grow the box around the text.
                 if (sized.used > sized.fit) {
                     var textW = Math.min(el.scrollWidth, natW);
                     var textH = Math.min(el.scrollHeight, natH);
@@ -420,7 +430,7 @@
         });
     }
 
-    function calcFontSize(ctx, text, maxWidth, maxHeight, textStyle, minFontSize) {
+    function calcFontSize(ctx, text, maxWidth, maxHeight, textStyle, minFontSize, fontScale) {
         var padding = 2;
         var availWidth = maxWidth - padding * 2;
         var availHeight = maxHeight - padding * 2;
@@ -443,7 +453,10 @@
             }
             if (hi - lo < 1) break;
         }
-        return Math.max((typeof minFontSize === 'number' && minFontSize > 0) ? minFontSize : 4, Math.floor(bestSize));
+        var fit = Math.floor(bestSize);
+        var scale = (typeof fontScale === 'number' && fontScale > 0) ? fontScale : 1;
+        return Math.max((typeof minFontSize === 'number' && minFontSize > 0) ? minFontSize : 4,
+                Math.round(fit * scale));
     }
 
     function isCJK(ch) {
@@ -586,7 +599,8 @@
 
                 var c2 = clamp(bx, by, bw, bh);
                 var displayText = applyTextTransform(targetText, textStyle.textTransform);
-                var fontSize = calcFontSize(ctx, displayText, c2.w, c2.h, textStyle, options.minFontSize);
+                var fontSize = calcFontSize(ctx, displayText, c2.w, c2.h, textStyle,
+                        options.minFontSize, options.fontScale);
                 ctx.font = buildFontString(fontSize, textStyle);
 
                 var textLines = wrapLines(ctx, displayText, c2.w - 4);
