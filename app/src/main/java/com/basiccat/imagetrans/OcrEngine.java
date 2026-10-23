@@ -6,16 +6,16 @@ import android.util.Log;
 
 import org.opencv.core.Point;
 
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.Comparator;
-import java.util.List;
-
 import io.github.hzkitty.RapidOCR;
 import io.github.hzkitty.entity.OcrConfig;
 import io.github.hzkitty.entity.OcrResult;
 import io.github.hzkitty.entity.ParamConfig;
 import io.github.hzkitty.entity.RecResult;
+
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.List;
 
 /**
  * Local OCR on the PP-OCRv6 models in {@code assets/ocr/} (the same files the

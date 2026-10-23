@@ -18,10 +18,14 @@ import android.util.Log;
 import android.util.Size;
 import android.widget.Toast;
 
+import androidx.core.content.FileProvider;
+
 import org.json.JSONException;
 import org.json.JSONObject;
 
 import java.io.ByteArrayOutputStream;
+import java.io.File;
+import java.io.FileOutputStream;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.text.SimpleDateFormat;
@@ -69,7 +73,9 @@ public final class ImageUtils {
             // long side to 3500 would leave a handful of pixels of width.
             // ImageDecoder scales during decode, so no oversized intermediate
             // bitmap is allocated.
-            Bitmap tall = decodeTall(context, uri, orientedWidth, orientedHeight);
+            Bitmap tall = Build.VERSION.SDK_INT >= Build.VERSION_CODES.P
+                    ? decodeTall(context, uri, orientedWidth, orientedHeight)
+                    : null;
             if (tall != null) return tall;
             Log.w(TAG, "ImageDecoder unavailable for tall image, falling back to BitmapFactory");
         }
@@ -144,6 +150,7 @@ public final class ImageUtils {
      * keeps the strip's width and caps the total pixel count instead of the
      * long side, which is what makes webtoon text readable.
      */
+    @android.annotation.TargetApi(28)
     private static Bitmap decodeTall(Context context, Uri uri, int orientedWidth, int orientedHeight) {
         float scale = Math.min(1f, Math.min(
                 (float) MAX_TALL_WIDTH / orientedWidth,
@@ -228,6 +235,11 @@ public final class ImageUtils {
     }
 
     public static Uri saveToGallery(Context context, Bitmap bitmap) {
+        if (!isAtLeastQ()) {
+            // The MediaStore write below needs scoped storage (API 29); the
+            // share sheet can still send a cached copy.
+            return saveToCache(context, bitmap);
+        }
         String name = "imagetrans_" + new SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(new Date()) + ".png";
         ContentValues values = new ContentValues();
         values.put(MediaStore.Images.Media.DISPLAY_NAME, name);
@@ -250,6 +262,19 @@ public final class ImageUtils {
         done.put(MediaStore.Images.Media.IS_PENDING, 0);
         context.getContentResolver().update(uri, done, null, null);
         return uri;
+    }
+
+    /** Writes the image into the app cache and shares it through FileProvider. */
+    private static Uri saveToCache(Context context, Bitmap bitmap) {
+        String name = "imagetrans_" + new SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(new Date()) + ".png";
+        File file = new File(context.getCacheDir(), name);
+        try (OutputStream out = new FileOutputStream(file)) {
+            bitmap.compress(Bitmap.CompressFormat.PNG, 100, out);
+        } catch (Exception e) {
+            return null;
+        }
+        return FileProvider.getUriForFile(context,
+                context.getPackageName() + ".fileprovider", file);
     }
 
     public static void shareImage(Context context, Uri uri) {

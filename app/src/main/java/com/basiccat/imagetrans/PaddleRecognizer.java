@@ -4,10 +4,10 @@ import android.content.Context;
 import android.graphics.Bitmap;
 import android.util.Log;
 
-
 import java.util.ArrayList;
 import java.util.List;
 
+import io.github.hzkitty.RapidOCR;
 import io.github.hzkitty.entity.OcrConfig;
 import io.github.hzkitty.entity.OcrResult;
 import io.github.hzkitty.entity.RecResult;
@@ -39,7 +39,7 @@ final class PaddleRecognizer extends NativeInference {
      */
     private static final float VERTICAL_ROTATE_RATIO = 1.5f;
 
-    private io.github.hzkitty.RapidOCR rapidOCR;
+    private RapidOCR rapidOCR;
 
     PaddleRecognizer(Context context) {
         super(context);
@@ -62,7 +62,7 @@ final class PaddleRecognizer extends NativeInference {
             config.Rec.modelPath = ensureModelFile(appContext, REC_MODEL);
             config.Rec.recKeysPath = ensureDictFile(appContext, REC_DICT);
             config.Cls.modelPath = ensureModelFile(appContext, CLS_MODEL);
-            rapidOCR = io.github.hzkitty.RapidOCR.create(appContext, config);
+            rapidOCR = RapidOCR.create(appContext, config);
         } catch (Throwable throwable) {
             Log.e(TAG, "recognizer init failed", throwable);
             throw new Exception("识别模型初始化失败: " + ImageUtils.humanError(throwable), throwable);

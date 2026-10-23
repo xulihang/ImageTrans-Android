@@ -13,6 +13,8 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+import io.github.hzkitty.entity.OrtInferConfig;
+import io.github.hzkitty.utils.OrtInferSession;
 
 /**
  * YOLO text-line detection (the extension's paddleocr/model.onnx, used by
@@ -33,7 +35,7 @@ final class PaddleTextLineDetector extends NativeInference {
     private static final float NMS_THRESHOLD = 0.45f;
     private static final int MANGA_CLASS = 5;
 
-    private io.github.hzkitty.utils.OrtInferSession session;
+    private OrtInferSession session;
 
     /** {@code modelPath} comes from NativeInference.ensureModelFile. */
     PaddleTextLineDetector(Context context, String modelPath) {
@@ -48,12 +50,12 @@ final class PaddleTextLineDetector extends NativeInference {
         long start = System.currentTimeMillis();
         try {
             // rapidocr4j's OrtInferSession only opens absolute file paths.
-            io.github.hzkitty.entity.OrtInferConfig config = new io.github.hzkitty.entity.OrtInferConfig();
+            OrtInferConfig config = new OrtInferConfig();
             config.setModelPath(modelPath);
             // OrtInferSession keeps its session private and exposes only
             // run(float[][][][]), which already takes the [1][3][640][640]
             // input this detector builds.
-            session = new io.github.hzkitty.utils.OrtInferSession(appContext, config);
+            session = new OrtInferSession(appContext, config);
         } catch (Throwable throwable) {
             Log.e(TAG, "YOLO init failed", throwable);
             throw new Exception("文本行检测模型初始化失败: " + ImageUtils.humanError(throwable), throwable);
