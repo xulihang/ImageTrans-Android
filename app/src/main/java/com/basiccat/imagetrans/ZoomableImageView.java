@@ -424,17 +424,16 @@ public class ZoomableImageView extends View {
 
     /**
      * Glides in the flick direction and stops at the image edge. The distance
-     * decays quickly with a faster-than-linear curve, so the image does not
-     * run far past where the finger left it; a velocity of about 1000 px/s
-     * glides all of {@link #FLING_DURATION_MS}, a flick of several thousand
-     * coasts at most 1.5× the remaining screen.
+     * grows with the lift-off speed, so a gentle flick coasts a little and a
+     * hard one carries on.
      */
     private void startFling(float velocityX, float velocityY) {
         float speed = Math.max(1f, (float) Math.hypot(velocityX, velocityY));
-        // Pixels travelled before stopping: 350 ms of decay at the lift-off
-        // speed, halved, and never more than 1.5 screens.
-        float distance = Math.min(FLING_DURATION_MS / 1000f * speed / 4f,
-                1.5f * Math.max(getWidth(), getHeight()));
+        // Pixels travelled before stopping: a fraction of a screen that grows
+        // nearly linearly with the lift-off speed (a screen at ~4000 px/s),
+        // capped at 2 screens.
+        float screens = Math.min(speed / 4000f, 2f);
+        float distance = Math.max(getWidth(), getHeight()) * screens;
         float dirX = velocityX / speed;
         float dirY = velocityY / speed;
         Matrix start = new Matrix(draw);
@@ -442,7 +441,10 @@ public class ZoomableImageView extends View {
         constrain();
         Matrix end = new Matrix(draw);
         draw.set(start);
-        animateTo(start, end, FLING_DURATION_MS);
+        // Longer glides for faster flicks, so the speed feels consistent.
+        long duration = FLING_DURATION_MS
+                + Math.round(FLING_DURATION_MS * Math.min(speed / 4000f, 1f));
+        animateTo(start, end, duration);
     }
 
     /** Animates translation while interpolating scale geometrically. */
