@@ -10,8 +10,10 @@ import android.graphics.ColorSpace;
 import android.graphics.ImageDecoder;
 import android.graphics.Matrix;
 import android.media.ExifInterface;
+import android.media.MediaScannerConnection;
 import android.net.Uri;
 import android.os.Build;
+import android.os.Environment;
 import android.provider.MediaStore;
 import android.util.Base64;
 import android.util.Log;
@@ -234,12 +236,9 @@ public final class ImageUtils {
         }
     }
 
+    /** Saves the image to the gallery, as Pictures/ImageTrans on every version. */
     public static Uri saveToGallery(Context context, Bitmap bitmap) {
-        if (!isAtLeastQ()) {
-            // The MediaStore write below needs scoped storage (API 29); the
-            // share sheet can still send a cached copy.
-            return saveToCache(context, bitmap);
-        }
+        if (!isAtLeastQ()) return saveToGalleryLegacy(context, bitmap);
         String name = "imagetrans_" + new SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(new Date()) + ".png";
         ContentValues values = new ContentValues();
         values.put(MediaStore.Images.Media.DISPLAY_NAME, name);
@@ -264,8 +263,42 @@ public final class ImageUtils {
         return uri;
     }
 
-    /** Writes the image into the app cache and shares it through FileProvider. */
-    private static Uri saveToCache(Context context, Bitmap bitmap) {
+    /**
+     * Before scoped storage (API 29) an image reaches the gallery by writing a
+     * file into Pictures/ and letting the media scanner index it; RELATIVE_PATH
+     * and IS_PENDING do not exist yet. Needs WRITE_EXTERNAL_STORAGE (declared
+     * for API <= 28 only).
+     */
+    private static Uri saveToGalleryLegacy(Context context, Bitmap bitmap) {
+        String name = "imagetrans_" + new SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(new Date()) + ".png";
+        File dir = new File(Environment.getExternalStoragePublicDirectory(
+                Environment.DIRECTORY_PICTURES), "ImageTrans");
+        if (!dir.isDirectory() && !dir.mkdirs()) return null;
+        File file = new File(dir, name);
+        try (OutputStream out = new FileOutputStream(file)) {
+            bitmap.compress(Bitmap.CompressFormat.PNG, 100, out);
+        } catch (Exception e) {
+            Log.w(TAG, "saving to " + file + " failed", e);
+            return null;
+        }
+        ContentValues values = new ContentValues();
+        values.put(MediaStore.Images.Media.DISPLAY_NAME, name);
+        values.put(MediaStore.Images.Media.MIME_TYPE, "image/png");
+        values.put(MediaStore.Images.Media.DATA, file.getAbsolutePath());
+        values.put(MediaStore.Images.Media.DATE_TAKEN, System.currentTimeMillis());
+        Uri uri = context.getContentResolver().insert(
+                MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values);
+        if (uri != null) return uri;
+        // The insert failed: ask the scanner to index the file instead.
+        MediaScannerConnection.scanFile(context, new String[]{file.getAbsolutePath()}, null, null);
+        return Uri.fromFile(file);
+    }
+
+    /**
+     * Saves the image in the app cache for sharing through FileProvider; only
+     * for sharing, it does not show up in the gallery.
+     */
+    public static Uri saveToCache(Context context, Bitmap bitmap) {
         String name = "imagetrans_" + new SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(new Date()) + ".png";
         File file = new File(context.getCacheDir(), name);
         try (OutputStream out = new FileOutputStream(file)) {

@@ -2,4 +2,7 @@
 <paths xmlns:android="http://schemas.android.com/apk/res/android">
     <!-- Shared images written by ImageUtils.saveToCache below API 29. -->
     <cache-path name="shared_images" path="." />
+    <!-- A saved result shared after the fact on API 26-28, where it lives in
+         the gallery rather than in the cache. -->
+    <external-path name="pictures" path="Pictures/ImageTrans/" />
 </paths>

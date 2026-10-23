@@ -1,9 +1,11 @@
 package com.basiccat.imagetrans;
 
+import android.Manifest;
 import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.ClipData;
 import android.content.ClipboardManager;
+import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.net.Uri;
@@ -36,6 +38,7 @@ import java.util.concurrent.TimeUnit;
  */
 public class TranslateActivity extends LocalizedActivity {
     private static final String TAG = "TranslateActivity";
+    private static final int REQUEST_STORAGE_PERMISSION = 3001;
 
     private ZoomableImageView imageView;
     private TextView errorText;
@@ -628,12 +631,26 @@ public class TranslateActivity extends LocalizedActivity {
 
     private void saveResult(final boolean share) {
         if (translatedBitmap == null || busy) return;
+        if (!share && Build.VERSION.SDK_INT <= Build.VERSION_CODES.P
+                && checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE)
+                != PackageManager.PERMISSION_GRANTED) {
+            // API 26-28 write into Pictures/ directly and need this grant.
+            requestPermissions(new String[]{Manifest.permission.WRITE_EXTERNAL_STORAGE},
+                    REQUEST_STORAGE_PERMISSION);
+            return;
+        }
         final Bitmap bitmap = translatedBitmap;
         executor.execute(new Runnable() {
             @Override
             public void run() {
-                final Uri uri = savedUri != null ? savedUri : ImageUtils.saveToGallery(TranslateActivity.this, bitmap);
-                if (uri != null) savedUri = uri;
+                // Sharing only needs a readable file; saving means the gallery,
+                // so it must still be written there on every version.
+                final Uri uri = share && savedUri != null
+                        ? savedUri
+                        : (share
+                                ? ImageUtils.saveToCache(TranslateActivity.this, bitmap)
+                                : ImageUtils.saveToGallery(TranslateActivity.this, bitmap));
+                if (!share && uri != null) savedUri = uri;
                 mainHandler.post(new Runnable() {
                     @Override
                     public void run() {
@@ -652,6 +669,18 @@ public class TranslateActivity extends LocalizedActivity {
                 });
             }
         });
+    }
+
+    @Override
+    public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] results) {
+        super.onRequestPermissionsResult(requestCode, permissions, results);
+        if (requestCode != REQUEST_STORAGE_PERMISSION) return;
+        if (checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE)
+                == PackageManager.PERMISSION_GRANTED) {
+            saveResult(false);
+        } else {
+            ImageUtils.toast(this, getString(R.string.translate_save_failed));
+        }
     }
 
     @Override
