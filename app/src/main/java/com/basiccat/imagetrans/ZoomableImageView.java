@@ -34,6 +34,9 @@ public class ZoomableImageView extends View {
     private static final float MAX_PIXELS_ON_SCREEN = 3f;
     private static final float DOUBLE_TAP_SCALE = 2.5f;
     private static final int SETTLE_DURATION_MS = 220;
+    private static final int FLING_DURATION_MS = 450;
+    /** Slower drags stop where the finger stops; faster ones coast. */
+    private static final int FLING_MIN_VELOCITY = 150;
 
     private final Matrix draw = new Matrix();
     private final Matrix from = new Matrix();
@@ -60,6 +63,9 @@ public class ZoomableImageView extends View {
 
     /** Distance the finger travelled during the current gesture. */
     private float dragX, dragY;
+    /** The fitted image stays put until the finger has been held still. */
+    private boolean swiped;
+    private static final long SWIPE_HOLD_MS = 160;
 
     /** Fired for a horizontal swipe at the fitted scale. */
     public interface OnSwipeListener {
@@ -120,13 +126,7 @@ public class ZoomableImageView extends View {
 
             @Override
             public boolean onSingleTapUp(MotionEvent e) {
-                // A mostly sideways drag at the fitted scale asks for the other
-                // image; the image may pan a little (or not at all) on the way.
-                if (swipeListener != null && scale() <= fitWidthScale + 0.01f
-                        && Math.abs(dragX) > getWidth() * 0.2f
-                        && Math.abs(dragX) > Math.abs(dragY) * 2f) {
-                    swipeListener.onSwipe(dragX < 0);
-                }
+                swiped = false;
                 return true;
             }
 
@@ -142,13 +142,46 @@ public class ZoomableImageView extends View {
 
             @Override
             public boolean onScroll(MotionEvent e1, MotionEvent e2, float dx, float dy) {
-                // The image moves exactly as far as the finger (1:1) and
-                // stops when the finger is lifted.
                 dragX += -dx;
                 dragY += -dy;
+                // At the fitted size a sideways drag means "other image", not
+                // panning: it fires once the finger has travelled far enough
+                // and has been held at least SWIPE_HOLD_MS, or on a quick
+                // flick (onFling). Panning only starts once zoomed in.
+                if (scale() <= fitWidthScale + 0.01f) {
+                    if (!swiped && Math.abs(dragX) > getWidth() * 0.2f
+                            && Math.abs(dragX) > Math.abs(dragY) * 2f
+                            && e2.getEventTime() - e1.getEventTime() >= SWIPE_HOLD_MS) {
+                        swiped = true;
+                        swipeListener.onSwipe(dragX < 0);
+                    }
+                    return true;
+                }
+                // The image moves exactly as far as the finger (1:1) and
+                // stops when the finger is lifted.
                 draw.postTranslate(-dx, -dy);
                 constrain();
                 invalidate();
+                return true;
+            }
+
+            @Override
+            public boolean onFling(MotionEvent e1, MotionEvent e2, float velocityX, float velocityY) {
+                if (scale() <= fitWidthScale + 0.01f) {
+                    // A quick sideways flick at the fitted size.
+                    if (!swiped && swipeListener != null
+                            && Math.abs(dragX) > getWidth() * 0.2f
+                            && Math.abs(dragX) > Math.abs(dragY) * 2f) {
+                        swiped = true;
+                        swipeListener.onSwipe(dragX < 0);
+                    }
+                    return true;
+                }
+                if (Math.abs(velocityX) < FLING_MIN_VELOCITY
+                        && Math.abs(velocityY) < FLING_MIN_VELOCITY) {
+                    return false;
+                }
+                startFling(velocityX, velocityY);
                 return true;
             }
         });
@@ -391,6 +424,20 @@ public class ZoomableImageView extends View {
         Matrix end = new Matrix(draw);
         draw.set(start);
         animateTo(start, end, SETTLE_DURATION_MS);
+    }
+
+    /**
+     * Glides in the fling direction, stopping at the image edge; slow drags
+     * never get here (see {@link #FLING_MIN_VELOCITY}).
+     */
+    private void startFling(float velocityX, float velocityY) {
+        Matrix start = new Matrix(draw);
+        draw.postTranslate(velocityX * FLING_DURATION_MS / 2000f,
+                velocityY * FLING_DURATION_MS / 2000f);
+        constrain();
+        Matrix end = new Matrix(draw);
+        draw.set(start);
+        animateTo(start, end, FLING_DURATION_MS);
     }
 
     /** Animates translation while interpolating scale geometrically. */
