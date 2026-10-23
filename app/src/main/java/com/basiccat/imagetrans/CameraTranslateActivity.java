@@ -84,6 +84,7 @@ public class CameraTranslateActivity extends LocalizedActivity implements Lifecy
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_camera);
+        applySystemBarInsets(R.id.appBar, true);
 
         previewView = findViewById(R.id.cameraPreview);
         viewfinder = findViewById(R.id.viewfinder);

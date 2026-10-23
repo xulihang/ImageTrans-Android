@@ -66,6 +66,7 @@ public class FolderTranslateActivity extends LocalizedActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_folder_translate);
+        applySystemBarInsets(R.id.appBar, false);
 
         btnPickFolder = findViewById(R.id.btnPickFolder);
         btnOpenOutput = findViewById(R.id.btnOpenOutput);

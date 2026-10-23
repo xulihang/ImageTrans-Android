@@ -19,6 +19,7 @@ public class ServerActivity extends LocalizedActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_server);
+        applySystemBarInsets(R.id.appBar, false);
         toggle = findViewById(R.id.btnServerToggle);
         address = findViewById(R.id.serverAddress);
 

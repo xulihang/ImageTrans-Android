@@ -51,6 +51,7 @@ public class SettingsActivity extends LocalizedActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_settings);
+        applySystemBarInsets();
 
         modeGroup = findViewById(R.id.modeGroup);
         modeImagetrans = findViewById(R.id.modeImagetrans);

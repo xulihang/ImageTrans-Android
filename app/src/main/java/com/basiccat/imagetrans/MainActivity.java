@@ -43,6 +43,7 @@ public class MainActivity extends LocalizedActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
+        applySystemBarInsets();
 
         modeSummary = findViewById(R.id.modeSummary);
         langSummary = findViewById(R.id.langSummary);

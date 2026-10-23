@@ -74,6 +74,7 @@ public class TranslateActivity extends LocalizedActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_translate);
+        applySystemBarInsets(R.id.appBar, false);
 
         imageView = findViewById(R.id.imageView);
         errorText = findViewById(R.id.errorText);
