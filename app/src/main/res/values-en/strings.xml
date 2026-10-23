@@ -206,8 +206,8 @@
     <string name="floating_renderer_failed">Could not create the renderer</string>
 
     <string-array name="language_names">
-        <item>Chinese</item>
         <item>Japanese</item>
+        <item>Chinese</item>
         <item>English</item>
         <item>Korean</item>
         <item>French</item>

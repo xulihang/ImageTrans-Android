@@ -38,7 +38,8 @@ public final class Prefs {
             "(no markdown, no code fences).\nTexts: {texts}";
 
     public static final String[] LANG_CODES = {
-            "zh", "ja", "en", "ko", "fr", "de", "es", "ru",
+            // Japanese first: it is the default source language.
+            "ja", "zh", "en", "ko", "fr", "de", "es", "ru",
             "ar", "pt", "it", "th", "vi", "id", "tr", "pl", "nl",
             "ms", "hi", "bn", "ur", "fa", "ta", "te", "mr", "gu", "kn", "ml",
             "pa", "ne", "si", "he", "sw", "am", "ha", "yo", "zu", "af", "uk",
