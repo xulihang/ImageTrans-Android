@@ -29,6 +29,15 @@ public class MainActivity extends LocalizedActivity {
      * (e.g. before the grant dialog is shown again); that is not a refusal.
      */
     private boolean capturePending;
+    /**
+     * The user just came back from the overlay settings: the grant may not be
+     * visible to this process yet, so the floating windows are started as
+     * soon as it is, instead of reporting a missing permission.
+     */
+    private boolean overlayPending;
+    private static final long OVERLAY_GRANT_POLL_MS = 200;
+    private static final long OVERLAY_GRANT_TIMEOUT_MS = 3000;
+    private final Runnable pollOverlayGrant = this::checkOverlayGrant;
 
     private TextView modeSummary;
     private TextView langSummary;
@@ -52,6 +61,7 @@ public class MainActivity extends LocalizedActivity {
         super.onCreate(savedInstanceState);
         if (savedInstanceState != null) {
             capturePending = savedInstanceState.getBoolean("capture_pending", false);
+            if (savedInstanceState.getBoolean("overlay_pending", false)) awaitOverlayGrant();
         }
         setContentView(R.layout.activity_main);
         applySystemBarInsets();
@@ -145,6 +155,7 @@ public class MainActivity extends LocalizedActivity {
     protected void onSaveInstanceState(Bundle outState) {
         super.onSaveInstanceState(outState);
         outState.putBoolean("capture_pending", capturePending);
+        outState.putBoolean("overlay_pending", overlayPending);
     }
 
     @Override
@@ -172,6 +183,33 @@ public class MainActivity extends LocalizedActivity {
         btnFloating.setText(running ? R.string.main_floating_on : R.string.main_floating_off);
         pollHandler.removeCallbacks(pollFloating);
         if (running) pollHandler.postDelayed(pollFloating, 2000);
+    }
+
+    /**
+     * Waits for the overlay grant made in the system settings to reach this
+     * process, then continues starting the floating windows. Only when it does
+     * not arrive is the user told the permission is missing.
+     */
+    private void awaitOverlayGrant() {
+        overlayPending = true;
+        pollHandler.removeCallbacks(pollOverlayGrant);
+        pollHandler.postDelayed(pollOverlayGrant, 0);
+        pollHandler.postDelayed(() -> {
+            if (!overlayPending) return;
+            overlayPending = false;
+            ImageUtils.toast(this, getString(R.string.main_floating_need_permission_short));
+        }, OVERLAY_GRANT_TIMEOUT_MS);
+    }
+
+    private void checkOverlayGrant() {
+        if (!overlayPending) return;
+        if (Prefs.hasOverlayPermission(this)) {
+            overlayPending = false;
+            pollHandler.removeCallbacks(pollOverlayGrant);
+            enableFloating();
+        } else {
+            pollHandler.postDelayed(pollOverlayGrant, OVERLAY_GRANT_POLL_MS);
+        }
     }
 
     /** True when the floating windows are actually on screen. */
@@ -203,6 +241,9 @@ public class MainActivity extends LocalizedActivity {
     private void enableFloating() {
         // Drop a floating window left over from a previous process without
         // its capture session (it would otherwise show an unusable mask).
+        // A grant made in the system settings a moment ago continues from
+        // checkOverlayGrant(), not from another trip to the settings.
+        if (overlayPending) return;
         ScreenshotTranslateService.stop(this);
         if (!Prefs.hasOverlayPermission(this)) {
             if (Prefs.isOverlayAsked(this)) {
@@ -295,11 +336,7 @@ public class MainActivity extends LocalizedActivity {
             return;
         }
         if (requestCode == REQUEST_OVERLAY) {
-            if (Prefs.hasOverlayPermission(this)) {
-                enableFloating();
-            } else {
-                ImageUtils.toast(this, getString(R.string.main_floating_need_permission_short));
-            }
+            awaitOverlayGrant();
             return;
         }
         if (requestCode != REQUEST_PICK_IMAGE || resultCode != RESULT_OK || data == null) {
