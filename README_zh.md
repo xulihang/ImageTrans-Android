@@ -73,17 +73,17 @@ app/build/outputs/apk/debug/app-debug.apk
 本地 AAR 放在 `app/libs/`：
 
 - `rapidocr4j-android-1.0.0.aar`
-- `opencv-4.9.0.aar`
-- `onnxruntime-android-1.18.0.aar`
+- `opencv-4.14.0.aar`
+- `onnxruntime-android-1.31.0.aar`
 
-不在仓库里的文件可以从 GitHub Release 的 assets 下载：
+不在仓库里的文件可以从以下地址下载：
 
 - [rapidocr4j-android-1.0.0.aar](https://github.com/xulihang/ImageTrans-Android/releases/download/assets/rapidocr4j-android-1.0.0.aar)
-- [opencv-4.9.0.aar](https://github.com/xulihang/ImageTrans-Android/releases/download/assets/opencv-4.9.0.aar)
-- [onnxruntime-android-1.18.0.aar](https://github.com/xulihang/ImageTrans-Android/releases/download/assets/onnxruntime-android-1.18.0.aar)
+- [opencv-4.14.0.aar](https://repo1.maven.org/maven2/org/opencv/opencv/4.14.0/opencv-4.14.0.aar)（Maven Central）
+- [onnxruntime-android-1.31.0.aar](https://repo1.maven.org/maven2/com/microsoft/onnxruntime/onnxruntime-android/1.31.0/onnxruntime-android-1.31.0.aar)（Maven Central）
 - [ocr-models.zip](https://github.com/xulihang/ImageTrans-Android/releases/download/assets/ocr-models.zip)：OCR 模型，解压到 `app/src/main/assets/ocr/`
 
-> 这三个 AAR 只包含 `arm64-v8a` 的 native 库，因此 `abiFilters` 只保留 `arm64-v8a`。x86_64 模拟器无法运行 OCR（可运行界面，但初始化 OpenCV/ONNX 会失败）。请使用 arm64 真机测试。
+> OpenCV 4.14.0、ONNX Runtime 1.31.0 和 CameraX 1.6.2（从 Google Maven 解析）均已按 16 KB 页面大小对齐，构建需要 AGP 8.9.1+ 和 compileSdk 36。Maven Central 的 AAR 包含多个 ABI，但 `abiFilters` 只会在 APK 中保留 `arm64-v8a`。x86_64 模拟器无法运行 OCR（可运行界面，但初始化 OpenCV/ONNX 会失败）。请使用 arm64 真机测试。
 
 ## 配置
 

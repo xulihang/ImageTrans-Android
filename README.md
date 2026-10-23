@@ -73,17 +73,17 @@ app/build/outputs/apk/debug/app-debug.apk
 Local AARs are placed in `app/libs/`:
 
 - `rapidocr4j-android-1.0.0.aar`
-- `opencv-4.9.0.aar`
-- `onnxruntime-android-1.18.0.aar`
+- `opencv-4.14.0.aar`
+- `onnxruntime-android-1.31.0.aar`
 
-Files not committed to the repository can be downloaded from the GitHub Release assets:
+Files not committed to the repository can be downloaded from:
 
 - [rapidocr4j-android-1.0.0.aar](https://github.com/xulihang/ImageTrans-Android/releases/download/assets/rapidocr4j-android-1.0.0.aar)
-- [opencv-4.9.0.aar](https://github.com/xulihang/ImageTrans-Android/releases/download/assets/opencv-4.9.0.aar)
-- [onnxruntime-android-1.18.0.aar](https://github.com/xulihang/ImageTrans-Android/releases/download/assets/onnxruntime-android-1.18.0.aar)
+- [opencv-4.14.0.aar](https://repo1.maven.org/maven2/org/opencv/opencv/4.14.0/opencv-4.14.0.aar) (Maven Central)
+- [onnxruntime-android-1.31.0.aar](https://repo1.maven.org/maven2/com/microsoft/onnxruntime/onnxruntime-android/1.31.0/onnxruntime-android-1.31.0.aar) (Maven Central)
 - [ocr-models.zip](https://github.com/xulihang/ImageTrans-Android/releases/download/assets/ocr-models.zip): OCR models to extract into `app/src/main/assets/ocr/`
 
-> These three AARs only contain `arm64-v8a` native libraries, so `abiFilters` keeps only `arm64-v8a`. OCR cannot run on x86_64 emulators (the UI runs, but initializing OpenCV/ONNX will fail). Please test on a real arm64 device.
+> OpenCV 4.14.0 and ONNX Runtime 1.31.0 are 16 KB page aligned, as is CameraX 1.6.2 (resolved from Google Maven). This requires AGP 8.9.1+ and compileSdk 36. The Maven Central AARs contain several ABIs, but `abiFilters` keeps only `arm64-v8a` in the APK. OCR cannot run on x86_64 emulators (the UI runs, but initializing OpenCV/ONNX will fail). Please test on a real arm64 device.
 
 ## Configuration
 
