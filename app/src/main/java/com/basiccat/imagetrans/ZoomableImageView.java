@@ -35,8 +35,12 @@ public class ZoomableImageView extends View {
     private static final float DOUBLE_TAP_SCALE = 2.5f;
     private static final int SETTLE_DURATION_MS = 220;
     private static final int FLING_DURATION_MS = 450;
-    /** Slower drags stop where the finger stops; faster ones coast. */
-    private static final int FLING_MIN_VELOCITY = 150;
+    /**
+     * A lift-off horizontal speed (dp/s) above this is a flick rather than a
+     * drag, and the only way a slow, steady drag can turn into a flip.
+     */
+    private static final float SWIPE_FLICK_DP_PER_SECOND = 600f;
+    private final float swipeFlickVelocity;
 
     private final Matrix draw = new Matrix();
     private final Matrix from = new Matrix();
@@ -63,9 +67,8 @@ public class ZoomableImageView extends View {
 
     /** Distance the finger travelled during the current gesture. */
     private float dragX, dragY;
-    /** The fitted image stays put until the finger has been held still. */
+    /** The fitted image has already been flipped during this gesture. */
     private boolean swiped;
-    private static final long SWIPE_HOLD_MS = 160;
 
     /** Fired for a horizontal swipe at the fitted scale. */
     public interface OnSwipeListener {
@@ -101,6 +104,8 @@ public class ZoomableImageView extends View {
 
     public ZoomableImageView(Context context, AttributeSet attrs, int defStyleAttr) {
         super(context, attrs, defStyleAttr);
+        swipeFlickVelocity = SWIPE_FLICK_DP_PER_SECOND
+                * getResources().getDisplayMetrics().density;
         scaleDetector = new ScaleGestureDetector(context,
                 new ScaleGestureDetector.SimpleOnScaleGestureListener() {
                     @Override
@@ -145,20 +150,13 @@ public class ZoomableImageView extends View {
                 dragX += -dx;
                 dragY += -dy;
                 // At the fitted size a sideways drag means "other image", not
-                // panning: it fires once the finger has travelled far enough
-                // and has been held at least SWIPE_HOLD_MS, or on a quick
-                // flick (onFling). Panning only starts once zoomed in.
-                if (scale() <= fitWidthScale + 0.01f) {
-                    if (!swiped && Math.abs(dragX) > getWidth() * 0.2f
-                            && Math.abs(dragX) > Math.abs(dragY) * 2f
-                            && e2.getEventTime() - e1.getEventTime() >= SWIPE_HOLD_MS) {
-                        swiped = true;
-                        swipeListener.onSwipe(dragX < 0);
-                    }
-                    return true;
-                }
-                // The image moves exactly as far as the finger (1:1) and
-                // stops when the finger is lifted.
+                // panning: panning would be a no-op there, since the whole
+                // image is visible. The flip waits for the finger to be
+                // lifted (onFling decides from the speed there), so a slow
+                // drag never flips mid-way. Panning starts once zoomed in.
+                if (scale() <= fitWidthScale + 0.01f) return true;
+                // The image moves exactly as far as the finger (1:1); a fast
+                // lift-off adds a short glide.
                 draw.postTranslate(-dx, -dy);
                 constrain();
                 invalidate();
@@ -167,9 +165,11 @@ public class ZoomableImageView extends View {
 
             @Override
             public boolean onFling(MotionEvent e1, MotionEvent e2, float velocityX, float velocityY) {
+                // Only a flick, never a slow drag, can flip the image or start
+                // a glide: a slow drag must stop exactly where the finger was.
+                boolean flick = Math.hypot(velocityX, velocityY) > swipeFlickVelocity;
                 if (scale() <= fitWidthScale + 0.01f) {
-                    // A quick sideways flick at the fitted size.
-                    if (!swiped && swipeListener != null
+                    if (flick && !swiped && swipeListener != null
                             && Math.abs(dragX) > getWidth() * 0.2f
                             && Math.abs(dragX) > Math.abs(dragY) * 2f) {
                         swiped = true;
@@ -177,11 +177,7 @@ public class ZoomableImageView extends View {
                     }
                     return true;
                 }
-                if (Math.abs(velocityX) < FLING_MIN_VELOCITY
-                        && Math.abs(velocityY) < FLING_MIN_VELOCITY) {
-                    return false;
-                }
-                startFling(velocityX, velocityY);
+                if (flick) startFling(velocityX, velocityY);
                 return true;
             }
         });
@@ -427,13 +423,22 @@ public class ZoomableImageView extends View {
     }
 
     /**
-     * Glides in the fling direction, stopping at the image edge; slow drags
-     * never get here (see {@link #FLING_MIN_VELOCITY}).
+     * Glides in the flick direction and stops at the image edge. The distance
+     * decays quickly with a faster-than-linear curve, so the image does not
+     * run far past where the finger left it; a velocity of about 1000 px/s
+     * glides all of {@link #FLING_DURATION_MS}, a flick of several thousand
+     * coasts at most 1.5× the remaining screen.
      */
     private void startFling(float velocityX, float velocityY) {
+        float speed = Math.max(1f, (float) Math.hypot(velocityX, velocityY));
+        // Pixels travelled before stopping: 350 ms of decay at the lift-off
+        // speed, halved, and never more than 1.5 screens.
+        float distance = Math.min(FLING_DURATION_MS / 1000f * speed / 4f,
+                1.5f * Math.max(getWidth(), getHeight()));
+        float dirX = velocityX / speed;
+        float dirY = velocityY / speed;
         Matrix start = new Matrix(draw);
-        draw.postTranslate(velocityX * FLING_DURATION_MS / 2000f,
-                velocityY * FLING_DURATION_MS / 2000f);
+        draw.postTranslate(dirX * distance, dirY * distance);
         constrain();
         Matrix end = new Matrix(draw);
         draw.set(start);
