@@ -41,11 +41,11 @@ import java.util.concurrent.Executors;
 
 /**
  * Photo translation: a camera preview with a draggable/resizable frame.
- * "Capture" grabs the frame currently shown in the preview, crops it to the
- * selection and translates it with the app's current settings. The
- * source/target pairs are shown in the same text-box dialog used by image
- * translation; the camera is unbound while the dialog is open and resumes
- * when it is closed.
+ * "Capture" grabs the frame currently shown in the preview, unbinds the
+ * camera, crops the frame to the selection and translates it with the app's
+ * current settings. The source/target pairs are shown in the same text-box
+ * dialog used by image translation; the camera is unbound from the moment of
+ * capture and resumes when the dialog is closed.
  */
 public class CameraTranslateActivity extends LocalizedActivity implements LifecycleOwner {
     private static final String TAG = "CameraTranslate";
@@ -65,8 +65,8 @@ public class CameraTranslateActivity extends LocalizedActivity implements Lifecy
     private ProcessCameraProvider cameraProvider;
     private boolean cameraBinding;
     private boolean cameraBound;
-    /** The result dialog is up: the camera stays unbound until it closes. */
-    private boolean dialogShowing;
+    /** A capture is in progress or its result is read: the camera is unbound. */
+    private boolean cameraPaused;
     private boolean processing;
 
     private AlertDialog resultDialog;
@@ -118,7 +118,7 @@ public class CameraTranslateActivity extends LocalizedActivity implements Lifecy
         lifecycleRegistry.setCurrentState(Lifecycle.State.RESUMED);
         // Also covers returning from the system settings page after granting
         // the camera permission.
-        if (hasCameraPermission() && !dialogShowing) bindCamera();
+        if (hasCameraPermission() && !cameraPaused) bindCamera();
     }
 
     @Override
@@ -181,7 +181,7 @@ public class CameraTranslateActivity extends LocalizedActivity implements Lifecy
     // --- camera -----------------------------------------------------------
 
     private void bindCamera() {
-        if (cameraBinding || cameraBound || dialogShowing
+        if (cameraBinding || cameraBound || cameraPaused
                 || isFinishing() || isDestroyed()) {
             return;
         }
@@ -201,7 +201,7 @@ public class CameraTranslateActivity extends LocalizedActivity implements Lifecy
                 showCameraError(throwable);
                 return;
             }
-            if (isFinishing() || isDestroyed() || dialogShowing || !hasCameraPermission()
+            if (isFinishing() || isDestroyed() || cameraPaused || !hasCameraPermission()
                     || !lifecycleRegistry.getCurrentState().isAtLeast(Lifecycle.State.STARTED)) {
                 return;
             }
@@ -223,23 +223,24 @@ public class CameraTranslateActivity extends LocalizedActivity implements Lifecy
         }, mainHandler::post);
     }
 
-    /** Unbinds the camera while the translation dialog is open. */
+    /** Unbinds the camera: frame grabbing does not need it, and it should not
+     * keep running while the frame is translated and read. */
     private void pauseCamera() {
-        dialogShowing = true;
+        cameraPaused = true;
         if (cameraProvider != null) cameraProvider.unbindAll();
         cameraBound = false;
         updateCaptureButton();
     }
 
     private void resumeCamera() {
-        dialogShowing = false;
+        cameraPaused = false;
         if (!isFinishing() && !isDestroyed()) bindCamera();
     }
 
     // --- capture / translate ----------------------------------------------
 
     private void capturePhoto() {
-        if (processing || dialogShowing || !cameraBound) return;
+        if (processing || cameraPaused || !cameraBound) return;
         if (previewView.getPreviewStreamState().getValue()
                 != PreviewView.StreamState.STREAMING) {
             onProcessingError(getString(R.string.camera_frame_failed));
@@ -249,19 +250,24 @@ public class CameraTranslateActivity extends LocalizedActivity implements Lifecy
         showProgress(getString(R.string.camera_capturing));
         // Grab the frame that is on screen instead of taking a photo. The
         // bitmap is already rotated and fitted to this view (the preview is
-        // FIT_CENTER), so the selection frame maps directly onto it.
+        // FIT_CENTER), so the selection frame maps directly onto it. Only then
+        // unbind the camera: once the user has captured, the preview freezes
+        // and does not keep running while translating.
         Bitmap frame;
         try {
             frame = previewView.getBitmap();
         } catch (Throwable throwable) {
+            processing = false;
             onProcessingError(getString(R.string.camera_capture_failed,
                     ImageUtils.humanError(throwable)));
             return;
         }
         if (frame == null || frame.getWidth() == 0 || frame.getHeight() == 0) {
+            processing = false;
             onProcessingError(getString(R.string.camera_frame_failed));
             return;
         }
+        pauseCamera();
         cropAndTranslate(frame);
     }
 
@@ -349,8 +355,6 @@ public class CameraTranslateActivity extends LocalizedActivity implements Lifecy
             return;
         }
         boxIndex = 0;
-        // The camera is not needed while the translation is being read.
-        pauseCamera();
         showTextBoxDialog();
     }
 
@@ -452,7 +456,7 @@ public class CameraTranslateActivity extends LocalizedActivity implements Lifecy
     private void updateCaptureButton() {
         boolean streaming = previewView.getPreviewStreamState().getValue()
                 == PreviewView.StreamState.STREAMING;
-        btnCapture.setEnabled(cameraBound && !processing && !dialogShowing && streaming);
+        btnCapture.setEnabled(cameraBound && !processing && streaming);
     }
 
     private void onProcessingError(String message) {
@@ -460,6 +464,8 @@ public class CameraTranslateActivity extends LocalizedActivity implements Lifecy
         processing = false;
         hideProgress();
         ImageUtils.toast(this, message);
+        // No result to read: give the preview back right away.
+        if (resultDialog == null) resumeCamera();
     }
 
     private void showCameraError(Throwable throwable) {
