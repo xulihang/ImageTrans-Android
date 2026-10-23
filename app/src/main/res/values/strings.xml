@@ -113,8 +113,10 @@
     <string name="main_floating_need_permission">截屏翻译需要在其他应用上显示悬浮球，请先允许「显示在其他应用上层」权限。</string>
     <string name="main_floating_need_permission_short">未获得悬浮窗权限，无法开启截屏翻译</string>
     <string name="main_open_settings">去设置</string>
+    <string name="main_floating_need_accessibility">截屏翻译需要在系统设置中开启 ImageTrans 的无障碍服务（用于截屏），开启一次后切换应用也可以随时截屏。请先开启该服务。</string>
     <string name="main_floating_started">截屏翻译已开启</string>
-    <string name="main_floating_cancelled">未授权截屏，截屏翻译未开启</string>
+    <string name="accessibility_service_label">截屏翻译（截屏用）</string>
+    <string name="accessibility_service_description">用于截屏翻译：在悬浮框内截取屏幕并进行翻译。不会读取屏幕上的其他内容。</string>
 
     <!-- UI language -->
     <string name="settings_ui_language">界面语言</string>
@@ -202,7 +204,9 @@
     <string name="folder_translate_cannot_read">无法读取该目录</string>
     <string name="floating_capture_auth_expired">截屏授权已失效，请再点一次翻译</string>
     <string name="floating_no_image">没有收到图像</string>
+    <string name="floating_need_accessibility">请在系统设置中开启 ImageTrans 的无障碍服务（用于截屏）</string>
     <string name="floating_capture_error">截屏失败：%1$s</string>
+    <string name="floating_capture_denied">没有获得截屏授权</string>
     <string name="floating_renderer_timeout">渲染器初始化超时</string>
     <string name="floating_renderer_failed">无法创建渲染器</string>
 

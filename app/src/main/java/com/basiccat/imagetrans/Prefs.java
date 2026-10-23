@@ -1,5 +1,6 @@
 package com.basiccat.imagetrans;
 
+import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
@@ -259,6 +260,23 @@ public final class Prefs {
 
     public static boolean hasOverlayPermission(Context context) {
         return Settings.canDrawOverlays(context);
+    }
+
+    /**
+     * Whether the screenshot accessibility service is turned on in the system
+     * settings. Matches on our package, so it also works before the service
+     * has connected in this process.
+     */
+    public static boolean hasAccessibilityService(Context context) {
+        String expected = new ComponentName(context, ScreenshotAccessibilityService.class)
+                .flattenToString();
+        String enabled = Settings.Secure.getString(context.getContentResolver(),
+                Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES);
+        if (enabled == null) return false;
+        for (String entry : enabled.split(":")) {
+            if (expected.equalsIgnoreCase(entry)) return true;
+        }
+        return false;
     }
 
     // --- background server (browser extension) ----------------------------

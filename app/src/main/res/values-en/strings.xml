@@ -113,8 +113,10 @@
     <string name="main_floating_need_permission">Screenshot translation needs the "Display over other apps" permission. Allow it first.</string>
     <string name="main_floating_need_permission_short">Overlay permission is missing; cannot start screenshot translation</string>
     <string name="main_open_settings">Open Settings</string>
-    <string name="main_floating_started">Screenshot translation turned on</string>
-    <string name="main_floating_cancelled">Screen capture was not authorized; screenshot translation is off</string>
+    <string name="main_floating_need_accessibility">Screenshot translation needs the ImageTrans accessibility service (used only to take screenshots). Turn it on once to capture at any time, even after switching apps. Enable it first.</string>
+    <string name="main_floating_started">Screen capture translation turned on</string>
+    <string name="accessibility_service_label">Screenshot translation (screenshots)</string>
+    <string name="accessibility_service_description">Takes a screenshot inside the floating frame for translation. It does not read anything else on the screen.</string>
 
     <string name="settings_ui_language">UI Language</string>
     <string name="language_chinese">中文</string>
@@ -197,7 +199,9 @@
     <string name="folder_translate_cannot_read">Could not read this folder</string>
     <string name="floating_capture_auth_expired">Screen capture permission expired. Tap Translate again.</string>
     <string name="floating_no_image">No image received</string>
+    <string name="floating_need_accessibility">Turn on the ImageTrans accessibility service (used for screenshots) in system settings</string>
     <string name="floating_capture_error">Screenshot failed: %1$s</string>
+    <string name="floating_capture_denied">Screen capture was not granted</string>
     <string name="floating_renderer_timeout">Renderer initialization timed out</string>
     <string name="floating_renderer_failed">Could not create the renderer</string>
 

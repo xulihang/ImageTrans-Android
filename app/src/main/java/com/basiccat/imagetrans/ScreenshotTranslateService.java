@@ -68,30 +68,40 @@ public class ScreenshotTranslateService extends Service {
 
     static final String EXTRA_RESULT_CODE = "result_code";
     static final String EXTRA_RESULT_DATA = "result_data";
-    static final String EXTRA_ENABLE_ONLY = "enable_only";
 
     private static final int NOTIFICATION_ID = 1;
     private static final String CHANNEL_ID = "screenshot_translate";
     private static final String CHANNEL_BALL_ID = "screenshot_translate_ball";
     private static final String CHANNEL_SERVER_ID = "image_trans_server";
     private static final long NOTIFICATION_HIDE_DELAY_MS = 8000;
+    /** Delay between screenshot attempts while the screen is settling. */
+    private static final long ATTEMPT_DELAY_MS = 150;
+    /** Attempts before giving up (a few seconds at most). */
+    private static final int MAX_CAPTURE_ATTEMPTS = 20;
+    /** A projection grant may be reused while the user is in this app. */
+    private static final long PROJECTION_GRANT_LIFETIME_MS = 5 * 60 * 1000;
 
+    /**
+     * Whether captures go through the accessibility service. Below Android 11
+     * takeScreenshot() does not exist, so those releases fall back to
+     * MediaProjection (one consent, reused while the app stays in front).
+     */
+    private static boolean useAccessibility() {
+        return Build.VERSION.SDK_INT >= Build.VERSION_CODES.R;
+    }
+
+    /** Starts the floating windows with a projection grant (Android 10). */
     public static void show(Context context, int resultCode, Intent resultData) {
-        Intent intent = new Intent(context, ScreenshotTranslateService.class)
+        context.startForegroundService(new Intent(context, ScreenshotTranslateService.class)
                 .setAction(ACTION_SHOW)
                 .putExtra(EXTRA_RESULT_CODE, resultCode)
-                .putExtra(EXTRA_RESULT_DATA, resultData);
-        context.startForegroundService(intent);
+                .putExtra(EXTRA_RESULT_DATA, resultData));
     }
 
     /** Starts the floating ball in the background (frame shown on capture). */
-    public static void enable(Context context, int resultCode, Intent resultData) {
-        Intent intent = new Intent(context, ScreenshotTranslateService.class)
-                .setAction(ACTION_SHOW)
-                .putExtra(EXTRA_RESULT_CODE, resultCode)
-                .putExtra(EXTRA_RESULT_DATA, resultData)
-                .putExtra(EXTRA_ENABLE_ONLY, true);
-        context.startForegroundService(intent);
+    public static void enable(Context context) {
+        context.startForegroundService(new Intent(context, ScreenshotTranslateService.class)
+                .setAction(ACTION_SHOW));
     }
 
     /**
@@ -132,8 +142,6 @@ public class ScreenshotTranslateService extends Service {
     // Selection frame, which also shows the result
     private SelectionOverlay overlay;
     private WindowManager.LayoutParams overlayParams;
-    /** A capture was requested while the permission prompt was open. */
-    private boolean pendingCapture;
     private final List<Box> hitBoxes = new ArrayList<>();
     /** The source/target overlay, if open. */
     private View textBoxDialog;
@@ -143,9 +151,13 @@ public class ScreenshotTranslateService extends Service {
     private boolean targetPressed;
 
     // Capture
-    private MediaProjection mediaProjection = null;
+    /** MediaProjection path only (Android 10). */
+    private MediaProjection mediaProjection;
     private int projectionResultCode;
     private Intent projectionData;
+    private long projectionGrantedAt;
+    /** A capture asked for a grant while the consent prompt was open. */
+    private boolean pendingCapture;
     private int generation;
 
     private final Runnable autoHideNotification = () -> {
@@ -223,8 +235,6 @@ public class ScreenshotTranslateService extends Service {
                 // Closing the windows: the server keeps running.
                 Prefs.setFloatingEnabled(this, false);
                 removeWindows();
-                mediaProjection = null;
-                projectionData = null;
                 serverOnly = true;
                 // A new start command: restart the sticky state again.
                 startForeground(NOTIFICATION_ID, buildServerNotification());
@@ -251,14 +261,13 @@ public class ScreenshotTranslateService extends Service {
             return START_STICKY;
         }
         if (ACTION_SHOW.equals(action)) {
-            projectionResultCode = intent.getIntExtra(EXTRA_RESULT_CODE, 0);
-            projectionData = intent.getParcelableExtra(EXTRA_RESULT_DATA);
-            if (intent.getBooleanExtra(EXTRA_ENABLE_ONLY, false)) {
-                // Enabled from the main screen: ball and frame together.
-                Prefs.setFloatingEnabled(this, true);
-                showWindows();
-                return START_NOT_STICKY;
+            // From ProjectionPermissionActivity (Android 10) or the main screen.
+            if (intent.hasExtra(EXTRA_RESULT_DATA)) {
+                projectionResultCode = intent.getIntExtra(EXTRA_RESULT_CODE, 0);
+                projectionData = intent.getParcelableExtra(EXTRA_RESULT_DATA);
+                projectionGrantedAt = SystemClock.elapsedRealtime();
             }
+            Prefs.setFloatingEnabled(this, true);
             showWindows();
             if (pendingCapture) {
                 pendingCapture = false;
@@ -271,16 +280,13 @@ public class ScreenshotTranslateService extends Service {
             shutdown();
             return START_NOT_STICKY;
         }
-        // Restarted by the system or opened from the notification: there is
-        // no capture token. Keep the turnkey content and show the frame; the
-        // next capture asks for the permission (tapping the frame or the ball
-        // is visible UI, which Android requires for that).
+        // Restarted by the system or opened from the notification: keep the
+        // current content and show the frame.
         enterForeground(getString(R.string.floating_running));
         if (!Prefs.hasOverlayPermission(this)) {
             shutdown();
             return START_NOT_STICKY;
         }
-        if (projectionData == null) mediaProjection = null;
         if (!ballShown) showBall();
         showOverlay();
         return START_NOT_STICKY;
@@ -327,9 +333,9 @@ public class ScreenshotTranslateService extends Service {
     }
 
     /**
-     * Puts the service in the foreground. Android only hands out a screen
-     * projection to a foreground service of type mediaProjection, so this
-     * happens before getMediaProjection() is ever called.
+     * Puts the service in the foreground. With the accessibility service a
+     * capture may wait for it to reconnect, so that path is dataSync; the
+     * MediaProjection path needs the projection type before it gets a grant.
      */
     private void enterForeground(String title) {
         Log.i(TAG, "enterForeground: " + title);
@@ -343,24 +349,20 @@ public class ScreenshotTranslateService extends Service {
                 .setOngoing(true)
                 .build();
         try {
-            if (serverOnly) {
-                // A mediaProjection-type foreground service needs a live
-                // projection; the server alone has none yet.
-                if (Build.VERSION.SDK_INT >= 29) {
-                    startForeground(NOTIFICATION_ID, notification,
-                            ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC);
-                } else {
-                    startForeground(NOTIFICATION_ID, notification);
-                }
-            } else if (Build.VERSION.SDK_INT >= 29) {
-                startForeground(NOTIFICATION_ID, notification,
-                        ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION);
+            int type = ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC;
+            if (!serverOnly && !useAccessibility()) {
+                // A mediaProjection-type foreground service is required to hold
+                // a projection. Never combine it with the projected process,
+                // as some systems refuse a dataSync service that also carries it.
+                type = ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION;
+            }
+            if (Build.VERSION.SDK_INT >= 29) {
+                startForeground(NOTIFICATION_ID, notification, type);
             } else {
                 startForeground(NOTIFICATION_ID, notification);
             }
         } catch (Throwable throwable) {
-            // Without the projection type the system refuses the projection;
-            // say so instead of failing later with a bare NPE.
+            // Say so instead of failing later with a bare NPE.
             Log.e(TAG, "startForeground failed", throwable);
             ImageUtils.toast(this, getString(R.string.floating_need_notifications));
             shutdown();
@@ -725,10 +727,9 @@ public class ScreenshotTranslateService extends Service {
         enterForeground(getString(R.string.floating_translating));
         mainHandler.removeCallbacks(autoHideNotification);
         try {
-            if (!ensureProjection()) {
-                // Permission prompt: the result comes back through ACTION_SHOW.
-                projectionData = null;
-                mainHandler.removeCallbacks(autoHideNotification);
+            if (!useAccessibility() && !ensureProjection()) {
+                // Permission prompt: the result comes back through ACTION_SHOW,
+                // which shows the frame again.
                 return;
             }
         } catch (Throwable throwable) {
@@ -737,114 +738,91 @@ public class ScreenshotTranslateService extends Service {
             return;
         }
         // The overlay's frame is in the window's coordinate space, which
-        // starts below the status bar; the projection is screen-sized.
+        // starts below the status bar; a screenshot or projection is
+        // screen-sized.
         capture(overlay.getFrameRectOnScreen());
     }
 
+    /** Captures the given screen region, then translates it in the frame. */
+    private void capture(Rect region) {
+        final Rect rect = new Rect(region);
+        if (rect.width() <= 0 || rect.height() <= 0) return;
+        if (useAccessibility()) {
+            Log.i(TAG, "capturing " + rect + " mode=accessibility");
+            captureScreen(rect, 1);
+        } else {
+            Log.i(TAG, "capturing " + rect + " mode=projection");
+            captureProjection(rect);
+        }
+    }
+
+    // --- MediaProjection (Android 10) -------------------------------------
+
     /**
-     * Makes sure a live projection exists. The session is kept for as long
-     * as the floating windows run, so only the first capture needs the system
-     * permission prompt; it is recreated only if the user or system ended it.
+     * Starts a capture with a projection (Android 10 only). The consent comes
+     * from ProjectionPermissionActivity and is kept for a while, so repeated
+     * captures only ask once; a consent Intent that already created a
+     * projection is never reused.
+     */
+    private void captureProjection(Rect rect) {
+        if (mediaProjection == null && !ensureProjection()) return;
+        if (mediaProjection == null) return;
+        projectionCapture(rect);
+    }
+
+    /**
+     * Makes sure a live projection exists; starts the consent prompt and
+     * returns false when there is none yet. A consent Intent creates exactly
+     * one projection, so it is dropped once used.
      */
     private boolean ensureProjection() {
         if (mediaProjection != null) return true;
-        if (projectionData == null) {
-            startProjectionPermission();
+        if (projectionData == null || SystemClock.elapsedRealtime() - projectionGrantedAt
+                > PROJECTION_GRANT_LIFETIME_MS) {
+            projectionData = null;
+            projectionResultCode = 0;
+            askProjectionPermission();
             return false;
         }
         enterForeground(getString(R.string.floating_translating));
-        mediaProjection = restartMediaProjection();
+        MediaProjectionManager manager = getSystemService(MediaProjectionManager.class);
+        try {
+            mediaProjection = manager.getMediaProjection(projectionResultCode, projectionData);
+        } catch (RuntimeException e) {
+            Log.w(TAG, "getMediaProjection failed: " + e);
+        }
+        projectionData = null;
         if (mediaProjection == null) {
-            projectionData = null;
-            startProjectionPermission();
+            askProjectionPermission();
             return false;
         }
         mediaProjection.registerCallback(new MediaProjection.Callback() {
             @Override
             public void onStop() {
-                Log.i(TAG, "projection stopped by system");
+                Log.i(TAG, "projection stopped");
                 mediaProjection = null;
-                projectionData = null;
-                projectionResultCode = 0;
             }
         }, mainHandler);
         return true;
     }
 
-    private MediaProjection restartMediaProjection() {
-        if (projectionData == null) return null;
-        MediaProjectionManager manager = getSystemService(MediaProjectionManager.class);
-        MediaProjection created = null;
-        for (int attempt = 0; attempt < 2 && created == null; attempt++) {
-            try {
-                created = manager.getMediaProjection(projectionResultCode, projectionData);
-            } catch (RuntimeException e) {
-                Log.w(TAG, "getMediaProjection failed (attempt " + attempt + "): " + e);
-                // Projection needs a mediaProjection-type foreground service.
-                enterForeground(getString(R.string.floating_translating));
-            }
-        }
-        Log.i(TAG, "mediaProjection " + (created == null ? "unavailable" : "created"));
-        return created;
-    }
-
-    private void startProjectionPermission() {
+    private void askProjectionPermission() {
         pendingCapture = true;
+        mainHandler.removeCallbacks(autoHideNotification);
+        if (overlay != null) overlay.setVisibility(View.GONE);
         Log.i(TAG, "asking for capture permission");
         startActivity(new Intent(this, ProjectionPermissionActivity.class)
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
     }
 
-    /** Captures the given screen region, then translates it in the frame. */
-    private void capture(Rect region) {
-        Rect rect = new Rect(region);
-        if (rect.width() <= 0 || rect.height() <= 0) return;
-        if (mediaProjection == null) {
-            // A capture called directly by the overlay also needs a projection.
-            try {
-                if (!ensureProjection()) return;
-            } catch (Throwable throwable) {
-                onCaptureError(throwable);
-                return;
-            }
-        }
-        Log.i(TAG, "capturing " + rect + " mode=projection");
-        captureProjection(rect);
-    }
-
-    /** Display size including the system bars, i.e. the projection's size. */
-    @SuppressWarnings("deprecation")
-    private DisplayMetrics realDisplayMetrics() {
-        DisplayMetrics metrics = new DisplayMetrics();
-        DisplayManager manager = getSystemService(DisplayManager.class);
-        android.view.Display display = manager.getDisplay(android.view.Display.DEFAULT_DISPLAY);
-        if (display != null) {
-            display.getRealMetrics(metrics);
-        } else {
-            metrics.setTo(getResources().getDisplayMetrics());
-        }
-        return metrics;
-    }
-
     /**
-     * Mirrors the whole screen into an ImageReader (the only size a
-     * projection reliably accepts) and cuts out the requested region in
-     * memory; the full-screen bitmap is recycled immediately.
+     * Mirrors the whole screen into an ImageReader (the only size a projection
+     * reliably accepts) and cuts out the requested region in memory.
      */
-    private void captureProjection(Rect rect) {
-        // The real display size, not the app area: getResources() reports
-        // the area without the system bars here, and a virtual display of
-        // that size would mirror the whole screen scaled down, so the crop
-        // would cover more than the frame and the text would look smaller.
+    private void projectionCapture(Rect rect) {
         final DisplayMetrics metrics = realDisplayMetrics();
         final int screenWidth = metrics.widthPixels;
         final int screenHeight = metrics.heightPixels;
-        // The overlay is hidden (not removed) rather than going invisible:
-        // some systems stop the projection when the app's UI leaves the
-        // screen, and the overlay still counts as visible UI.
-        // Keep the frame's window (a visible UI) but draw nothing briefly, so
-        // the capture does not contain it.
-        overlay.setVisibility(View.INVISIBLE);
         final Rect screen = new Rect(0, 0, screenWidth, screenHeight);
         final Rect crop = new Rect(rect);
         crop.intersect(screen);
@@ -854,8 +832,6 @@ public class ScreenshotTranslateService extends Service {
         }
         final ImageReader reader = ImageReader.newInstance(screenWidth, screenHeight,
                 PixelFormat.RGBA_8888, 2);
-        final int screenHeightFinal = screenHeight;
-        final int screenWidthFinal = screenWidth;
         final VirtualDisplay[] display = {null};
         final Runnable release = () -> {
             if (display[0] != null) {
@@ -865,8 +841,9 @@ public class ScreenshotTranslateService extends Service {
             reader.close();
         };
         final long startedAt = SystemClock.uptimeMillis();
-        // Hide the ball first, then give the screen a moment to redraw
-        // without it before grabbing pixels.
+        // Hide the frame and ball first, then give the screen a moment to
+        // redraw without them before grabbing pixels.
+        overlay.setVisibility(View.INVISIBLE);
         mainHandler.postDelayed(() -> {
             if (mediaProjection == null) {
                 release.run();
@@ -875,7 +852,7 @@ public class ScreenshotTranslateService extends Service {
             }
             try {
                 display[0] = mediaProjection.createVirtualDisplay("screenshot-translate",
-                        screenWidthFinal, screenHeightFinal, metrics.densityDpi,
+                        screenWidth, screenHeight, metrics.densityDpi,
                         DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR,
                         reader.getSurface(), null, mainHandler);
             } catch (Throwable throwable) {
@@ -884,20 +861,15 @@ public class ScreenshotTranslateService extends Service {
                 imageOnCaptured(null, ImageUtils.humanError(throwable));
             }
         }, 300);
-        reader.setOnImageAvailableListener(new ImageReader.OnImageAvailableListener() {
-            @Override
-            public void onImageAvailable(ImageReader r) {
-                // The listener runs on the service's main handler; do the
-                // (slow) decoding off it so the UI stays responsive.
-                r.setOnImageAvailableListener(null, null);
-                executor.execute(() -> decodeScreen(r, crop, screenWidthFinal, screenHeightFinal,
-                        startedAt, release));
-            }
+        reader.setOnImageAvailableListener(r -> {
+            r.setOnImageAvailableListener(null, null);
+            executor.execute(() -> decodeProjectionImage(r, crop, screenWidth, screenHeight,
+                    startedAt, release));
         }, mainHandler);
     }
 
-    private void decodeScreen(ImageReader r, Rect crop, int screenWidthFinal,
-                              int screenHeightFinal, long startedAt, Runnable release) {
+    private void decodeProjectionImage(ImageReader r, Rect crop, int screenWidth,
+                                       int screenHeight, long startedAt, Runnable release) {
         Image image = null;
         String error = null;
         Bitmap bitmap = null;
@@ -911,13 +883,13 @@ public class ScreenshotTranslateService extends Service {
                 ByteBuffer buffer = image.getPlanes()[0].getBuffer();
                 int pixelStride = image.getPlanes()[0].getPixelStride();
                 int rowStride = image.getPlanes()[0].getRowStride();
-                int rowPadding = rowStride - pixelStride * screenWidthFinal;
-                int paddedWidth = screenWidthFinal + rowPadding / pixelStride;
-                Bitmap full = Bitmap.createBitmap(paddedWidth, screenHeightFinal,
+                int paddedWidth = screenWidth + (rowStride - pixelStride * screenWidth)
+                        / pixelStride;
+                Bitmap full = Bitmap.createBitmap(paddedWidth, screenHeight,
                         Bitmap.Config.ARGB_8888);
                 full.copyPixelsFromBuffer(buffer);
                 Bitmap result = full;
-                if (paddedWidth != screenWidthFinal || !crop.isEmpty()) {
+                if (paddedWidth != screenWidth || !crop.isEmpty()) {
                     result = Bitmap.createBitmap(full, crop.left, crop.top,
                             crop.width(), crop.height());
                     if (result != full) full.recycle();
@@ -942,14 +914,81 @@ public class ScreenshotTranslateService extends Service {
         });
     }
 
-    private void imageOnCaptured(Bitmap bitmap, String error) {
+    /** Display size including the system bars, i.e. the projection's size. */
+    @SuppressWarnings("deprecation")
+    private DisplayMetrics realDisplayMetrics() {
+        DisplayMetrics metrics = new DisplayMetrics();
+        DisplayManager manager = getSystemService(DisplayManager.class);
+        android.view.Display display = manager.getDisplay(android.view.Display.DEFAULT_DISPLAY);
+        if (display != null) {
+            display.getRealMetrics(metrics);
+        } else {
+            metrics.setTo(getResources().getDisplayMetrics());
+        }
+        return metrics;
+    }
+
+    /**
+     * Screenshots the whole screen and cuts out the region. Right after a tap
+     * the accessibility service may still be finishing an app switch, so a
+     * failed attempt is repeated for a few seconds before giving up.
+     */
+    private void captureScreen(final Rect crop, final int attempt) {
         if (overlay == null) {
-            // Hidden while the capture ran; the result would have nowhere to go.
+            // Closed while a retry was still scheduled.
+            return;
+        }
+        // Screenshots show what is drawn, the frame included, so hide it.
+        overlay.setVisibility(View.INVISIBLE);
+        if (ScreenshotAccessibilityService.isEnabled()) {
+            ScreenshotAccessibilityService.capture((bitmap, error) -> {
+                if (bitmap != null) {
+                    imageOnCaptured(cropToFrame(bitmap, crop), null);
+                    bitmap.recycle();
+                } else {
+                    failedCapture(attempt, crop, new IllegalStateException(error));
+                }
+            });
+            return;
+        }
+        // Turned on in the settings but not (yet) connected to this process.
+        if (Prefs.hasAccessibilityService(this) && attempt < MAX_CAPTURE_ATTEMPTS) {
+            mainHandler.postDelayed(() -> captureScreen(crop, attempt + 1),
+                    ATTEMPT_DELAY_MS);
+            return;
+        }
+        imageOnCaptured(null, getString(R.string.floating_need_accessibility));
+        restoreWindows();
+    }
+
+    private void failedCapture(int attempt, Rect crop, Throwable throwable) {
+        if (attempt < MAX_CAPTURE_ATTEMPTS) {
+            mainHandler.postDelayed(() -> captureScreen(crop, attempt + 1),
+                    ATTEMPT_DELAY_MS);
+            return;
+        }
+        onCaptureError(throwable);
+    }
+
+    /** Accounts for a screenshot whose size differs from the window's. */
+    private Bitmap cropToFrame(Bitmap screen, Rect crop) {
+        DisplayMetrics metrics = getResources().getDisplayMetrics();
+        float scale = metrics.widthPixels / (float) screen.getWidth();
+        Rect scaled = new Rect(
+                Math.round(crop.left * scale), Math.round(crop.top * scale),
+                Math.round(crop.right * scale), Math.round(crop.bottom * scale));
+        scaled.intersect(0, 0, screen.getWidth(), screen.getHeight());
+        if (scaled.isEmpty()) return null;
+        return Bitmap.createBitmap(screen, scaled.left, scaled.top,
+                scaled.width(), scaled.height());
+    }
+
+    private void imageOnCaptured(Bitmap bitmap, String error) {
+        restoreWindows();
+        if (overlay == null) {
             ImageUtils.recycle(bitmap);
             return;
         }
-        overlay.setVisibility(View.VISIBLE);
-        if (ballShown) ball.setVisibility(View.VISIBLE);
         if (bitmap == null) {
             overlay.showResult(null, error != null
                     ? getString(R.string.floating_capture_failed) + "：" + error
@@ -957,6 +996,12 @@ public class ScreenshotTranslateService extends Service {
             return;
         }
         onCaptured(bitmap);
+    }
+
+    /** Undoes what capture() changed about the windows. */
+    private void restoreWindows() {
+        if (overlay != null) overlay.setVisibility(View.VISIBLE);
+        if (ballShown) ball.setVisibility(View.VISIBLE);
     }
 
     private void onCaptured(Bitmap bitmap) {
@@ -1048,12 +1093,11 @@ public class ScreenshotTranslateService extends Service {
         }
         ImageUtils.toast(this, getString(R.string.floating_capture_error,
                 ImageUtils.humanError(throwable)));
+        restoreWindows();
         if (mediaProjection != null) {
             mediaProjection.stop();
             mediaProjection = null;
         }
-        // The grant is single-use; the next capture asks for a new one.
-        projectionData = null;
     }
 
     private void showTranslated(Bitmap bitmap, List<Box> boxes) {

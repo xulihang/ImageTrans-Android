@@ -11,6 +11,7 @@ import android.media.projection.MediaProjectionManager;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
+import android.provider.Settings;
 import android.view.MotionEvent;
 import android.view.View;
 import android.widget.Button;
@@ -21,6 +22,7 @@ public class MainActivity extends LocalizedActivity {
     private static final int REQUEST_CAPTURE = 1002;
     private static final int REQUEST_OVERLAY = 1003;
     private static final int REQUEST_NOTIFICATIONS = 1004;
+    private static final int REQUEST_ACCESSIBILITY = 1005;
 
     private TextView modeSummary;
     private TextView langSummary;
@@ -209,19 +211,43 @@ public class MainActivity extends LocalizedActivity {
                     REQUEST_NOTIFICATIONS);
             return;
         }
-        requestScreenCapture();
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R
+                && !Prefs.hasAccessibilityService(this)) {
+            // API 30+ captures through the accessibility service: enabled once
+            // here, it can take screenshots at any time, even after the user
+            // switches apps. Older releases use MediaProjection instead, which
+            // asks when the floating windows start.
+            new AlertDialog.Builder(this)
+                    .setMessage(R.string.main_floating_need_accessibility)
+                    .setPositiveButton(R.string.main_open_settings,
+                            (dialog, which) -> startActivityForResult(
+                                    new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS),
+                                    REQUEST_ACCESSIBILITY))
+                    .setNegativeButton(android.R.string.cancel, null)
+                    .show();
+            return;
+        }
+        startFloating();
     }
 
-    private void requestScreenCapture() {
-        MediaProjectionManager manager = getSystemService(MediaProjectionManager.class);
-        startActivityForResult(manager.createScreenCaptureIntent(), REQUEST_CAPTURE);
+    private void startFloating() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
+            // MediaProjection consent has to be asked for from here.
+            MediaProjectionManager manager = getSystemService(MediaProjectionManager.class);
+            startActivityForResult(manager.createScreenCaptureIntent(), REQUEST_CAPTURE);
+            return;
+        }
+        Prefs.setFloatingEnabled(this, true);
+        ScreenshotTranslateService.enable(this);
+        ImageUtils.toast(this, getString(R.string.main_floating_started));
+        updateFloatingButton();
     }
 
     @Override
     public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] results) {
         super.onRequestPermissionsResult(requestCode, permissions, results);
         // The notification is only a convenience; continue either way.
-        if (requestCode == REQUEST_NOTIFICATIONS) requestScreenCapture();
+        if (requestCode == REQUEST_NOTIFICATIONS) startFloating();
     }
 
     private void pickImage() {
@@ -235,15 +261,19 @@ public class MainActivity extends LocalizedActivity {
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
         if (requestCode == REQUEST_CAPTURE) {
-            // The grant is handed straight to the floating service.
             if (resultCode == RESULT_OK && data != null) {
                 Prefs.setFloatingEnabled(this, true);
-                ScreenshotTranslateService.enable(this, resultCode, data);
+                ScreenshotTranslateService.show(this, resultCode, data);
                 ImageUtils.toast(this, getString(R.string.main_floating_started));
             } else {
-                ImageUtils.toast(this, getString(R.string.main_floating_cancelled));
+                ImageUtils.toast(this, getString(R.string.floating_capture_denied));
             }
             updateFloatingButton();
+            return;
+        }
+        if (requestCode == REQUEST_ACCESSIBILITY) {
+            if (!Prefs.hasAccessibilityService(this)) return;
+            startFloating();
             return;
         }
         if (requestCode == REQUEST_OVERLAY) {

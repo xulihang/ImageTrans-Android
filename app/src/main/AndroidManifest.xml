@@ -72,11 +72,27 @@
             android:theme="@android:style/Theme.Translucent.NoTitleBar" />
 
         <!-- Screenshot translation: floating ball + translated result window.
-             Not exported: only the app itself starts it. -->
+             Not exported: only the app itself starts it. mediaProjection is
+             only used below API 30. -->
         <service
             android:name=".ScreenshotTranslateService"
             android:exported="false"
-            android:foregroundServiceType="mediaProjection|dataSync" />
+            android:foregroundServiceType="dataSync|mediaProjection" />
+
+        <!-- Takes the floating windows' screenshots. Enabled by the user in
+             the system accessibility settings; no consent per capture. -->
+        <service
+            android:name=".ScreenshotAccessibilityService"
+            android:exported="true"
+            android:label="@string/accessibility_service_label"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.accessibilityservice"
+                android:resource="@xml/accessibility_service" />
+        </service>
     </application>
 
 </manifest>
