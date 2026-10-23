@@ -24,6 +24,8 @@ import android.os.Looper;
 import android.os.SystemClock;
 import android.util.DisplayMetrics;
 import android.util.Log;
+import android.text.Selection;
+import android.text.Spannable;
 import android.view.ContextThemeWrapper;
 import android.view.Gravity;
 import android.view.LayoutInflater;
@@ -1191,13 +1193,30 @@ public class ScreenshotTranslateService extends Service {
             buttons.addView(next);
         }
         // Tapping a text copies it; long press selects part of it.
-        sourceText.setOnClickListener(v -> copyText(sourceText));
-        targetText.setOnClickListener(v -> copyText(targetText));
+        sourceText.setOnClickListener(v -> {
+            if (!selectedInsteadOfTapping(sourceText)) copyText(sourceText);
+        });
+        targetText.setOnClickListener(v -> {
+            if (!selectedInsteadOfTapping(targetText)) copyText(targetText);
+        });
         touchTracker = (view, event) -> {
-            if (view == targetText && event.getActionMasked() == MotionEvent.ACTION_DOWN) {
+            int action = event.getActionMasked();
+            if (action == MotionEvent.ACTION_UP) {
+                touchView = null;
+                touchDownAt = 0;
+                return;
+            }
+            if (action != MotionEvent.ACTION_DOWN) return;
+            touchView = (TextView) view;
+            touchDownAt = SystemClock.uptimeMillis();
+            if (view == targetText) {
                 targetPressed = true;
-            } else if (view == sourceText && event.getActionMasked() == MotionEvent.ACTION_DOWN) {
+                // One selection at a time: picking text in this field drops
+                // the one in the other.
+                clearSelection(sourceText);
+            } else if (view == sourceText) {
                 targetPressed = false;
+                clearSelection(targetText);
             }
         };
         sourceText.setOnTouchListener(this::trackTouch);
@@ -1263,6 +1282,37 @@ public class ScreenshotTranslateService extends Service {
     }
 
     private TouchTracker touchTracker;
+    /** The text view under the finger, to tell a new selection from a copy tap. */
+    private TextView touchView;
+    private long touchDownAt;
+
+    /** Whether the finger did not merely tap the text (copy) but selected it. */
+    private boolean selectedInsteadOfTapping(TextView view) {
+        if (view != touchView || touchDownAt == 0) return false;
+        return SystemClock.uptimeMillis() - touchDownAt
+                > ViewConfiguration.getLongPressTimeout() / 2;
+    }
+
+    /**
+     * Removes a text view's selection without a touch: setSelection exists on
+     * EditText only, and the framework selection hand grips need a touch
+     * stream. The spans behind getSelectionStart() are removed instead, which
+     * makes hasSelection() false again.
+     */
+    private static void clearSelection(TextView view) {
+        if (view == null || !view.hasSelection()) return;
+        int start = Math.min(view.getSelectionStart(), view.getSelectionEnd());
+        int end = Math.max(view.getSelectionStart(), view.getSelectionEnd());
+        Spannable text = (Spannable) view.getText();
+        text.removeSpan(Selection.getSelectionStart(text));
+        text.removeSpan(Selection.getSelectionEnd(text));
+        Selection.setSelection(text, end, end);
+        Selection.removeSelection(text);
+        if (view.hasSelection()) {
+            // Last resort: a cursor at the end is not a selection either.
+            Selection.setSelection(text, Math.min(start, end));
+        }
+    }
 
     private boolean trackTouch(View view, MotionEvent event) {
         if (touchTracker != null) touchTracker.onTouch(view, event);
@@ -1303,11 +1353,13 @@ public class ScreenshotTranslateService extends Service {
         ImageUtils.toast(this, getString(R.string.copied));
     }
 
-    /** The text being selected: whichever one was last touched. */
+    /**
+     * The text being selected: whichever one was last touched. Only one can
+     * have a selection at a time (see the touch tracker).
+     */
     private TextView selectionView() {
-        if (targetText != null && targetText.hasSelection()) return targetText;
-        if (sourceText != null && sourceText.hasSelection()) return sourceText;
-        return targetPressed ? targetText : sourceText;
+        if (targetPressed && targetText != null) return targetText;
+        return sourceText != null ? sourceText : targetText;
     }
 
     private TextView dialogButton(Context context, int textRes) {
