@@ -38,7 +38,14 @@ public final class Prefs {
 
     public static final String[] LANG_CODES = {
             "zh", "ja", "en", "ko", "fr", "de", "es", "ru",
-            "ar", "pt", "it", "th", "vi", "id", "tr", "pl", "nl", "auto"
+            "ar", "pt", "it", "th", "vi", "id", "tr", "pl", "nl",
+            "ms", "hi", "bn", "ur", "fa", "ta", "te", "mr", "gu", "kn", "ml",
+            "pa", "ne", "si", "he", "sw", "am", "ha", "yo", "zu", "af", "uk",
+            "ro", "el", "cs", "sv", "da", "no", "fi", "hu", "sr", "hr", "sk",
+            "sl", "bg", "mk", "sq", "bs", "lt", "lv", "et", "is", "ga", "cy",
+            "ca", "gl", "eu", "mt", "az", "kk", "uz", "ky", "tg", "mn", "hy",
+            "ka", "km", "lo", "my", "tl", "jv", "su", "yi", "ps", "ku", "sd",
+            "ug", "auto"
     };
 
     private Prefs() {
