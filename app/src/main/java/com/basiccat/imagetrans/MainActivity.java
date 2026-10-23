@@ -23,6 +23,12 @@ public class MainActivity extends LocalizedActivity {
     private static final int REQUEST_OVERLAY = 1003;
     private static final int REQUEST_NOTIFICATIONS = 1004;
     private static final int REQUEST_ACCESSIBILITY = 1005;
+    /**
+     * A capture grant (Android 10) was requested and its result is expected.
+     * The system may still report RESULT_CANCELED to the recreated activity
+     * (e.g. before the grant dialog is shown again); that is not a refusal.
+     */
+    private boolean capturePending;
 
     private TextView modeSummary;
     private TextView langSummary;
@@ -44,6 +50,9 @@ public class MainActivity extends LocalizedActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        if (savedInstanceState != null) {
+            capturePending = savedInstanceState.getBoolean("capture_pending", false);
+        }
         setContentView(R.layout.activity_main);
         applySystemBarInsets();
 
@@ -130,6 +139,12 @@ public class MainActivity extends LocalizedActivity {
                 ? R.string.main_server_state_on : R.string.main_server_state_off);
         serverState.setTextColor(getColor(enabled
                 ? R.color.primary : R.color.text_secondary));
+    }
+
+    @Override
+    protected void onSaveInstanceState(Bundle outState) {
+        super.onSaveInstanceState(outState);
+        outState.putBoolean("capture_pending", capturePending);
     }
 
     @Override
@@ -234,6 +249,7 @@ public class MainActivity extends LocalizedActivity {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
             // MediaProjection consent has to be asked for from here.
             MediaProjectionManager manager = getSystemService(MediaProjectionManager.class);
+            capturePending = true;
             startActivityForResult(manager.createScreenCaptureIntent(), REQUEST_CAPTURE);
             return;
         }
@@ -261,16 +277,13 @@ public class MainActivity extends LocalizedActivity {
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
         if (requestCode == REQUEST_CAPTURE) {
+            boolean asked = capturePending;
+            capturePending = false;
             if (resultCode == RESULT_OK && data != null) {
                 Prefs.setFloatingEnabled(this, true);
                 ScreenshotTranslateService.show(this, resultCode, data);
                 ImageUtils.toast(this, getString(R.string.main_floating_started));
-            } else if (resultCode == RESULT_CANCELED) {
-                // Only a tap on "deny" (or leaving the prompt) cancels; the
-                // system restarts this activity while a grant prompt is open
-                // (e.g. when returning from the "display over other apps"
-                // settings), which arrives here with RESULT_CANCELED but is
-                // not a refusal. Say nothing then: the user can tap again.
+            } else if (asked) {
                 ImageUtils.toast(this, getString(R.string.main_floating_cancelled));
             }
             updateFloatingButton();
