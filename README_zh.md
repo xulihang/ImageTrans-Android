@@ -6,7 +6,7 @@ ImageTrans 的 Android 版本，支持**图片翻译**、**拍照翻译**、**�
 
 ## 下载
 
-[下载 APK v0.1.0](https://github.com/xulihang/ImageTrans-Android/releases/tag/v0.1.0)
+[下载 APK v0.1.1](https://github.com/xulihang/ImageTrans-Android/releases/tag/v0.1.1)
 
 ## 已实现
 

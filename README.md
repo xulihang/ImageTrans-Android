@@ -6,7 +6,7 @@ The Android version of ImageTrans, supporting **image translation**, **camera tr
 
 ## Download
 
-[Download APK v0.1.0](https://github.com/xulihang/ImageTrans-Android/releases/tag/v0.1.0)
+[Download APK v0.1.1](https://github.com/xulihang/ImageTrans-Android/releases/tag/v0.1.1)
 
 ## Features
 
