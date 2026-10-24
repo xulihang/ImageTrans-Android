@@ -174,6 +174,7 @@ public class ScreenshotTranslateService extends Service {
     private View textBoxDialog;
     private LinearLayout selectionBar;
     private TextView sourceText;
+    private TextView textBoxTitle;
     private TextView targetText;
     private boolean targetPressed;
 
@@ -1216,7 +1217,13 @@ public class ScreenshotTranslateService extends Service {
      * window instead.
      */
     private void showTextBoxDialog(final int index) {
-        dismissTextBoxDialog();
+        if (textBoxDialog != null) {
+            // Already open: show the next box's text in the same window
+            // instead of building a new one (the selection would be lost and
+            // the window jump).
+            fillTextBoxDialog(index);
+            return;
+        }
         Context themed = new ContextThemeWrapper(this, R.style.FloatingTheme);
         View content = LayoutInflater.from(themed).inflate(R.layout.dialog_text_box, null);
         TextView sourceText = content.findViewById(R.id.sourceText);
@@ -1243,11 +1250,7 @@ public class ScreenshotTranslateService extends Service {
         panel.addView(content, new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
 
-        Box box = hitBoxes.get(index);
-        sourceText.setText(box.source == null || box.source.trim().isEmpty()
-                ? getString(R.string.text_box_empty) : box.source);
-        targetText.setText(box.target == null || box.target.trim().isEmpty()
-                ? getString(R.string.text_box_empty) : box.target);
+        fillBoxText(sourceText, targetText, index);
 
         LinearLayout buttons = new LinearLayout(themed);
         buttons.setOrientation(LinearLayout.HORIZONTAL);
@@ -1315,6 +1318,7 @@ public class ScreenshotTranslateService extends Service {
         this.selectionBar = selectionBar;
         this.sourceText = sourceText;
         this.targetText = targetText;
+        this.textBoxTitle = title;
 
         DisplayMetrics metrics = getResources().getDisplayMetrics();
         android.widget.ScrollView scroll = new android.widget.ScrollView(themed);
@@ -1453,6 +1457,26 @@ public class ScreenshotTranslateService extends Service {
         context.getTheme().resolveAttribute(android.R.attr.selectableItemBackgroundBorderless,
                 value, true);
         return value.resourceId;
+    }
+
+    /** Shows another box's text in the dialog that is already open. */
+    private void fillTextBoxDialog(int index) {
+        if (index < 0 || index >= hitBoxes.size()) return;
+        if (textBoxTitle != null) {
+            textBoxTitle.setText(getString(R.string.text_box_title, index + 1, hitBoxes.size()));
+        }
+        if (sourceText == null || targetText == null) return;
+        clearSelection(sourceText);
+        clearSelection(targetText);
+        fillBoxText(sourceText, targetText, index);
+    }
+
+    private void fillBoxText(TextView source, TextView target, int index) {
+        Box box = hitBoxes.get(index);
+        source.setText(box.source == null || box.source.trim().isEmpty()
+                ? getString(R.string.text_box_empty) : box.source);
+        target.setText(box.target == null || box.target.trim().isEmpty()
+                ? getString(R.string.text_box_empty) : box.target);
     }
 
     private void dismissTextBoxDialog() {

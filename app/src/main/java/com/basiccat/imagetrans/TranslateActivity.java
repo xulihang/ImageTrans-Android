@@ -4,6 +4,7 @@ import android.Manifest;
 import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.ClipData;
+import android.content.DialogInterface;
 import android.content.ClipboardManager;
 import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
@@ -68,6 +69,11 @@ public class TranslateActivity extends LocalizedActivity {
      * renderer's layout (see {@link #fetchRenderedBoxes}).
      */
     private List<Box> hitBoxes = new ArrayList<>();
+    /** The Source/target dialog, kept open while a box after another shows. */
+    private AlertDialog resultDialog;
+    private TextView dialogSourceText;
+    private TextView dialogTargetText;
+    private int textBoxIndex;
     private List<Box> pendingHitBoxes;
     private boolean fetchingHitBoxes;
     private long lastTapAt;
@@ -534,30 +540,60 @@ public class TranslateActivity extends LocalizedActivity {
     }
 
     private void showTextBoxDialog(final int index) {
+        if (resultDialog != null && resultDialog.isShowing()) {
+            // Already open: show the next box's text in the same dialog.
+            textBoxIndex = index;
+            updateTextBoxDialog();
+            return;
+        }
+        textBoxIndex = index;
         View content = getLayoutInflater().inflate(R.layout.dialog_text_box, null);
-        TextView sourceText = content.findViewById(R.id.sourceText);
-        TextView targetText = content.findViewById(R.id.targetText);
+        dialogSourceText = content.findViewById(R.id.sourceText);
+        dialogTargetText = content.findViewById(R.id.targetText);
         AlertDialog.Builder builder = new AlertDialog.Builder(this)
-                .setTitle(getString(R.string.text_box_title, index + 1, hitBoxes.size()))
                 .setView(content)
                 .setPositiveButton(R.string.action_close, null);
         if (hitBoxes.size() > 1) {
-            // Custom listeners replace the default dismiss-on-click, so the
-            // dialog re-opens on the neighbouring box and stays up.
-            builder.setNegativeButton(R.string.action_previous, (dialog, which) ->
-                    showTextBoxDialog((index - 1 + hitBoxes.size()) % hitBoxes.size()));
-            builder.setNeutralButton(R.string.action_next, (dialog, which) ->
-                    showTextBoxDialog((index + 1) % hitBoxes.size()));
+            // The listeners are set after show(), so a click does not
+            // dismiss the dialog: the next box's text replaces this one's.
+            builder.setNegativeButton(R.string.action_previous, null);
+            builder.setNeutralButton(R.string.action_next, null);
         }
-        Box box = hitBoxes.get(index);
-        sourceText.setText(emptyIfBlank(box.source));
-        targetText.setText(emptyIfBlank(box.target));
         // Selectable (long press to copy part of it); a tap copies all.
-        enableSelection(sourceText);
-        enableSelection(targetText);
-        sourceText.setOnClickListener(this::copyText);
-        targetText.setOnClickListener(this::copyText);
-        builder.show();
+        enableSelection(dialogSourceText);
+        enableSelection(dialogTargetText);
+        dialogSourceText.setOnClickListener(this::copyText);
+        dialogTargetText.setOnClickListener(this::copyText);
+        resultDialog = builder.create();
+        resultDialog.setOnDismissListener(dialog -> {
+            resultDialog = null;
+            dialogSourceText = null;
+            dialogTargetText = null;
+        });
+        resultDialog.show();
+        if (hitBoxes.size() > 1) {
+            resultDialog.getButton(DialogInterface.BUTTON_NEGATIVE)
+                    .setOnClickListener(v -> {
+                        textBoxIndex = (textBoxIndex - 1 + hitBoxes.size()) % hitBoxes.size();
+                        updateTextBoxDialog();
+                    });
+            resultDialog.getButton(DialogInterface.BUTTON_NEUTRAL)
+                    .setOnClickListener(v -> {
+                        textBoxIndex = (textBoxIndex + 1) % hitBoxes.size();
+                        updateTextBoxDialog();
+                    });
+        }
+        updateTextBoxDialog();
+    }
+
+    /** The open dialog's title and texts, for the box at textBoxIndex. */
+    private void updateTextBoxDialog() {
+        if (resultDialog == null || dialogSourceText == null || hitBoxes.isEmpty()) return;
+        int index = Math.max(0, Math.min(textBoxIndex, hitBoxes.size() - 1));
+        Box box = hitBoxes.get(index);
+        resultDialog.setTitle(getString(R.string.text_box_title, index + 1, hitBoxes.size()));
+        dialogSourceText.setText(emptyIfBlank(box.source));
+        dialogTargetText.setText(emptyIfBlank(box.target));
     }
 
     private static void enableSelection(TextView view) {
