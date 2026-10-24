@@ -556,6 +556,9 @@ public class TranslateActivity extends LocalizedActivity {
         dialogSourceText = content.findViewById(R.id.sourceText);
         dialogTargetText = content.findViewById(R.id.targetText);
         AlertDialog.Builder builder = new AlertDialog.Builder(this)
+                // The title is set here too: setTitle() alone before show()
+                // left the title off on some releases.
+                .setTitle(getString(R.string.text_box_title, index + 1, hitBoxes.size()))
                 .setView(content)
                 .setPositiveButton(R.string.action_close, null);
         if (hitBoxes.size() > 1) {

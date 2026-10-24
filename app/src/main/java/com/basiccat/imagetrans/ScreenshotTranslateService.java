@@ -1175,10 +1175,14 @@ public class ScreenshotTranslateService extends Service {
             ImageUtils.recycle(bitmap);
             return;
         }
+        // The boxes with text, in the same order for the taps, the numbering
+        // and the source/target texts; a box without text has nothing to show.
         hitBoxes.clear();
-        hitBoxes.addAll(boxes);
+        for (Box box : boxes) {
+            if (box != null && box.hasText()) hitBoxes.add(box);
+        }
         overlay.showResult(bitmap, null);
-        Log.i(TAG, "translation shown, " + boxes.size() + " boxes");
+        Log.i(TAG, "translation shown, " + hitBoxes.size() + " boxes");
     }
 
     /** A tap on the frame's content. Returns true when it opened a dialog. */
