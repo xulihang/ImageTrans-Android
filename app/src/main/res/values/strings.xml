@@ -72,6 +72,7 @@
     <string name="floating_ball_label">译</string>
     <string name="floating_capture">翻译</string>
     <string name="floating_hide_frame">隐藏选框</string>
+    <string name="floating_close_result">关闭结果</string>
     <string name="floating_show_frame">显示选框</string>
     <string name="floating_running_hint_hidden">点悬浮球翻译原有选框区域</string>
     <string name="floating_need_frame">还没有选框区域，请先显示选框并调整</string>

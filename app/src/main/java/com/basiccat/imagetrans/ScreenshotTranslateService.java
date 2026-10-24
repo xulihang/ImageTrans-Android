@@ -163,6 +163,8 @@ public class ScreenshotTranslateService extends Service {
     private LinearLayout ball;
     /** The ball's menu entry for the frame (see setFrameHidden). */
     private TextView frameItem;
+    /** The ball's menu entry that closes a result (see closeResult). */
+    private TextView resultItem;
     /** The frame is off the screen; its place is remembered instead. */
     private boolean frameHidden;
     /** The window that shows a result while the frame is hidden. */
@@ -765,6 +767,20 @@ public class ScreenshotTranslateService extends Service {
         row.addView(captureItem, new LinearLayout.LayoutParams(
                 android.view.ViewGroup.LayoutParams.WRAP_CONTENT, dp(52)));
 
+        resultItem = new TextView(themed);
+        resultItem.setText(R.string.floating_close_result);
+        resultItem.setTextColor(getColor(R.color.text_secondary));
+        resultItem.setTextSize(14);
+        resultItem.setGravity(Gravity.CENTER);
+        resultItem.setPadding(dp(12), 0, dp(12), 0);
+        resultItem.setOnClickListener(v -> {
+            Log.i(TAG, "close result tapped");
+            setBallExpanded(false);
+            closeResult();
+        });
+        row.addView(resultItem, new LinearLayout.LayoutParams(
+                android.view.ViewGroup.LayoutParams.WRAP_CONTENT, dp(52)));
+
         frameItem = new TextView(themed);
         frameItem.setText(R.string.floating_hide_frame);
         frameItem.setTextColor(getColor(R.color.text_secondary));
@@ -870,10 +886,33 @@ public class ScreenshotTranslateService extends Service {
         mainHandler.removeCallbacks(collapseBall);
         if (!ballShown) return;
         ballExpanded = expanded;
+        boolean hasResult = hasResult();
         for (int i = 1; i < ball.getChildCount(); i++) {
-            ball.getChildAt(i).setVisibility(expanded ? View.VISIBLE : View.GONE);
+            View item = ball.getChildAt(i);
+            // Closing a result is offered only while there is one.
+            boolean relevant = item != resultItem || hasResult;
+            item.setVisibility(expanded && relevant ? View.VISIBLE : View.GONE);
         }
         if (expanded) mainHandler.postDelayed(collapseBall, 5000);
+    }
+
+    /** Whether a result is on screen, in the frame or in its own window. */
+    private boolean hasResult() {
+        return overlay != null && overlay.hasResult();
+    }
+
+    /**
+     * Closes what a translation left on screen. A frame's result is cleared
+     * in place (the frame stays, ready for the next one); a result shown
+     * without the frame is taken away, leaving only the ball.
+     */
+    private void closeResult() {
+        if (overlay != null && overlay.hasResult()) {
+            overlay.clearTranslation();
+        }
+        dismissResultView();
+        hitBoxes.clear();
+        if (ballShown) ball.setVisibility(View.VISIBLE);
     }
 
     private void clampBall() {
