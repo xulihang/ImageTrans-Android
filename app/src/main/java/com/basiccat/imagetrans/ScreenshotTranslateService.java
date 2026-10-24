@@ -32,7 +32,9 @@ import android.view.LayoutInflater;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewConfiguration;
+import android.view.WindowInsets;
 import android.view.WindowManager;
+import android.view.WindowMetrics;
 import android.webkit.WebView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
@@ -928,6 +930,9 @@ public class ScreenshotTranslateService extends Service {
         final Rect screen = new Rect(0, 0, screenWidth, screenHeight);
         final Rect crop = new Rect(rect);
         crop.intersect(screen);
+        // A full screen is the app area: the status bar above it is left
+        // out. (An area ending at the screen's top edge is left alone.)
+        if (rect.equals(screen)) crop.top = statusBarHeight();
         if (crop.isEmpty()) {
             imageOnCaptured(null, null);
             return;
@@ -1019,6 +1024,24 @@ public class ScreenshotTranslateService extends Service {
             release.run();
             imageOnCaptured(result, message);
         });
+    }
+
+    /**
+     * The status bar's height, 0 when it is out of the picture. Measured on
+     * the projection's own window, whose insets say what is there.
+     */
+    private int statusBarHeight() {
+        if (windowManager != null && Build.VERSION.SDK_INT >= 30) {
+            WindowMetrics metrics = windowManager.getCurrentWindowMetrics();
+            WindowInsets insets = metrics.getWindowInsets();
+            WindowInsets bars = insets.inset(insets.getInsets(WindowInsets.Type.systemBars()));
+            if (bars.isVisible(WindowInsets.Type.statusBars())) {
+                return insets.getInsets(WindowInsets.Type.statusBars()).top;
+            }
+            return 0;
+        }
+        int id = getResources().getIdentifier("status_bar_height", "dimen", "android");
+        return id > 0 ? getResources().getDimensionPixelSize(id) : 0;
     }
 
     /** Display size including the system bars, i.e. the projection's size. */
