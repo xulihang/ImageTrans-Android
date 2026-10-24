@@ -52,7 +52,7 @@ final class PanelMerger {
         logLines("recognized", items);
         Layout layout = Layout.ofLines(items);
         List<Box> blocks = merge(items, layout, sourceLang, xGap, yGap, panelsOut);
-        logPanels(layout, items);
+        logPanels(layout, items, new ArrayList<Box>());
         logLines("merged", blocks);
         return blocks;
     }
@@ -72,7 +72,7 @@ final class PanelMerger {
         Layout layout = panelRects == null || panelRects.isEmpty()
                 ? Layout.ofLines(items) : Layout.ofPanels(items, panelRects);
         List<Box> blocks = merge(items, layout, sourceLang, xGap, yGap, null);
-        logPanels(layout, items);
+        logPanels(layout, items, panelRects == null ? new ArrayList<Box>() : panelRects);
         logLines("merged", blocks);
         return blocks;
     }
@@ -572,8 +572,10 @@ final class PanelMerger {
         boolean samePanel(Box a, Box b) {
             Integer pa = panelOf.get(a);
             Integer pb = panelOf.get(b);
-            // A line outside the drawn panels joins a neighbor unless a panel
-            // was drawn between them (e.g. a box around the title only).
+            // A line that falls in no panel (a caption) joins a neighbor;
+            // a line outside the drawn panels joins one unless a panel was
+            // drawn between them (e.g. a box around the title only).
+            if (pa == null && pb == null) return true;
             if (pa == null || pb == null) {
                 return !separated(panels.get(pa == null ? pb : pa), a, b);
             }
@@ -855,7 +857,7 @@ final class PanelMerger {
     }
 
     /** Logs which panel each recognized line was put in. */
-    private static void logPanels(Layout layout, List<Box> items) {
+    private static void logPanels(Layout layout, List<Box> items, List<Box> panelRects) {
         StringBuilder text = new StringBuilder("panels:");
         int index = 0;
         for (List<Box> panel : layout.partition(items, false)) {
@@ -864,6 +866,14 @@ final class PanelMerger {
                 text.append('[').append(String.format(Locale.US, "%.0f,%.0f",
                         box.x, box.y)).append("] ");
             }
+        }
+        // The panels themselves (drawn ones: their boxes), so a line that
+        // went to the wrong panel can be checked.
+        int index2 = 0;
+        for (Box rect : panelRects) {
+            text.append(NEWLINE).append(String.format(Locale.US,
+                    "  rect %d: %.0f,%.0f %.0fx%.0f", index2++, rect.x, rect.y,
+                    rect.width, rect.height));
         }
         Log.d(TAG, text.toString());
     }

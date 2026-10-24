@@ -246,7 +246,12 @@ public class TranslateActivity extends LocalizedActivity {
         // translating/rendering, grouped by panels (comics: one speech
         // balloon each; the panels are estimated from the lines).
         status(getString(R.string.translate_status_merge));
-        boxes = PanelMerger.merge(boxes, sourceLang, 15, 15, null);
+        // Japanese uses YOLO, whose manga class gives the balloons directly;
+        // otherwise the panels are estimated from the lines.
+        List<Box> balloons = engine.getLastBalloons();
+        boxes = balloons.isEmpty()
+                ? PanelMerger.merge(boxes, sourceLang, 15, 15, null)
+                : PanelMerger.merge(boxes, balloons, sourceLang, 15, 15);
 
         if (Prefs.MODE_OPENAI.equals(mode) || Prefs.MODE_MYMEMORY.equals(mode)) {
             boolean mymemory = Prefs.MODE_MYMEMORY.equals(mode);

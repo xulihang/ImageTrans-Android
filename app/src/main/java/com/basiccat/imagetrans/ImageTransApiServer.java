@@ -419,8 +419,12 @@ public final class ImageTransApiServer {
             // Without panels the lines are already the final boxes.
             return lines;
         }
-        return PanelMerger.merge(ImageUtils.detectOnly(context, bitmap, sourceLang),
-                sourceLang, 15, 15, null);
+        OcrEngine engine = OcrEngine.getInstance(context);
+        List<Box> recognized = engine.recognize(bitmap, sourceLang, message -> { });
+        List<Box> balloons = engine.getLastBalloons();
+        return balloons.isEmpty()
+                ? PanelMerger.merge(recognized, sourceLang, 15, 15, null)
+                : PanelMerger.merge(recognized, balloons, sourceLang, 15, 15);
     }
 
     /** Boxes from a JSON array sent in the form (X/Y or x/y), or null. */
