@@ -157,17 +157,42 @@ public class SelectionOverlay extends View {
     }
 
     void show(Rect initialFrame) {
-        params.width = -1;
-        params.height = -1;
-        params.x = -1;
-        params.y = -1;
         frame.set(initialFrame);
+        // The window at the frame's own place from its first frame. Changed
+        // right after addView() it would be shown once as a whole screen
+        // (and the system animates that), then jump to the frame.
+        placeAtFrame();
         setVisibility(View.VISIBLE);
-        // Added before the flag, so a failed addView() does not leave the
-        // window manager updates below thinking the view is attached.
+        attach();
+    }
+
+    /**
+     * Gives the view's window params the frame's place, from the screen size
+     * already known (the display's).
+     */
+    private void placeAtFrame() {
+        android.util.DisplayMetrics metrics = getResources().getDisplayMetrics();
+        if (screenWidth == 0) {
+            screenWidth = metrics.widthPixels;
+            screenHeight = metrics.heightPixels;
+        }
+        Rect staged = new Rect(frame);
+        int left = clampInt(staged.left - sideInset(), 0, screenWidth);
+        int top = clampInt(staged.top - topInset(), 0, screenHeight);
+        params.x = left;
+        params.y = top;
+        params.width = Math.max(1, Math.min(screenWidth - left, frameWidth(staged)));
+        params.height = Math.max(1, Math.min(screenHeight - top, frameHeight(staged)));
+        contentOffsetX = left;
+        contentOffsetY = top;
+    }
+
+    /** Adds the window, at once and without the system's animation. */
+    private void attach() {
+        params.windowAnimations = 0;
         windowManager.addView(this, params);
         attached = true;
-        // Reopen the frame's touch area once the window knows the screen size.
+        // The touch area once the window knows the screen size.
         post(this::updateTouchableArea);
     }
 
