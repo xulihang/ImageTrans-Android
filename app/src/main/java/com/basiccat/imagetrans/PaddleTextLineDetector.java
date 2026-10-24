@@ -63,8 +63,28 @@ final class PaddleTextLineDetector extends NativeInference {
         Log.i(TAG, "YOLO initialized in " + (System.currentTimeMillis() - start) + " ms");
     }
 
+    /** The balloons (manga class 5, no text) and the text lines. */
+    static final class Result {
+        final List<float[]> lines;
+        final List<float[]> balloons;
+
+        Result(List<float[]> lines, List<float[]> balloons) {
+            this.lines = lines;
+            this.balloons = balloons;
+        }
+    }
+
     /** Detects text-line regions as [x1, y1, x2, y2] boxes in bitmap coordinates. */
     synchronized List<float[]> detect(Bitmap bitmap) throws Exception {
+        return detectAll(bitmap).lines;
+    }
+
+    /**
+     * The text lines and, separately, the balloons the model knows (the manga
+     * class 5 the extension drops): a balloon's box is a panel the lines in it
+     * belong to, better than estimating it from the lines.
+     */
+    synchronized Result detectAll(Bitmap bitmap) throws Exception {
         initialize();
         long start = System.currentTimeMillis();
 
@@ -105,7 +125,9 @@ final class PaddleTextLineDetector extends NativeInference {
         // The output is [1][4 + classes][anchors]: the batch dimension is
         // dropped for the single-image case.
         float[][][] raw = (float[][][]) session.run(input);
-        List<float[]> boxes = postprocess(raw[0], ratio, dw, dh, srcWidth, srcHeight);
+        List<List<float[]>> byKind = postprocess(raw[0], ratio, dw, dh, srcWidth, srcHeight);
+        List<float[]> boxes = byKind.get(0);
+        List<float[]> balloons = byKind.get(1);
         // Reading order: vertical lines right to left, then top to bottom.
         // Within a column (same x band) keep top to bottom; columns themselves
         // run right to left. Sorting only by (y, -x) would interleave columns.
@@ -121,8 +143,8 @@ final class PaddleTextLineDetector extends NativeInference {
             }
         });
         Log.i(TAG, "YOLO finished in " + (System.currentTimeMillis() - start)
-                + " ms, boxes=" + boxes.size());
-        return boxes;
+                + " ms, boxes=" + boxes.size() + ", balloons=" + balloons.size());
+        return new Result(boxes, balloons);
     }
 
     private static float[][] reshape(float[] plane, int size) {
@@ -134,14 +156,15 @@ final class PaddleTextLineDetector extends NativeInference {
     }
 
     /** output is [dims, anchors] with dims = 4 + classes. */
-    private static List<float[]> postprocess(float[][] output, float ratio, float dw, float dh,
-                                             int srcWidth, int srcHeight) {
+    private static List<List<float[]>> postprocess(float[][] output, float ratio, float dw,
+                                                   float dh, int srcWidth, int srcHeight) {
         int dims = output.length;
         int anchors = output[0].length;
         int numClasses = dims - 4;
 
         // Same as the extension's postprocessYOLO: keep the best class per
-        // anchor, drop the manga class (5), then NMS per class.
+        // anchor, then NMS per class; the manga class (5) is not text but a
+        // balloon's box.
         Map<Integer, List<float[]>> byClass = new LinkedHashMap<>();
         for (int i = 0; i < anchors; i++) {
             int bestClass = -1;
@@ -154,7 +177,6 @@ final class PaddleTextLineDetector extends NativeInference {
                 }
             }
             if (bestScore < CONF_THRESHOLD) continue;
-            if (bestClass == MANGA_CLASS) continue;
 
             float cx = output[0][i];
             float cy = output[1][i];
@@ -165,24 +187,27 @@ final class PaddleTextLineDetector extends NativeInference {
             byClass.computeIfAbsent(bestClass, k -> new ArrayList<>()).add(box);
         }
 
-        List<float[]> detections = new ArrayList<>();
-        for (List<float[]> classBoxes : byClass.values()) {
-            detections.addAll(nonMaxSuppression(classBoxes, NMS_THRESHOLD));
+        List<float[]> lines = new ArrayList<>();
+        List<float[]> balloons = new ArrayList<>();
+        for (Map.Entry<Integer, List<float[]>> entry : byClass.entrySet()) {
+            boolean manga = entry.getKey() == MANGA_CLASS;
+            for (float[] box : nonMaxSuppression(entry.getValue(), NMS_THRESHOLD)) {
+                float[] b = {
+                        Math.max(0, Math.min(srcWidth - 1, Math.round((box[0] - dw) / ratio))),
+                        Math.max(0, Math.min(srcHeight - 1, Math.round((box[1] - dh) / ratio))),
+                        Math.max(0, Math.min(srcWidth - 1, Math.round((box[2] - dw) / ratio))),
+                        Math.max(0, Math.min(srcHeight - 1, Math.round((box[3] - dh) / ratio)))
+                };
+                // doOCRYolo() skips regions smaller than 10 px in either
+                // direction.
+                if (b[2] - b[0] < 10 || b[3] - b[1] < 10) continue;
+                (manga ? balloons : lines).add(b);
+            }
         }
-
-        List<float[]> scaled = new ArrayList<>(detections.size());
-        for (float[] box : detections) {
-            float[] b = {
-                    Math.max(0, Math.min(srcWidth - 1, Math.round((box[0] - dw) / ratio))),
-                    Math.max(0, Math.min(srcHeight - 1, Math.round((box[1] - dh) / ratio))),
-                    Math.max(0, Math.min(srcWidth - 1, Math.round((box[2] - dw) / ratio))),
-                    Math.max(0, Math.min(srcHeight - 1, Math.round((box[3] - dh) / ratio)))
-            };
-            // doOCRYolo() skips regions smaller than 10 px in either direction.
-            if (b[2] - b[0] < 10 || b[3] - b[1] < 10) continue;
-            scaled.add(b);
-        }
-        return scaled;
+        List<List<float[]>> result = new ArrayList<>();
+        result.add(lines);
+        result.add(balloons);
+        return result;
     }
 
     private static List<float[]> nonMaxSuppression(List<float[]> boxes, float iouThreshold) {

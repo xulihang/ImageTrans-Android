@@ -558,8 +558,10 @@ final class PanelMerger {
                 for (int i = 0; i < byArea.size(); i++) {
                     Box panel = byArea.get(i);
                     // A line may stick out of its panel a little (the text
-                    // runs to the balloon's edge).
-                    if (!contains(panel, line, AROUND_LINE)) continue;
+                    // runs to the balloon's edge). A detected balloon's box
+                    // has no margin for its outline, so half a line is allowed
+                    // there.
+                    if (!contains(panel, line, AROUND_CENTER)) continue;
                     panelOf.put(line, panels.indexOf(panel));
                     break;
                 }
@@ -581,6 +583,8 @@ final class PanelMerger {
 
     /** Slack in pixels when deciding which panel a line belongs to. */
     private static final double AROUND_LINE = 1;
+    /** Slack for a panel detected from the image (a balloon's box): half a line. */
+    private static final double AROUND_CENTER = 18;
 
     private static boolean contains(Box outer, Box inner, double slack) {
         return inner.left() >= outer.left() - slack && inner.top() >= outer.top() - slack

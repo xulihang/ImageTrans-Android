@@ -363,9 +363,15 @@ public final class ImageUtils {
             boxes = translateOnServer(context, bitmap);
         } else {
             String sourceLang = Prefs.getSourceLang(context);
-            boxes = OcrEngine.getInstance(context).recognize(bitmap, sourceLang, message -> { });
+            OcrEngine engine = OcrEngine.getInstance(context);
+            boxes = engine.recognize(bitmap, sourceLang, message -> { });
             if (boxes.isEmpty()) throw new Exception(context.getString(R.string.error_no_text));
-            boxes = PanelMerger.merge(boxes, sourceLang, 15, 15, null);
+            // The YOLO detector's balloons (Japanese) are the panels; without
+            // them they are estimated from the lines.
+            List<Box> balloons = engine.getLastBalloons();
+            boxes = balloons.isEmpty()
+                    ? PanelMerger.merge(boxes, sourceLang, 15, 15, null)
+                    : PanelMerger.merge(boxes, balloons, sourceLang, 15, 15);
             if (Prefs.MODE_OPENAI.equals(mode) || Prefs.MODE_MYMEMORY.equals(mode)) {
                 List<String> texts = new ArrayList<>();
                 for (Box box : boxes) texts.add(box.source);
@@ -392,11 +398,14 @@ public final class ImageUtils {
      */
     private static List<Box> translateOnServer(Context context, Bitmap bitmap) throws Exception {
         String sourceLang = Prefs.getSourceLang(context);
-        List<Box> lines = OcrEngine.getInstance(context).recognize(bitmap, sourceLang,
-                message -> { });
+        OcrEngine engine = OcrEngine.getInstance(context);
+        List<Box> lines = engine.recognize(bitmap, sourceLang, message -> { });
         if (lines.isEmpty()) throw new Exception(context.getString(R.string.error_no_text));
+        List<Box> balloons = engine.getLastBalloons();
         JSONArray panels = new JSONArray();
-        List<Box> merged = PanelMerger.merge(lines, sourceLang, 15, 15, panels);
+        List<Box> merged = balloons.isEmpty()
+                ? PanelMerger.merge(lines, sourceLang, 15, 15, panels)
+                : PanelMerger.merge(lines, balloons, sourceLang, 15, 15);
         JSONArray boxes = new JSONArray();
         for (Box box : merged) {
             JSONObject item = box.toJson();

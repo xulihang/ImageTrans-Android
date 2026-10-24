@@ -156,9 +156,22 @@ public final class OcrEngine extends NativeInference {
         return recognize(bitmap, sourceLang, null);
     }
 
+    /** The balloons the YOLO detector found for the last recognize() call. */
+    private List<Box> lastBalloons = new ArrayList<>();
+
+    /**
+     * The balloons found with the last lines, when the YOLO detector was
+     * used (Japanese): they tell PanelMerger which lines share a balloon
+     * instead of estimating it. Empty otherwise.
+     */
+    public List<Box> getLastBalloons() {
+        return lastBalloons;
+    }
+
     /** Same as {@link #recognize(Bitmap, String)}, reporting download progress. */
     public List<Box> recognize(Bitmap bitmap, String sourceLang,
                                RemoteOcrModels.ProgressListener listener) throws Exception {
+        lastBalloons = new ArrayList<>();
         try {
             if (ImageUtils.isTall(bitmap.getWidth(), bitmap.getHeight())) {
                 return recognizeTall(bitmap, sourceLang, listener);
@@ -231,13 +244,20 @@ public final class OcrEngine extends NativeInference {
     /** YOLO text-line detection, then PP-OCRv6 recognition of every line. */
     private List<Box> detectWithYolo(Bitmap bitmap) throws Exception {
         long start = System.currentTimeMillis();
-        List<float[]> regions = textLineDetector().detect(bitmap);
+        PaddleTextLineDetector.Result detection = textLineDetector().detectAll(bitmap);
+        List<float[]> regions = detection.lines;
+        List<Box> balloons = new ArrayList<>();
+        for (float[] b : detection.balloons) {
+            balloons.add(new Box(b[0], b[1], b[2] - b[0], b[3] - b[1], ""));
+        }
+        lastBalloons = balloons;
         List<Box> lines = new ArrayList<>();
         for (PaddleRecognizer.RecognizedLine line : getRecognizer().recognize(bitmap, regions)) {
             lines.add(new Box(line.x, line.y, line.width, line.height, line.text));
         }
         Log.i(TAG, "YOLO OCR finished in " + (System.currentTimeMillis() - start)
-                + " ms, regions=" + regions.size() + ", lines=" + lines.size());
+                + " ms, regions=" + regions.size() + ", lines=" + lines.size()
+                + ", balloons=" + balloons.size());
         return lines;
     }
 
