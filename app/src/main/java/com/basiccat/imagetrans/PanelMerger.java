@@ -1,9 +1,12 @@
 package com.basiccat.imagetrans;
 
+import android.util.Log;
+
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.IdentityHashMap;
+import java.util.Locale;
 import java.util.List;
 import java.util.Map;
 
@@ -24,6 +27,8 @@ import java.util.Map;
  * left (columns). The blocks follow the reading order of the lines.
  */
 final class PanelMerger {
+    private static final String TAG = "PanelMerger";
+    private static final String NEWLINE = System.lineSeparator();
     /** Default gaps between two lines of one block, for callers that pass 0. */
     private static final double DEFAULT_X_GAP = 15;
     private static final double DEFAULT_Y_GAP = 15;
@@ -41,7 +46,12 @@ final class PanelMerger {
         if (items == null || items.isEmpty()) return new ArrayList<>();
         if (xGap <= 0) xGap = DEFAULT_X_GAP;
         if (yGap <= 0) yGap = DEFAULT_Y_GAP;
-        return merge(items, Layout.ofLines(items), sourceLang, xGap, yGap, panelsOut);
+        logLines("recognized", items);
+        Layout layout = Layout.ofLines(items);
+        List<Box> blocks = merge(items, layout, sourceLang, xGap, yGap, panelsOut);
+        logPanels(layout, items);
+        logLines("merged", blocks);
+        return blocks;
     }
 
     /**
@@ -55,9 +65,13 @@ final class PanelMerger {
         if (items == null || items.isEmpty()) return new ArrayList<>();
         if (xGap <= 0) xGap = DEFAULT_X_GAP;
         if (yGap <= 0) yGap = DEFAULT_Y_GAP;
+        logLines("recognized", items);
         Layout layout = panelRects == null || panelRects.isEmpty()
                 ? Layout.ofLines(items) : Layout.ofPanels(items, panelRects);
-        return merge(items, layout, sourceLang, xGap, yGap, null);
+        List<Box> blocks = merge(items, layout, sourceLang, xGap, yGap, null);
+        logPanels(layout, items);
+        logLines("merged", blocks);
+        return blocks;
     }
 
     private static List<Box> merge(List<Box> items, Layout layout, String sourceLang,
@@ -621,6 +635,35 @@ final class PanelMerger {
         double dx = Math.abs(x - cx);
         double dy = Math.abs(y - cy);
         return Math.hypot(dx, dy) + (Math.max(dx, dy) > penalty ? penalty : 0);
+    }
+
+    // --- logging ----------------------------------------------------------
+
+    /**
+     * Logs the recognized lines and the merged blocks, so a wrong grouping
+     * on a device can be traced from the log.
+     */
+    private static void logLines(String what, List<Box> boxes) {
+        StringBuilder text = new StringBuilder(what).append(": ").append(boxes.size()).append(" boxes");
+        for (Box box : boxes) {
+            text.append(NEWLINE).append(String.format(Locale.US, "  %6.1f,%6.1f %6.1fx%5.1f %s",
+                    box.x, box.y, box.width, box.height, box.source));
+        }
+        Log.d(TAG, text.toString());
+    }
+
+    /** Logs which panel each recognized line was put in. */
+    private static void logPanels(Layout layout, List<Box> items) {
+        StringBuilder text = new StringBuilder("panels:");
+        int index = 0;
+        for (List<Box> panel : layout.partition(items, false)) {
+            text.append(NEWLINE).append("  panel ").append(index++).append(": ");
+            for (Box box : panel) {
+                text.append('[').append(String.format(Locale.US, "%.0f,%.0f",
+                        box.x, box.y)).append("] ");
+            }
+        }
+        Log.d(TAG, text.toString());
     }
 
     // --- geometry ---------------------------------------------------------
