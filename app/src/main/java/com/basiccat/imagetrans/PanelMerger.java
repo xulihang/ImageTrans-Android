@@ -19,7 +19,8 @@ import java.util.Map;
  *
  * - the panels ImageTrans detected or the user drew, sent along with the
  *   lines; a line goes to the smallest panel holding it;
- * - without them, an estimate from the lines: k-means with a gap penalty.
+ * - without them, the lines are grouped by alignment and proximity (see
+ *   cluster()), the rules worked out in experiments/balloon_clustering.
  *
  * Inside a panel, horizontal text merges left to right first (fragments on
  * one line) and then top to bottom (lines into paragraphs); vertical text
@@ -93,21 +94,26 @@ final class PanelMerger {
         if (panelsOut != null && layout instanceof Estimated) {
             ((Estimated) layout).toJson(items, panelsOut);
         }
-        // Blocks keep their panel's reading order (the order the lines are
-        // stored in), with the lines of the other panels filled in after
-        // them: see Layout.partition().
-        // The blocks follow the .itp's order where its lines (boxes) are in
-        // reading order: the order the panels are first reached. Otherwise
-        // they are sorted by position, as the merge produces them.
+        // Panel by panel, the blocks in the panels' reading order. A panel
+        // whose lines are stored in reading order keeps that order (ImageTrans
+        // numbers the lines when it detects the panels); the others are
+        // sorted: top to bottom, and on a row right to left for vertical text
+        // (the columns of a manga run right to left), left to right otherwise.
         List<Box> blocks = new ArrayList<>();
-        for (List<Box> panel : layout.partition(items, vertical)) {
+        for (List<Box> panel : layout.partition(items, true)) {
             List<Box> ofPanel = mergePanel(panel, sourceLang, vertical, rightToLeft, xGap, yGap);
             if (!inReadingOrder(panel)) {
                 Collections.sort(ofPanel, new Comparator<Box>() {
                     @Override
                     public int compare(Box a, Box b) {
-                        return vertical ? Double.compare(b.right(), a.right())
-                                : Double.compare(a.top(), b.top());
+                        if (vertical) {
+                            double tolerance = Math.max(Math.abs(a.height), Math.abs(b.height)) * 0.5;
+                            if (Math.abs(a.top() - b.top()) > tolerance) {
+                                return Double.compare(a.top(), b.top());
+                            }
+                            return Double.compare(b.right(), a.right());
+                        }
+                        return Double.compare(a.top(), b.top());
                     }
                 });
             }
@@ -433,14 +439,9 @@ final class PanelMerger {
 
         /**
          * The lines grouped by panel (clusters of neighboring lines), each
-         * group in reading order: the boxes' own order (ImageTrans numbers
-         * the panels and their lines), or, for flat coordinate order, down
-         * the page and across. The groups come out in the reading order of
-         * their first line.
-         *
-         * For vertical text a group is a whole column (a column is what a
-         * bubble holds): its fragments in a row are joined by 列 first, so a
-         * column is never torn across two bubbles.
+         * group in the boxes' own order (ImageTrans numbers the panels and
+         * their lines), or, for flat coordinate order, down the page and
+         * across. The groups come out in the order of their first line.
          */
         List<List<Box>> partition(List<Box> items, boolean vertical) {
             final List<Box> order = new ArrayList<>(items);
@@ -456,12 +457,8 @@ final class PanelMerger {
                 });
             }
             List<List<Box>> units = new ArrayList<>();
-            if (vertical) {
-                units.addAll(columns(order));
-            } else {
-                for (Box box : order) {
-                    units.add(new ArrayList<>(Collections.singletonList(box)));
-                }
+            for (Box box : order) {
+                units.add(new ArrayList<>(Collections.singletonList(box)));
             }
             List<List<Box>> groups = new ArrayList<>();
             for (List<Box> unit : units) {
@@ -481,10 +478,7 @@ final class PanelMerger {
             return groups;
         }
 
-        /**
-         * Whether a unit joins the group of {@code first}: the same panel
-         * for the first line of a whole column, otherwise its first line.
-         */
+        /** Whether a line joins the panel of a group's first line. */
         private boolean sameUnit(Box first, List<Box> unit, boolean vertical) {
             return samePanel(first, unit.get(0));
         }
@@ -564,7 +558,7 @@ final class PanelMerger {
                 && panel.top() >= Math.min(a.top(), b.top()) - AROUND_LINE;
     }
 
-    /** Panels estimated from the lines: k-means with a gap penalty. */
+    /** Panels estimated from the lines. */
     private static final class Estimated extends Layout {
         private final IdentityHashMap<Box, Integer> panelOf = new IdentityHashMap<>();
 
