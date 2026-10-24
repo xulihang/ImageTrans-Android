@@ -6,7 +6,7 @@ The Android version of ImageTrans, supporting **image translation**, **camera tr
 
 ## Download
 
-[Download APK v0.1.1](https://github.com/xulihang/ImageTrans-Android/releases/tag/v0.1.1)
+[Download APK v0.2.0](https://github.com/xulihang/ImageTrans-Android/releases/tag/v0.2.0)
 
 Requires Android 8.0 (API 26) or later; the native libraries are arm64-v8a only.
 
