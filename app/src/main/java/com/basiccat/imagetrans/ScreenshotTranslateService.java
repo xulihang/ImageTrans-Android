@@ -174,7 +174,6 @@ public class ScreenshotTranslateService extends Service {
     private WindowManager.LayoutParams ballParams;
     private boolean ballShown;
     private boolean ballExpanded;
-    private final Runnable collapseBall = () -> setBallExpanded(false);
 
     // Selection frame, which also shows the result
     private SelectionOverlay overlay;
@@ -761,7 +760,6 @@ public class ScreenshotTranslateService extends Service {
         captureItem.setPadding(dp(12), 0, dp(12), 0);
         captureItem.setOnClickListener(v -> {
             Log.i(TAG, "translate tapped");
-            setBallExpanded(false);
             capture();
         });
         row.addView(captureItem, new LinearLayout.LayoutParams(
@@ -775,7 +773,6 @@ public class ScreenshotTranslateService extends Service {
         resultItem.setPadding(dp(12), 0, dp(12), 0);
         resultItem.setOnClickListener(v -> {
             Log.i(TAG, "close result tapped");
-            setBallExpanded(false);
             closeResult();
         });
         row.addView(resultItem, new LinearLayout.LayoutParams(
@@ -789,7 +786,6 @@ public class ScreenshotTranslateService extends Service {
         frameItem.setPadding(dp(12), 0, dp(12), 0);
         frameItem.setOnClickListener(v -> {
             Log.i(TAG, "frame toggle tapped");
-            setBallExpanded(false);
             setFrameHidden(!frameHidden);
         });
         row.addView(frameItem, new LinearLayout.LayoutParams(
@@ -882,8 +878,11 @@ public class ScreenshotTranslateService extends Service {
         }
     }
 
+    /**
+     * Opens or closes the menu. Only the ball itself does it: it stays open
+     * until the ball is tapped again, and no choice closes it.
+     */
     private void setBallExpanded(boolean expanded) {
-        mainHandler.removeCallbacks(collapseBall);
         if (!ballShown) return;
         ballExpanded = expanded;
         boolean hasResult = hasResult();
@@ -893,7 +892,6 @@ public class ScreenshotTranslateService extends Service {
             boolean relevant = item != resultItem || hasResult;
             item.setVisibility(expanded && relevant ? View.VISIBLE : View.GONE);
         }
-        if (expanded) mainHandler.postDelayed(collapseBall, 5000);
     }
 
     /** Whether a result is on screen, in the frame or in its own window. */
