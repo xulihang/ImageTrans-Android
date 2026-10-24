@@ -22,13 +22,7 @@ public class MainActivity extends LocalizedActivity {
     private static final int REQUEST_PICK_IMAGE = 1001;
     private static final int REQUEST_CAPTURE = 1002;
     private static final int REQUEST_OVERLAY = 1003;
-    private static final int REQUEST_NOTIFICATIONS = 1004;
     private static final int REQUEST_ACCESSIBILITY = 1005;
-    /**
-     * The notification permission is asked once per launch. Asked before
-     * starting a foreground service, Android 13+ treats an answer right after
-     * the dialog closed as a missing "visible UI" and refuses the start.
-     */
     private boolean notificationRequested;
     /**
      * A capture grant (Android 10) was requested and its result is expected.
@@ -44,8 +38,6 @@ public class MainActivity extends LocalizedActivity {
     private boolean overlayPending;
     private static final long OVERLAY_GRANT_POLL_MS = 200;
     private static final long OVERLAY_GRANT_TIMEOUT_MS = 3000;
-    /** Lets the notification permission dialog finish closing. */
-    private static final long FOREGROUND_START_DELAY_MS = 700;
     private final Runnable pollOverlayGrant = this::checkOverlayGrant;
 
     private TextView modeSummary;
@@ -269,14 +261,6 @@ public class MainActivity extends LocalizedActivity {
             startActivityForResult(Prefs.overlayPermissionIntent(this), REQUEST_OVERLAY);
             return;
         }
-        if (Build.VERSION.SDK_INT >= 33 && !notificationRequested
-                && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)
-                != PackageManager.PERMISSION_GRANTED) {
-            notificationRequested = true;
-            requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS},
-                    REQUEST_NOTIFICATIONS);
-            return;
-        }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R
                 && !Prefs.hasAccessibilityService(this)) {
             // API 30+ captures through the accessibility service: enabled once
@@ -317,16 +301,6 @@ public class MainActivity extends LocalizedActivity {
                     ImageUtils.humanError(e)));
         }
         updateFloatingButton();
-    }
-
-    @Override
-    public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] results) {
-        super.onRequestPermissionsResult(requestCode, permissions, results);
-        if (requestCode != REQUEST_NOTIFICATIONS) return;
-        // The notification is only a convenience; continue either way. Let
-        // the dialog finish its exit animation first: a foreground-service
-        // start right in the callback is refused ("not in the foreground").
-        btnFloating.postDelayed(this::startFloating, FOREGROUND_START_DELAY_MS);
     }
 
     private void pickImage() {
