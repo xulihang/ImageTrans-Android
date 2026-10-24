@@ -143,6 +143,8 @@ public class SelectionOverlay extends View {
                 PixelFormat.TRANSLUCENT);
         params.gravity = Gravity.TOP | Gravity.START;
         params.setTitle("ImageTransFrame");
+        // At once, with no window animation (the system's fade/scale).
+        params.windowAnimations = 0;
 
         setBackgroundColor(0x00000000);
         setFocusable(false);
