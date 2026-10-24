@@ -1,0 +1,4 @@
+8 lines -> 3 balloons (left)
+ 1. Home
+ 2. BasicCAT is an open source and free computer-aided translation tool, which aims at providing a simple and useful tool for translators. The name is BasicCAT, because of its simplicity and its programming language—Basic. Basic is easy to learn and everyone can build a suitable CAT tool based on BasicCAT's source code.
+ 3. The design principle of BasicCAT is to reduce eye shift and focus on translating. Machine Translation, selected word meaning and language check results will all show as a dropdown list below the input textarea.

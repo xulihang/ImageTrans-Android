@@ -1,0 +1,8 @@
+25, 7 94x38 Home
+25, 74 1018x36 BasicCAT is an open source and free computer-aided translation tool, which aims at providing a
+25, 112 978x33 simple and useful tool for translators. The name is BasicCAT, because of its simplicity and its
+24, 147 1025x35 programming language—Basic. Basic is easy to learn and everyone can build a suitable CAT tool
+25, 184 363x32 based on BasicCAT's source code.
+26, 244 1066x33 The design principle of BasicCAT is to reduce eye shift and focus on translating. Machine Translation,
+24, 280 1059x34 selected word meaning and language check results will all show as a dropdown list below the input
+25, 319 100x28 textarea.
