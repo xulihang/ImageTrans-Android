@@ -110,6 +110,8 @@
     <string name="main_floating_hint">Adds a floating ball to the screen. Tap it to capture a screen area and translate it; the translation appears in the floating frame.</string>
     <string name="main_floating_on">Turn Off Ball</string>
     <string name="main_floating_off">Turn On Ball</string>
+    <string name="main_floating_mode_area">Area: show a frame and translate only what is inside it</string>
+    <string name="main_floating_mode_full">Full screen: no frame, translate the whole screen</string>
     <string name="main_floating_need_permission">Screenshot translation needs the "Display over other apps" permission. Allow it first.</string>
     <string name="main_floating_need_permission_short">Overlay permission is missing; cannot start screenshot translation</string>
     <string name="main_open_settings">Open Settings</string>

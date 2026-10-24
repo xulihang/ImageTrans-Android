@@ -130,6 +130,32 @@
                 android:textColor="@color/text_secondary"
                 android:textSize="13sp" />
 
+            <RadioGroup
+                android:id="@+id/floatingMode"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:orientation="vertical">
+
+                <RadioButton
+                    android:id="@+id/floatingModeArea"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:minHeight="40dp"
+                    android:text="@string/main_floating_mode_area"
+                    android:textColor="@color/text_primary"
+                    android:textSize="14sp" />
+
+                <RadioButton
+                    android:id="@+id/floatingModeFull"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:minHeight="40dp"
+                    android:text="@string/main_floating_mode_full"
+                    android:textColor="@color/text_primary"
+                    android:textSize="14sp" />
+            </RadioGroup>
+
             <Button
                 android:id="@+id/btnFloating"
                 style="@style/SecondaryButton"

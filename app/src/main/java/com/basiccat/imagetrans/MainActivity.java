@@ -16,6 +16,7 @@ import android.util.Log;
 import android.view.MotionEvent;
 import android.view.View;
 import android.widget.Button;
+import android.widget.RadioGroup;
 import android.widget.TextView;
 
 public class MainActivity extends LocalizedActivity {
@@ -96,6 +97,7 @@ public class MainActivity extends LocalizedActivity {
             }
         });
         btnFloating.setOnClickListener(v -> toggleFloating());
+        initFloatingMode();
         findViewById(R.id.btnServer).setOnClickListener(v ->
                 startActivity(new Intent(MainActivity.this, ServerActivity.class)));
 
@@ -280,6 +282,35 @@ public class MainActivity extends LocalizedActivity {
             return;
         }
         startFloating();
+    }
+
+    /**
+     * Area or full-screen translation. The running service reads this on
+     * every capture, so a change takes effect at once; the windows are
+     * restarted only so the frame comes back (or goes) with it.
+     */
+    private void initFloatingMode() {
+        RadioGroup group = findViewById(R.id.floatingMode);
+        group.check(Prefs.isFloatingFullScreen(this)
+                ? R.id.floatingModeFull : R.id.floatingModeArea);
+        group.setOnCheckedChangeListener((g, checkedId) -> {
+            Prefs.setFloatingMode(this, checkedId == R.id.floatingModeFull
+                    ? Prefs.FLOATING_MODE_FULL : Prefs.FLOATING_MODE_AREA);
+            // The running windows would still show the other mode's frame.
+            if (!isFloatingRunning()) return;
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
+                // The restarted session needs a projection grant again.
+                startFloating();
+                return;
+            }
+            Prefs.setFloatingEnabled(this, true);
+            try {
+                ScreenshotTranslateService.enable(this);
+            } catch (RuntimeException e) {
+                Log.e("MainActivity", "floating restart failed", e);
+            }
+            updateFloatingButton();
+        });
     }
 
     private void startFloating() {

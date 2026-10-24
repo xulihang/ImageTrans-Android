@@ -752,11 +752,17 @@ public class ScreenshotTranslateService extends Service {
 
     // --- selection frame --------------------------------------------------
 
+    /** Shows the frame (the full-screen mode shows none until a capture). */
     private void showOverlay() {
         // Windows left by an earlier turnkey session (whose code may have
         // covered the whole screen) must be removed, not reused.
         if (overlay != null && overlay.isAttachedToWindow()) {
-            overlay.setVisibility(View.VISIBLE);
+            if (isFullScreen()) {
+                overlay.clearTranslation();
+                overlay.setVisibility(View.GONE);
+            } else {
+                overlay.setVisibility(View.VISIBLE);
+            }
             return;
         }
         if (overlay != null) {
@@ -782,6 +788,8 @@ public class ScreenshotTranslateService extends Service {
                 Math.round(getResources().getDisplayMetrics().widthPixels * 0.94f),
                 Math.round(getResources().getDisplayMetrics().heightPixels * 0.82f));
         overlay.show(frame);
+        // show() makes it visible; full-screen keeps it away until a capture.
+        if (isFullScreen()) overlay.setVisibility(View.GONE);
     }
 
     // --- capture ----------------------------------------------------------
@@ -798,7 +806,9 @@ public class ScreenshotTranslateService extends Service {
             return;
         }
         showOverlay();
-        overlay.setVisibility(View.VISIBLE);
+        // Full-screen: a small frame in the middle says what is happening
+        // (the ball is hidden for the screenshot).
+        if (isFullScreen()) overlay.showMessageFrame();
         enterForeground(getString(R.string.floating_translating));
         mainHandler.removeCallbacks(autoHideNotification);
         try {
@@ -814,8 +824,15 @@ public class ScreenshotTranslateService extends Service {
         }
         // The overlay's frame is in the window's coordinate space, which
         // starts below the status bar; a screenshot or projection is
-        // screen-sized.
-        capture(overlay.getFrameRectOnScreen());
+        // screen-sized. Full-screen mode takes the screen itself.
+        capture(isFullScreen() ? new Rect(0, 0,
+                        getResources().getDisplayMetrics().widthPixels,
+                        getResources().getDisplayMetrics().heightPixels)
+                : overlay.getFrameRectOnScreen());
+    }
+
+    private boolean isFullScreen() {
+        return Prefs.isFloatingFullScreen(this);
     }
 
     /** Captures the given screen region, then translates it in the frame. */
@@ -1195,9 +1212,7 @@ public class ScreenshotTranslateService extends Service {
 
     private void onCaptureError(Throwable throwable) {
         Log.e(TAG, "capture error", throwable);
-        if (overlay != null) {
-            overlay.showResult(null, getString(R.string.floating_capture_failed));
-        }
+        if (overlay != null) overlay.showResult(null, getString(R.string.floating_capture_failed));
         ImageUtils.toast(this, getString(R.string.floating_capture_error,
                 ImageUtils.humanError(throwable)));
         restoreWindows();
