@@ -310,38 +310,6 @@
         });
     }
 
-    /** The four corner radii of a box's text element: top-left, top-right, bottom-right, bottom-left. */
-    function cornerRadii(el, w, h) {
-        var style = getComputedStyle(el);
-        var read = function (corner, size) {
-            var value = style.getPropertyValue('border' + corner) || '0';
-            var amount = parseFloat(value) || 0;
-            // A percentage is of the box's width (its height once the radii
-            // no longer fit the width).
-            return /%/.test(value) ? amount / 100 * size : amount;
-        };
-        return [read('.top-left-radius', w), read('.top-right-radius', w),
-                read('.bottom-right-radius', w), read('.bottom-left-radius', w)]
-            .map(function (r) { return Math.max(0, Math.min(r, w / 2, h / 2)); });
-    }
-
-    /** A filled rectangle whose corners have their own radii. */
-    function fillRoundedRect(ctx, x, y, w, h, r) {
-        var tl = r[0], tr = r[1], br = r[2], bl = r[3];
-        ctx.beginPath();
-        ctx.moveTo(x + tl, y);
-        ctx.lineTo(x + w - tr, y);
-        if (tr > 0) ctx.arcTo(x + w, y, x + w, y + tr, tr);
-        ctx.lineTo(x + w, y + h - br);
-        if (br > 0) ctx.arcTo(x + w, y + h, x + w - br, y + h, br);
-        ctx.lineTo(x + bl, y + h);
-        if (bl > 0) ctx.arcTo(x, y + h, x, y + h - bl, bl);
-        ctx.lineTo(x, y + tl);
-        if (tl > 0) ctx.arcTo(x, y, x + tl, y, tl);
-        ctx.closePath();
-        ctx.fill();
-    }
-
     function clampBox(x, y, w, h, natW, natH) {
         x = Math.max(0, x);
         y = Math.max(0, y);
@@ -380,17 +348,29 @@
                 }
             }
 
+            // The text layer and the mask layer: the same CSS on both, so a
+            // rounded box (border-radius) is rounded in both. The text layer
+            // spells the text out and paints no background; the mask layer
+            // paints the background and holds no text.
             var textBaseCSS =
                 'all:initial;position:absolute;display:block;box-sizing:border-box;margin:0;padding:2px;' +
                 'overflow:hidden;line-height:1.3;color:#000;-webkit-text-fill-color:#000;' +
-                'background-color:#fff;font-family:sans-serif;';
+                'font-family:sans-serif;';
+            var texts = document.createElement('div');
+            var masks = document.createElement('div');
+            texts.style.cssText = importantCss(
+                'all:initial;position:absolute;display:block;left:0;top:0;' +
+                'width:' + natW + 'px;height:' + natH + 'px;'
+            );
+            masks.style.cssText = importantCss(
+                'all:initial;position:absolute;display:block;left:0;top:0;' +
+                'width:' + natW + 'px;height:' + natH + 'px;'
+            );
+            container.appendChild(texts);
+            container.appendChild(masks);
 
-            wrapper.appendChild(container);
-            (document.body || document.documentElement).appendChild(wrapper);
-
-            // What each box needs after it is laid out: its size (the
-            // element grows around a larger font), the font, and the mask's
-            // colour.
+            // What each box comes to after it is laid out (the element grows
+            // around a larger font), for its mask.
             var placed = [];
             for (var i = 0; i < boxes.length; i++) {
                 var box = boxes[i];
@@ -405,10 +385,11 @@
                 var c = clampBox(bx, by, bw, bh, natW, natH);
                 if (c.w <= 0 || c.h <= 0) continue;
 
-                var maskColor = '#fff';
+                var maskColor = null;
                 if (options.textRepairMode === 'background') {
-                    var detected = detectBackgroundColor(img, box);
-                    if (detected) maskColor = detected;
+                    maskColor = detectBackgroundColor(img, box);
+                } else if (options.textRepairMode !== 'none') {
+                    maskColor = '#fff';
                 }
                 var el = document.createElement('div');
                 el.style.cssText = importantCss(
@@ -422,63 +403,85 @@
                     el.style.setProperty('direction', getRenderedTextDirection(box, targetText, options), 'important');
                 }
                 el.textContent = targetText;
-                // A box at the edge of the image keeps its place (the text
-                // keeps its alignment); a text larger than its box runs over
-                // (the element grows to the text) rather than being cut at
-                // the box's edge.
-                el.style.setProperty('overflow', 'visible', 'important');
-                container.appendChild(el);
-                var piece = { el: el, x: c.x, y: c.y, w: c.w, h: c.h, color: maskColor, text: targetText };
+                texts.appendChild(el);
+                placed.push({ el: el, x: c.x, y: c.y, w: c.w, h: c.h, color: maskColor });
 
                 var sized = fitBoxFontSize(el, userFontSize, options.minFontSize,
                         options.fontScale);
                 // Larger than the box either because of the minimum size or
-                // because of fontScale: the text keeps its size and runs
-                // over the neighbouring boxes, as it did in the app before
-                // (the mask stays the box's), never pushed back in, which
-                // would cut it in half.
-                // The text stays in the page: html-to-image draws it (vertical
-                // text, alignment and all) on top of the masks filled in
-                // below.
-                el.setAttribute('data-text', '');
-                placed.push(piece);
-            }
-
-            // The masks are filled in here, on the image itself, not through
-            // html-to-image: there a mask would cover the text next to it.
-            // The texts are drawn afterwards, by html-to-image, with nothing
-            // covering them.
-            var out = document.createElement('canvas');
-            out.width = natW;
-            out.height = natH;
-            var ctx = out.getContext('2d');
-            ctx.drawImage(img, 0, 0, natW, natH);
-            for (var m = 0; m < placed.length; m++) {
-                var p = placed[m];
-                if (options.textRepairMode === 'none') continue;
-                // Whole pixels, rounded out, so the text above covers it.
-                var mx = Math.floor(p.x);
-                var my = Math.floor(p.y);
-                ctx.fillStyle = p.color;
-                var corners = cornerRadii(p.el, p.w, p.h);
-                if (corners.every(function (r) { return r <= 0; })) {
-                    ctx.fillRect(mx, my, Math.ceil(p.x + p.w) - mx, Math.ceil(p.y + p.h) - my);
-                } else {
-                    fillRoundedRect(ctx, p.x, p.y, p.w, p.h, corners);
+                // because of fontScale: the mask follows the grown text.
+                if (sized.used > sized.fit) {
+                    var textW = Math.min(el.scrollWidth, natW);
+                    var textH = Math.min(el.scrollHeight, natH);
+                    var nx = c.x;
+                    var ny = c.y;
+                    if (nx + textW > natW) nx = Math.max(0, natW - textW);
+                    if (ny + textH > natH) ny = Math.max(0, natH - textH);
+                    placed[placed.length - 1].x = nx;
+                    placed[placed.length - 1].y = ny;
+                    placed[placed.length - 1].w = textW;
+                    placed[placed.length - 1].h = textH;
                 }
             }
-            return htmlToImage.toCanvas(container, {
-                backgroundColor: 'transparent',
-                width: natW,
-                height: natH,
-                canvasWidth: natW,
-                canvasHeight: natH,
-                skipFonts: true,
-                pixelRatio: 1
-            }).then(function (textCanvas) {
-                ctx.drawImage(textCanvas, 0, 0, natW, natH);
-                wrapper.remove();
-                return out.toDataURL('image/webp', 0.8);
+            wrapper.appendChild(container);
+            (document.body || document.documentElement).appendChild(wrapper);
+
+            // The masks: the text elements' own box with the background on
+            // and the text out, and their final style (font size and all)
+            // kept, so the CSS, border-radius included, is the very same.
+            // The texts are put on their own while the masks go up.
+            var containerParent = container.parentNode;
+            var containerNext = container.nextSibling;
+            containerParent.removeChild(container);
+            var wrapperMasks = document.createElement('div');
+            wrapperMasks.style.cssText = importantCss(
+                'all:initial;display:block;position:fixed;left:-99999px;top:0;' +
+                'width:' + natW + 'px;height:' + natH + 'px;'
+            );
+            var masks = document.createElement('div');
+            masks.style.cssText = importantCss(
+                'all:initial;position:relative;display:block;left:0;top:0;' +
+                'width:' + natW + 'px;height:' + natH + 'px;'
+            );
+            for (var k = 0; k < placed.length; k++) {
+                var p = placed[k];
+                if (p.color == null) continue;
+                var style = p.el.getAttribute('style') || '';
+                style = style.replace(/background-color\s*:[^;]*;?/gi, '');
+                var mask = document.createElement('div');
+                mask.style.cssText = style + ';background-color:' + p.color + ' !important;';
+                masks.appendChild(mask);
+            }
+            wrapperMasks.appendChild(masks);
+            (document.body || document.documentElement).appendChild(wrapperMasks);
+
+            // The masks first, then the texts, each taken on its own: a text
+            // that lies beside an opaque block is dropped by html-to-image,
+            // and a layer of absolutely positioned boxes alone measures empty.
+            var shot = function (element) {
+                return htmlToImage.toCanvas(element, {
+                    width: natW,
+                    height: natH,
+                    canvasWidth: natW,
+                    canvasHeight: natH,
+                    skipFonts: true,
+                    pixelRatio: 1
+                });
+            };
+            return shot(masks).then(function (maskCanvas) {
+                wrapperMasks.remove();
+                containerParent.insertBefore(container, containerNext);
+                return shot(container).then(function (textCanvas) {
+                    var out = document.createElement('canvas');
+                    out.width = natW;
+                    out.height = natH;
+                    var ctx = out.getContext('2d');
+                    ctx.drawImage(img, 0, 0, natW, natH);
+                    ctx.drawImage(maskCanvas, 0, 0, natW, natH);
+                    ctx.drawImage(textCanvas, 0, 0, natW, natH);
+                    wrapper.remove();
+                    return out.toDataURL('image/webp', 0.8);
+                });
             }).catch(function (err) {
                 wrapper.remove();
                 throw err;
