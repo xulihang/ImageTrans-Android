@@ -557,7 +557,9 @@
             if (ctx.measureText(testLine).width > maxWidth) {
                 if (line.length > 0) {
                     lines.push(line);
-                    line = hasSpaces ? token.trimStart() : token;
+                    // Not trimStart(): the WebView of an Android 7 phone may be
+                    // Chrome 57, which does not have it.
+                    line = hasSpaces ? token.replace(/^\s+/, '') : token;
                 } else {
                     for (var j = 0; j < token.length; j++) {
                         var ch = token[j];
