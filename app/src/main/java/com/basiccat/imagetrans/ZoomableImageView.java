@@ -5,6 +5,7 @@ import android.content.Context;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.Matrix;
+import android.graphics.Paint;
 import android.graphics.RectF;
 import android.util.AttributeSet;
 import android.view.GestureDetector;
@@ -26,12 +27,10 @@ import java.util.ArrayList;
  * The image opens fitted inside the view, whole if it fits at screen width
  * (tall images are fitted to the height, landscape ones to the width), and
  * can be zoomed out to see the whole picture or in until one image pixel
- * covers {@link #MAX_PIXELS_ON_SCREEN} device pixels.
+ * covers one device pixel (at most).
  */
 public class ZoomableImageView extends View {
 
-    /** At most this many device pixels per image pixel at maximum zoom. */
-    private static final float MAX_PIXELS_ON_SCREEN = 3f;
     private static final float DOUBLE_TAP_SCALE = 2.5f;
     private static final int SETTLE_DURATION_MS = 220;
     private static final int FLING_DURATION_MS = 450;
@@ -43,6 +42,12 @@ public class ZoomableImageView extends View {
     private final float swipeFlickVelocity;
 
     private final Matrix draw = new Matrix();
+    /**
+     * Scales the bitmap in the draw call. A matrix passed to drawBitmap()
+     * goes through the shader path, which skips the bilinear filter (and so
+     * looks jagged); a paint with bitmap filtering always samples smoothly.
+     */
+    private final Paint imagePaint = new Paint(Paint.FILTER_BITMAP_FLAG | Paint.DITHER_FLAG);
     private final Matrix from = new Matrix();
     private final RectF imageRect = new RectF();
     private final float[] values = new float[9];
@@ -326,7 +331,7 @@ public class ZoomableImageView extends View {
     protected void onDraw(Canvas canvas) {
         super.onDraw(canvas);
         if (bitmap != null) {
-            canvas.drawBitmap(bitmap, draw, null);
+            canvas.drawBitmap(bitmap, draw, imagePaint);
         }
     }
 
@@ -349,10 +354,10 @@ public class ZoomableImageView extends View {
         float fitInside = Math.min(fitWidth, getHeight() / (float) bitmap.getHeight());
         minScale = fitInside;
         initialScale = fitInside;
-        // Drawing more than MAX_PIXELS_ON_SCREEN device pixels per image pixel
-        // only blurs, so stop zooming there.
-        float nativeScale = MAX_PIXELS_ON_SCREEN * getResources().getDisplayMetrics().density;
-        maxScale = Math.max(initialScale * 2f, nativeScale);
+        // Zooming in stops at one image pixel per device pixel: drawing the
+        // bitmap larger only invents pixels and looks blurrier than the
+        // original. Double tap still reaches at least twice the opening size.
+        maxScale = Math.max(initialScale * 2f, 1f);
     }
 
     private void fitToView() {
