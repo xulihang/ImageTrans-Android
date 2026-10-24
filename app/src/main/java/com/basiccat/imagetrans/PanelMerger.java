@@ -605,99 +605,70 @@ final class PanelMerger {
         }
     }
 
-    // --- k-means with a gap penalty ---------------------------------------
+    // --- panels estimated from the lines ----------------------------------
 
-    /** A line this far (in line heights) from its panel's centre is "far". */
-    private static final double PENALTY_HEIGHTS = 2.5;
-    private static final int MAX_PANELS = 40;
-    private static final int RESTARTS = 4;
-    private static final int ITERATIONS = 50;
+    /** Lines closer than this (in heights) can be in the same panel. */
+    private static final double NEIGHBOR_GAP_HEIGHTS = 1.5;
 
+    /**
+     * Groups the lines as the desktop does when it counts few lines
+     * (panel detection, horizontal text): a line joins the group of a line
+     * beside it (overlapping its column of the page) or right below it, less
+     * than a line and a half apart; a longer gap - to the balloon above or
+     * below, or to the next bubble - starts a new group. Groups are
+     * transitive, so the lines of a paragraph or a bubble stay together.
+     */
     private static int[] cluster(List<Box> lines) {
         int n = lines.size();
-        int k = Math.max(1, Math.min(n / 2, MAX_PANELS));
-        float[] px = new float[n];
-        float[] py = new float[n];
-        double heights = 0;
+        int[] parent = new int[n];
+        for (int i = 0; i < n; i++) parent[i] = i;
         for (int i = 0; i < n; i++) {
-            Box box = lines.get(i);
-            px[i] = (float) box.centerX();
-            py[i] = (float) (box.top() + box.height / 2);
-            heights += Math.abs(box.height);
-        }
-        float lineHeight = (float) Math.max(heights / n, 1.0);
-        float penalty = (float) PENALTY_HEIGHTS * lineHeight;
-        int[] best = null;
-        double bestCost = Double.MAX_VALUE;
-        for (int restart = 0; restart < RESTARTS; restart++) {
-            java.util.Random random = new java.util.Random(restart);
-            float[] cx = new float[k];
-            float[] cy = new float[k];
-            for (int c = 0; c < k; c++) {
-                int seed = random.nextInt(n);
-                cx[c] = px[seed];
-                cy[c] = py[seed];
-            }
-            int[] labels = new int[n];
-            for (int iteration = 0; iteration < ITERATIONS; iteration++) {
-                boolean changed = false;
-                for (int i = 0; i < n; i++) {
-                    int group = 0;
-                    double nearest = Double.MAX_VALUE;
-                    for (int c = 0; c < k; c++) {
-                        double d = distance(px[i], py[i], cx[c], cy[c], penalty);
-                        if (d < nearest) {
-                            nearest = d;
-                            group = c;
-                        }
-                    }
-                    if (labels[i] != group) {
-                        labels[i] = group;
-                        changed = true;
-                    }
+            for (int j = i + 1; j < n; j++) {
+                if (neighbors(lines.get(i), lines.get(j))) {
+                    int a = find(parent, i);
+                    int b = find(parent, j);
+                    if (a != b) parent[a] = b;
                 }
-                if (!changed && iteration > 0) break;
-                double[] sumX = new double[k];
-                double[] sumY = new double[k];
-                int[] count = new int[k];
-                for (int i = 0; i < n; i++) {
-                    sumX[labels[i]] += px[i];
-                    sumY[labels[i]] += py[i];
-                    count[labels[i]]++;
-                }
-                for (int c = 0; c < k; c++) {
-                    if (count[c] == 0) continue;
-                    cx[c] = (float) (sumX[c] / count[c]);
-                    cy[c] = (float) (sumY[c] / count[c]);
-                }
-            }
-            double cost = 0;
-            boolean[] used = new boolean[k];
-            for (int i = 0; i < n; i++) {
-                used[labels[i]] = true;
-                cost += distance(px[i], py[i], cx[labels[i]], cy[labels[i]], penalty);
-            }
-            for (boolean u : used) {
-                if (!u) cost += penalty;
-            }
-            if (cost < bestCost) {
-                bestCost = cost;
-                best = labels.clone();
             }
         }
-        return best;
+        int[] labels = new int[n];
+        IdentityHashMap<Integer, Integer> ids = new IdentityHashMap<>();
+        for (int i = 0; i < n; i++) {
+            int root = find(parent, i);
+            Integer label = ids.get(root);
+            if (label == null) {
+                label = ids.size();
+                ids.put(root, label);
+            }
+            labels[i] = label;
+        }
+        return labels;
+    }
+
+    private static int find(int[] parent, int i) {
+        while (parent[i] != i) {
+            parent[i] = parent[parent[i]];
+            i = parent[i];
+        }
+        return i;
     }
 
     /**
-     * Distance to a centre, plus the penalty once the line is far from it.
-     * Under the assumption that the panels hold one line each, this recovers
-     * them exactly whatever the start; with several lines per panel, a line
-     * is at worst attached to a neighbouring panel, never the other way.
+     * Whether two lines are neighbors in the sense of cluster(): less than a
+     * line and a half apart, with a side of one lying within the other
+     * (their columns of the page overlap, a margin of a third of the line
+     * height allows for lines that do not quite line up). Balloons stacked
+     * on a page nearly touch, so a longer vertical gap is what separates
+     * them; sideways, a wide and a narrow line seldom share an exact column.
      */
-    private static double distance(float x, float y, float cx, float cy, float penalty) {
-        double dx = Math.abs(x - cx);
-        double dy = Math.abs(y - cy);
-        return Math.hypot(dx, dy) + (Math.max(dx, dy) > penalty ? penalty : 0);
+    private static boolean neighbors(Box a, Box b) {
+        double h = Math.max(Math.abs(a.height), Math.abs(b.height));
+        if (h <= 0) return false;
+        if (Math.abs(a.top() - b.top()) > NEIGHBOR_GAP_HEIGHTS * h) return false;
+        double margin = h / 3;
+        double overlap = Math.min(a.right(), b.right()) + margin
+                - Math.max(a.left() - margin, b.left());
+        return overlap > 0;
     }
 
     // --- logging ----------------------------------------------------------
