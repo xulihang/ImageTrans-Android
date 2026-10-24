@@ -961,11 +961,18 @@ public class ScreenshotTranslateService extends Service {
                 capture();
             }
         });
-        Rect frame = new Rect(
-                Math.round(getResources().getDisplayMetrics().widthPixels * 0.06f),
-                Math.round(getResources().getDisplayMetrics().heightPixels * 0.18f),
-                Math.round(getResources().getDisplayMetrics().widthPixels * 0.94f),
-                Math.round(getResources().getDisplayMetrics().heightPixels * 0.82f));
+        // Where the frame was last left (it saves it after every drag and
+        // resize), or a default for the first time.
+        Rect frame;
+        if (Prefs.hasFrameRect(this)) {
+            frame = Prefs.getFrameRect(this);
+        } else {
+            frame = new Rect(
+                    Math.round(getResources().getDisplayMetrics().widthPixels * 0.06f),
+                    Math.round(getResources().getDisplayMetrics().heightPixels * 0.18f),
+                    Math.round(getResources().getDisplayMetrics().widthPixels * 0.94f),
+                    Math.round(getResources().getDisplayMetrics().heightPixels * 0.82f));
+        }
         overlay.show(frame);
     }
 
