@@ -25,7 +25,8 @@ public class MainActivity extends LocalizedActivity {
     private static final int REQUEST_ACCESSIBILITY = 1005;
     private boolean notificationRequested;
     /**
-     * A capture grant (Android 10) was requested and its result is expected.
+     * A capture grant (below Android 12, or above it with the accessibility
+     * service off) was requested and its result is expected.
      * The system may still report RESULT_CANCELED to the recreated activity
      * (e.g. before the grant dialog is shown again); that is not a refusal.
      */
@@ -262,9 +263,9 @@ public class MainActivity extends LocalizedActivity {
                     .show();
             return;
         }
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
                 && !Prefs.hasAccessibilityService(this)) {
-            // API 30+ captures through the accessibility service: enabled once
+            // API 31+ captures through the accessibility service: enabled once
             // here, it can take screenshots at any time, even after the user
             // switches apps. Older releases use MediaProjection instead, which
             // asks when the floating windows start.
@@ -282,8 +283,10 @@ public class MainActivity extends LocalizedActivity {
     }
 
     private void startFloating() {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
-            // MediaProjection consent has to be asked for from here.
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
+            // Below API 31 MediaProjection consent has to be asked for from
+            // here (on one that has the accessibility service on, the service
+            // takes the screenshots).
             MediaProjectionManager manager = getSystemService(MediaProjectionManager.class);
             capturePending = true;
             startActivityForResult(manager.createScreenCaptureIntent(), REQUEST_CAPTURE);

@@ -5,10 +5,11 @@ import android.media.projection.MediaProjectionManager;
 import android.util.Log;
 
 /**
- * Lets the floating service ask for screen capture consent on releases where
- * there is no AccessibilityService.takeScreenshot() (below Android 11 / API
- * 30). Android 14+ refuses to start this activity from a background service,
- * which is one more reason those releases use the accessibility service.
+ * Lets the floating service ask for screen capture consent on Android 11,
+ * whose screenshot came out refused on some of its phones, so that release
+ * goes through MediaProjection. Android 14+ refuses to start this activity
+ * from a background service, which is one more reason those releases use the
+ * accessibility service.
  */
 public class ProjectionPermissionActivity extends LocalizedActivity {
     private static final String TAG = "ScreenshotTranslate";

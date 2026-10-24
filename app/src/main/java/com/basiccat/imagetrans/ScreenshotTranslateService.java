@@ -84,15 +84,16 @@ public class ScreenshotTranslateService extends Service {
     private static final long PROJECTION_GRANT_LIFETIME_MS = 5 * 60 * 1000;
 
     /**
-     * Whether captures go through the accessibility service. Below Android 11
-     * takeScreenshot() does not exist, so those releases fall back to
-     * MediaProjection (one consent, reused while the app stays in front).
+     * Whether captures go through the accessibility service: Android 12+ has
+     * the screenshot permission on its accessibility settings. Android 11
+     * could take a screenshot through it too, but some of its phones refuse
+     * an enabled service; there MediaProjection is used, as below 11.
      */
     private static boolean useAccessibility() {
-        return Build.VERSION.SDK_INT >= Build.VERSION_CODES.R;
+        return Build.VERSION.SDK_INT >= Build.VERSION_CODES.S;
     }
 
-    /** Starts the floating windows with a projection grant (Android 10). */
+    /** Starts the floating windows with a projection grant (Android 11). */
     public static void show(Context context, int resultCode, Intent resultData) {
         context.startForegroundService(new Intent(context, ScreenshotTranslateService.class)
                 .setAction(ACTION_SHOW)
@@ -181,7 +182,16 @@ public class ScreenshotTranslateService extends Service {
     private boolean targetPressed;
 
     // Capture
-    /** MediaProjection path only (Android 10). */
+    /**
+     * Whether this session captures through MediaProjection. Android 12+ asks
+     * only when the accessibility service is not connected (a projector's
+     * whole screen mirror is too slow for a phone to care about otherwise);
+     * the one consent of main screen's start then carries the session.
+     */
+    private boolean usesProjection() {
+        return !useAccessibility() || !ScreenshotAccessibilityService.isEnabled();
+    }
+
     private MediaProjection mediaProjection;
     private int projectionResultCode;
     private Intent projectionData;
@@ -292,7 +302,8 @@ public class ScreenshotTranslateService extends Service {
             return START_STICKY;
         }
         if (ACTION_SHOW.equals(action)) {
-            // From ProjectionPermissionActivity (Android 10) or the main screen.
+            // From ProjectionPermissionActivity (Android 11), the main screen
+            // or the consent itself (both with a grant, or not on API 31+).
             if (intent.hasExtra(EXTRA_RESULT_DATA)) {
                 projectionResultCode = intent.getIntExtra(EXTRA_RESULT_CODE, 0);
                 projectionData = intent.getParcelableExtra(EXTRA_RESULT_DATA);
@@ -303,6 +314,12 @@ public class ScreenshotTranslateService extends Service {
             if (pendingCapture) {
                 pendingCapture = false;
                 capture();
+            } else if (projectionData != null) {
+                // The main screen's consent: this session goes through
+                // MediaProjection whatever the accessibility service does, so
+                // the projection is made now, from the start.
+                enterForeground(getString(R.string.floating_translating));
+                ensureProjection();
             }
             return START_NOT_STICKY;
         }
@@ -382,7 +399,7 @@ public class ScreenshotTranslateService extends Service {
                 .build();
         try {
             int type = ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC;
-            if (!serverOnly && !useAccessibility()) {
+            if (!serverOnly && usesProjection()) {
                 // A mediaProjection-type foreground service is required to hold
                 // a projection. Never combine it with the projected process,
                 // as some systems refuse a dataSync service that also carries it.
@@ -785,7 +802,7 @@ public class ScreenshotTranslateService extends Service {
         enterForeground(getString(R.string.floating_translating));
         mainHandler.removeCallbacks(autoHideNotification);
         try {
-            if (!useAccessibility() && !ensureProjection()) {
+            if (usesProjection() && !ensureProjection()) {
                 // Permission prompt: the result comes back through ACTION_SHOW,
                 // which shows the frame again.
                 return;
@@ -805,7 +822,7 @@ public class ScreenshotTranslateService extends Service {
     private void capture(Rect region) {
         final Rect rect = new Rect(region);
         if (rect.width() <= 0 || rect.height() <= 0) return;
-        if (useAccessibility()) {
+        if (!usesProjection()) {
             Log.i(TAG, "capturing " + rect + " mode=accessibility");
             captureScreen(rect, 1);
         } else {
@@ -814,17 +831,27 @@ public class ScreenshotTranslateService extends Service {
         }
     }
 
-    // --- MediaProjection (Android 10) -------------------------------------
+    // --- MediaProjection (below Android 12, the fallback on Android 12+) ---
 
     /**
-     * Starts a capture with a projection (Android 10 only). The consent comes
-     * from ProjectionPermissionActivity and is kept for a while, so repeated
-     * captures only ask once; a consent Intent that already created a
-     * projection is never reused.
+     * Starts a capture with a projection, or, on Android 12+, through the
+     * accessibility service where the projection is not there to be used.
+     * The consent comes from ProjectionPermissionActivity and is kept for a
+     * while, so repeated captures only ask once; a consent Intent that
+     * already created a projection is never reused.
      */
     private void captureProjection(Rect rect) {
         if (mediaProjection == null && !ensureProjection()) return;
-        if (mediaProjection == null) return;
+        if (mediaProjection == null) {
+            if (useAccessibility()) {
+                // A grant that made no projection: the accessibility
+                // service's screenshots still work.
+                Log.i(TAG, "no projection, capturing through accessibility");
+                captureScreen(rect, 1);
+                return;
+            }
+            return;
+        }
         projectionCapture(rect);
     }
 
@@ -1028,6 +1055,14 @@ public class ScreenshotTranslateService extends Service {
         if (attempt < MAX_CAPTURE_ATTEMPTS) {
             mainHandler.postDelayed(() -> captureScreen(crop, attempt + 1),
                     ATTEMPT_DELAY_MS);
+            return;
+        }
+        if (mediaProjection != null) {
+            // The accessibility service is connected, so no projection is
+            // asked for on Android 12+: one kept from the start of the
+            // session is still good (or the whole screen is mirrored).
+            Log.i(TAG, "accessibility capture failed, trying the projection");
+            captureProjection(crop);
             return;
         }
         onCaptureError(throwable);
