@@ -10,8 +10,8 @@ android {
         applicationId "com.basiccat.imagetrans"
         minSdk 26
         targetSdk 36
-        versionCode 4
-        versionName "0.2.1"
+        versionCode 5
+        versionName "0.3.0"
 
         ndk {
             // The bundled AARs only contain arm64-v8a native libraries.

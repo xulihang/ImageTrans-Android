@@ -6,7 +6,7 @@ ImageTrans 的 Android 版本，支持**图片翻译**、**拍照翻译**、**�
 
 ## 下载
 
-[下载 APK v0.2.1](https://github.com/xulihang/ImageTrans-Android/releases/tag/v0.2.1)
+[下载 APK v0.3.0](https://github.com/xulihang/ImageTrans-Android/releases/tag/v0.3.0)
 
 需要 Android 8.0（API 26）或更高版本，原生库仅支持 arm64-v8a。
 
