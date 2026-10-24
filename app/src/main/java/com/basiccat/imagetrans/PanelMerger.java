@@ -1,7 +1,6 @@
 package com.basiccat.imagetrans;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.IdentityHashMap;
@@ -10,20 +9,24 @@ import java.util.Map;
 
 /**
  * Groups recognized text lines into the blocks that are translated and
- * rendered together ("panels"). Used by the ImageTrans server API for comics.
+ * rendered together. Used for comics, with the server API and locally.
  *
- * A line joins a neighboring line in the same panel (they overlap sideways
- * and are less than one line apart vertically), but never crosses a panel
- * border. Borders come from either source:
+ * Lines are clustered first, by panel (a speech balloon or a paragraph
+ * area), so that lines of different panels never join:
  *
- * - the panels the user drew or confirmed in ImageTrans and sent along
- *   ("detected panels"); a line belongs to the smallest panel containing
- *   it, and lines of different panels are kept apart;
- * - without them, an estimate from the lines alone: k-means with a gap
- *   penalty groups lines that sit close, which keeps the lines of one
- *   balloon together and those of two balloons apart.
+ * - the panels ImageTrans detected or the user drew, sent along with the
+ *   lines; a line goes to the smallest panel holding it;
+ * - without them, an estimate from the lines: k-means with a gap penalty.
+ *
+ * Inside a panel, horizontal text merges left to right first (fragments on
+ * one line) and then top to bottom (lines into paragraphs); vertical text
+ * merges top to bottom first (fragments of a column) and then right to
+ * left (columns). The blocks follow the reading order of the lines.
  */
 final class PanelMerger {
+    /** Default gaps between two lines of one block, for callers that pass 0. */
+    private static final double DEFAULT_X_GAP = 15;
+    private static final double DEFAULT_Y_GAP = 15;
 
     private PanelMerger() {
     }
@@ -36,8 +39,8 @@ final class PanelMerger {
     static List<Box> merge(List<Box> items, String sourceLang, double xGap, double yGap,
                            org.json.JSONArray panelsOut) {
         if (items == null || items.isEmpty()) return new ArrayList<>();
-        if (xGap <= 0) xGap = 15;
-        if (yGap <= 0) yGap = 15;
+        if (xGap <= 0) xGap = DEFAULT_X_GAP;
+        if (yGap <= 0) yGap = DEFAULT_Y_GAP;
         return merge(items, Layout.ofLines(items), sourceLang, xGap, yGap, panelsOut);
     }
 
@@ -50,8 +53,8 @@ final class PanelMerger {
     static List<Box> merge(List<Box> items, List<Box> panelRects, String sourceLang,
                            double xGap, double yGap) {
         if (items == null || items.isEmpty()) return new ArrayList<>();
-        if (xGap <= 0) xGap = 15;
-        if (yGap <= 0) yGap = 15;
+        if (xGap <= 0) xGap = DEFAULT_X_GAP;
+        if (yGap <= 0) yGap = DEFAULT_Y_GAP;
         Layout layout = panelRects == null || panelRects.isEmpty()
                 ? Layout.ofLines(items) : Layout.ofPanels(items, panelRects);
         return merge(items, layout, sourceLang, xGap, yGap, null);
@@ -265,44 +268,33 @@ final class PanelMerger {
         return bottom(row) - top(row);
     }
 
-    private static double left(List<Box> row) {
-        double value = 0;
-        boolean first = true;
-        for (Box box : row) {
-            value = first ? box.left() : Math.min(value, box.left());
-            first = false;
+    /** The box around a row (or a block) of lines. */
+    private static Box bounds(List<Box> row) {
+        Box box = row.get(0);
+        double left = box.left(), top = box.top(), right = box.right(), bottom = box.bottom();
+        for (Box other : row) {
+            left = Math.min(left, other.left());
+            top = Math.min(top, other.top());
+            right = Math.max(right, other.right());
+            bottom = Math.max(bottom, other.bottom());
         }
-        return value;
+        return new Box(left, top, right - left, bottom - top, "");
+    }
+
+    private static double left(List<Box> row) {
+        return bounds(row).left();
     }
 
     private static double right(List<Box> row) {
-        double value = 0;
-        boolean first = true;
-        for (Box box : row) {
-            value = first ? box.right() : Math.max(value, box.right());
-            first = false;
-        }
-        return value;
+        return bounds(row).right();
     }
 
     private static double top(List<Box> row) {
-        double value = 0;
-        boolean first = true;
-        for (Box box : row) {
-            value = first ? box.top() : Math.min(value, box.top());
-            first = false;
-        }
-        return value;
+        return bounds(row).top();
     }
 
     private static double bottom(List<Box> row) {
-        double value = 0;
-        boolean first = true;
-        for (Box box : row) {
-            value = first ? box.bottom() : Math.max(value, box.bottom());
-            first = false;
-        }
-        return value;
+        return bounds(row).bottom();
     }
 
     /** Rows must overlap this share to be one line (overlapping only a little is not). */
@@ -311,9 +303,6 @@ final class PanelMerger {
     private static final double TALL_RATIO = 1.5;
     /** A row overlapping this share of the row above continues its block. */
     private static final double CONTINUE_OVERLAP = 0.5;
-    /** Default gaps between two lines of one block, for callers that pass 0. */
-    private static final double DEFAULT_X_GAP = 15;
-    private static final double DEFAULT_Y_GAP = 15;
 
     /**
      * Whether the lines are already in reading order: each line starts at
@@ -364,13 +353,12 @@ final class PanelMerger {
     }
 
     private static Box groupUnion(List<Box> group) {
-        return new Box(left(group), top(group),
-                right(group) - left(group), bottom(group) - top(group), "");
+        return bounds(group);
     }
 
     // --- panel layout -----------------------------------------------------
 
-    /** Which lines share a panel, and where their blocks belong in reading order. */
+    /** Which lines share a panel. */
     abstract static class Layout {
         /** Lines in the same panel (transitive within one panel). */
         abstract boolean samePanel(Box a, Box b);
@@ -397,7 +385,6 @@ final class PanelMerger {
                 });
             }
             List<List<Box>> groups = new ArrayList<>();
-            List<Integer> first = new ArrayList<>();
             for (int i = 0; i < order.size(); i++) {
                 Box box = order.get(i);
                 int group = -1;
@@ -409,21 +396,12 @@ final class PanelMerger {
                 }
                 if (group < 0) {
                     groups.add(new ArrayList<>(Collections.singletonList(box)));
-                    first.add(i);
                 } else {
                     groups.get(group).add(box);
                 }
             }
             return groups;
         }
-
-        /** Larger for a longer panel: its blocks are formed first. */
-        int weight(List<Box> line) {
-            return line.size();
-        }
-
-        // Ordering key of a block, smaller is read first.
-        abstract int order(Box block);
 
         static Layout ofPanels(List<Box> items, List<Box> panelRects) {
             return new Detected(items, panelRects);
@@ -436,66 +414,30 @@ final class PanelMerger {
 
     /** Panels from ImageTrans: each line belongs to the smallest one holding it. */
     private static final class Detected extends Layout {
-        private final List<Box> sortedPanels;
-        private final java.util.IdentityHashMap<Box, Integer> panelOf =
-                new java.util.IdentityHashMap<>();
-        private final List<Integer> weights = new ArrayList<>();
-        /** Where each panel sits in the readings order. */
-        private final List<Integer> rank = new ArrayList<>();
+        private final List<Box> panels;
+        private final IdentityHashMap<Box, Integer> panelOf = new IdentityHashMap<>();
 
         Detected(List<Box> items, List<Box> panelRects) {
-            sortedPanels = new ArrayList<>(panelRects);
-            // Reading order: top to bottom, left to right.
-            Collections.sort(sortedPanels, new Comparator<Box>() {
-                @Override
-                public int compare(Box a, Box b) {
-                    // Rows: a little overlap of the tops is enough (reading
-                    // across a spread); vertical text lines: right to left.
-                    boolean verticalText = a.width < a.height && b.width < b.height;
-                    double tolerance = verticalText ? 0 : Math.max(a.height, b.height) * 0.15;
-                    if (Math.abs(a.top() - b.top()) > tolerance) {
-                        return Double.compare(a.top(), b.top());
-                    }
-                    if (a.width < a.height && b.width < b.height) {
-                        return Double.compare(b.left(), a.left());
-                    }
-                    return Double.compare(a.left(), b.left());
-                }
-            });
+            panels = new ArrayList<>(panelRects);
             // Each line goes to the smallest panel holding it, so nested or
             // overlapping panels keep their own lines apart.
-            List<Box> byArea = new ArrayList<>(sortedPanels);
+            List<Box> byArea = new ArrayList<>(panels);
             Collections.sort(byArea, new Comparator<Box>() {
                 @Override
                 public int compare(Box a, Box b) {
                     return Double.compare(area(a), area(b));
                 }
             });
-            int[] sizes = new int[sortedPanels.size()];
             for (Box line : items) {
-                for (Box panel : byArea) {
+                for (int i = 0; i < byArea.size(); i++) {
+                    Box panel = byArea.get(i);
                     // A line may stick out of its panel a little (the text
-                    // runs to the balloon's edge); halfway to the neighbor is
-                    // the border.
+                    // runs to the balloon's edge).
                     if (!contains(panel, line, AROUND_LINE)) continue;
-                    int index = sortedPanels.indexOf(panel);
-                    panelOf.put(line, index);
-                    sizes[index]++;
+                    panelOf.put(line, panels.indexOf(panel));
                     break;
                 }
             }
-            for (int size : sizes) weights.add(size);
-            for (int c = 0; c < sortedPanels.size(); c++) rank.add(c);
-        }
-
-        @Override
-        int weight(List<Box> line) {
-            int best = 0;
-            for (Box box : line) {
-                Integer index = panelOf.get(box);
-                if (index != null) best = Math.max(best, weights.get(index));
-            }
-            return best;
         }
 
         @Override
@@ -505,18 +447,9 @@ final class PanelMerger {
             // A line outside the drawn panels joins a neighbor unless a panel
             // was drawn between them (e.g. a box around the title only).
             if (pa == null || pb == null) {
-                return !separated(sortedPanels.get(pa == null ? pb : pa), a, b);
+                return !separated(panels.get(pa == null ? pb : pa), a, b);
             }
             return pa.equals(pb);
-        }
-
-        @Override
-        int order(Box block) {
-            for (int c = 0; c < sortedPanels.size(); c++) {
-                if (contains(sortedPanels.get(c), block, AROUND_LINE)) return rank.get(c);
-            }
-            // Outside every panel: after the last one.
-            return rank.size();
         }
     }
 
@@ -547,9 +480,7 @@ final class PanelMerger {
 
     /** Panels estimated from the lines: k-means with a gap penalty. */
     private static final class Estimated extends Layout {
-        private final java.util.IdentityHashMap<Box, Integer> panelOf =
-                new java.util.IdentityHashMap<>();
-        private final java.util.HashMap<Integer, Integer> sizes = new java.util.HashMap<>();
+        private final IdentityHashMap<Box, Integer> panelOf = new IdentityHashMap<>();
 
         Estimated(List<Box> items) {
             int n = items.size();
@@ -558,11 +489,7 @@ final class PanelMerger {
                 return;
             }
             int[] labels = cluster(items);
-            for (int i = 0; i < n; i++) {
-                panelOf.put(items.get(i), labels[i]);
-                Integer count = sizes.get(labels[i]);
-                sizes.put(labels[i], count == null ? 1 : count + 1);
-            }
+            for (int i = 0; i < n; i++) panelOf.put(items.get(i), labels[i]);
         }
 
         @Override
@@ -570,21 +497,6 @@ final class PanelMerger {
             Integer pa = panelOf.get(a);
             Integer pb = panelOf.get(b);
             return pa == null || pb == null || pa.equals(pb);
-        }
-
-        @Override
-        int weight(List<Box> line) {
-            int best = 0;
-            for (Box box : line) {
-                Integer size = sizes.get(panelOf.get(box));
-                if (size != null) best = Math.max(best, size);
-            }
-            return best;
-        }
-
-        @Override
-        int order(Box block) {
-            return 0;
         }
 
         /** The estimated panels as plain rectangles, for a server. */
@@ -713,30 +625,10 @@ final class PanelMerger {
 
     // --- geometry ---------------------------------------------------------
 
-    private static double xOverlapRatio(Box a, Box b) {
-        double minWidth = Math.min(Math.abs(a.width), Math.abs(b.width));
-        if (minWidth <= 0) return 0;
-        double marginA = Math.min(Math.abs(a.width) * 0.25, 20);
-        double marginB = Math.min(Math.abs(b.width) * 0.25, 20);
-        double overlap = Math.min(a.right() + marginA, b.right() + marginB)
-                - Math.max(a.left() - marginA, b.left() - marginB);
-        return overlap <= 0 ? 0 : overlap / minWidth;
-    }
-
     private static boolean xCloseEnough(Box a, Box b, double xGap) {
         if (a.right() < b.left()) return b.left() - a.right() <= xGap;
         if (b.right() < a.left()) return a.left() - b.right() <= xGap;
         return true;
-    }
-
-    private static double yOverlapRatio(Box a, Box b) {
-        double minHeight = Math.min(Math.abs(a.height), Math.abs(b.height));
-        if (minHeight <= 0) return 0;
-        double marginA = Math.min(Math.abs(a.height) * 0.25, 30);
-        double marginB = Math.min(Math.abs(b.height) * 0.25, 30);
-        double overlap = Math.min(a.bottom() + marginA, b.bottom() + marginB)
-                - Math.max(a.top() - marginA, b.top() - marginB);
-        return overlap <= 0 ? 0 : overlap / minHeight;
     }
 
     private static boolean yCloseEnough(Box a, Box b, double yGap) {
