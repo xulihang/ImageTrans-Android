@@ -25,6 +25,12 @@ wide):
   column between them; or lines in one column (right edges within 8 px) at
   most 40 px apart vertically.
 
+## Order of the balloons
+
+The balloons are laid out in reading order after they are found: rows from
+top to bottom, where two balloons are on one row when their heights overlap
+(by half the shorter one), and the balloons of a row from left to right.
+
 ## Results on the sample pages
 
 | page | lines | balloons in ImageTrans | found |

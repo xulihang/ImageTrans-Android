@@ -165,12 +165,45 @@ def horizontal_links(lines, way, pitch):
     return links
 
 
+def bounds(group):
+    """A balloon's box: left, top, right, bottom."""
+    left = min(l['x'] for l in group)
+    top = min(l['y'] for l in group)
+    return left, top, max(right(l) for l in group), max(l['y'] + l['h'] for l in group)
+
+
+def same_row(a, b):
+    """Two balloons on one row: their heights overlap."""
+    top = max(a[1], b[1])
+    bottom = min(a[3], b[3])
+    return bottom - top >= 0.5 * min(a[3] - a[1], b[3] - b[1])
+
+
+def order_balloons(groups):
+    """The balloons in reading order: top to bottom, and the balloons on one
+    row (their heights overlap) left to right first."""
+    rows = []
+    for group in sorted(groups, key=lambda g: bounds(g)[1]):
+        box = bounds(group)
+        for row in rows:
+            if same_row(box, row[0][0]):
+                row.append((box, group))
+                break
+        else:
+            rows.append([(box, group)])
+    ordered = []
+    for row in rows:
+        row.sort(key=lambda entry: entry[0][0])
+        ordered.extend(group for _, group in row)
+    return ordered
+
+
 def main():
     lines = load(sys.argv[1])
     if vertical(lines):
         groups = groups_of(lines, vertical_links(lines))
         bubble = 'vertical'
-        groups.sort(key=lambda g: (min(l['y'] for l in g), -max(right(l) for l in g)))
+        groups = order_balloons(groups)
         order = lambda g: sorted(g, key=lambda l: (-right(l), l['y']))
     else:
         pitch = pitch_of(lines)
@@ -179,7 +212,7 @@ def main():
         biggest = {w: max(len(g) for g in gs) for w, gs in by_way.items()}
         bubble = 'centred' if biggest['centred'] >= biggest['left'] else 'left'
         groups = by_way[bubble]
-        groups.sort(key=lambda g: (min(l['y'] for l in g), min(l['x'] for l in g)))
+        groups = order_balloons(groups)
         order = lambda g: sorted(g, key=lambda l: (l['y'], l['x']))
     out = ['%d lines -> %d balloons (%s)' % (len(lines), len(groups), bubble)]
     for i, g in enumerate(groups):
