@@ -720,7 +720,13 @@
         if (typeof htmlToImage === 'undefined' || !htmlToImage.toCanvas) {
             return renderTranslatedImageCanvas(base64Image, boxes, options);
         }
-        return renderTranslatedImageDOM(base64Image, boxes, options).catch(function (err) {
+        // Anything the DOM rendering throws, before or during its
+        // asynchronous work (an old WebView without a feature it needs, a
+        // renderer error), and the image still comes out, through the canvas
+        // renderer.
+        return Promise.resolve().then(function () {
+            return renderTranslatedImageDOM(base64Image, boxes, options);
+        }).catch(function (err) {
             log('[ImageTrans] DOM rendering failed, falling back to canvas:', err);
             return renderTranslatedImageCanvas(base64Image, boxes, options);
         });
