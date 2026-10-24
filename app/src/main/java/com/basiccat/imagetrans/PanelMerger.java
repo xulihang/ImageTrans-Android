@@ -175,10 +175,23 @@ final class PanelMerger {
         }
 
         // Panels in reading order, lines in each in their natural order.
+        // The sort is stable, so lines and blocks already in order stay so.
+        final List<Box> source = new ArrayList<>(sorted);
         Collections.sort(groups, new Comparator<List<Box>>() {
             @Override
             public int compare(List<Box> a, List<Box> b) {
-                return Integer.compare(panels.order(groupUnion(a)), panels.order(groupUnion(b)));
+                int byPanel = Integer.compare(panels.order(groupUnion(a)), panels.order(groupUnion(b)));
+                if (byPanel != 0) return byPanel;
+                // Without panel info keep the lines' own order (e.g. the
+                // text order the caller sent); otherwise top to bottom and,
+                // for vertical text lines, right to left.
+                if (panels instanceof Estimated) return firstIndex(source, a) - firstIndex(source, b);
+                Box ua = groupUnion(a);
+                Box ub = groupUnion(b);
+                if (rightToLeft && ua.width < ua.height && ub.width < ub.height) {
+                    return Double.compare(ub.left(), ua.left());
+                }
+                return Double.compare(ua.top(), ub.top());
             }
         });
 
@@ -203,8 +216,7 @@ final class PanelMerger {
         return merged;
     }
 
-    private static boolean joins(final Layout panels, List<Box> group, List<Box> other,
-                                 double yGap) {
+    private static boolean joins(final Layout panels, List<Box> group, List<Box> other,                                 double yGap) {
         for (Box a : group) {
             for (Box b : other) {
                 if (xOverlapRatio(a, b) >= 0.15 && yCloseEnough(a, b, yGap)
@@ -214,6 +226,16 @@ final class PanelMerger {
             }
         }
         return false;
+    }
+
+    /** Position of a block's first line in the given (ordered) lines. */
+    private static int firstIndex(List<Box> lines, List<Box> group) {
+        int best = Integer.MAX_VALUE;
+        for (Box box : group) {
+            int index = lines.indexOf(box);
+            if (index >= 0) best = Math.min(best, index);
+        }
+        return best;
     }
 
     private static Box groupUnion(List<Box> group) {
@@ -274,9 +296,15 @@ final class PanelMerger {
             Collections.sort(sortedPanels, new Comparator<Box>() {
                 @Override
                 public int compare(Box a, Box b) {
-                    double tolerance = Math.max(a.height, b.height) * 0.6;
+                    // Rows: a little overlap of the tops is enough (reading
+                    // across a spread); vertical text lines: right to left.
+                    boolean verticalText = a.width < a.height && b.width < b.height;
+                    double tolerance = verticalText ? 0 : Math.max(a.height, b.height) * 0.15;
                     if (Math.abs(a.top() - b.top()) > tolerance) {
                         return Double.compare(a.top(), b.top());
+                    }
+                    if (a.width < a.height && b.width < b.height) {
+                        return Double.compare(b.left(), a.left());
                     }
                     return Double.compare(a.left(), b.left());
                 }
@@ -344,22 +372,17 @@ final class PanelMerger {
 
         @Override
         int order(Box block) {
-            for (int i = 0; i < sortedPanels.size(); i++) {
-                if (contains(sortedPanels.get(i), block, AROUND_BLOCK)) return i;
+            int index = 0;
+            for (Box panel : sortedPanels) {
+                if (contains(panel, block, AROUND_LINE)) return index;
+                index++;
             }
-            // Not in any drawn panel: between the panels it falls between.
-            int key = 0;
-            for (int i = 0; i < sortedPanels.size(); i++) {
-                if (sortedPanels.get(i).top() <= block.top()) key = i + 1;
-            }
-            return key;
+            return index;
         }
     }
 
     /** Slack in pixels when deciding which panel a line belongs to. */
     private static final double AROUND_LINE = 1;
-    /** Slack when looking up the panel of a finished block. */
-    private static final double AROUND_BLOCK = 6;
 
     private static boolean contains(Box outer, Box inner, double slack) {
         return inner.left() >= outer.left() - slack && inner.top() >= outer.top() - slack
