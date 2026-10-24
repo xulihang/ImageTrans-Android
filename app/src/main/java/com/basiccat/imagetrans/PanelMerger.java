@@ -62,16 +62,21 @@ final class PanelMerger {
         if (items == null || items.isEmpty()) return new ArrayList<>();
         if (xGap <= 0) xGap = 15;
         if (yGap <= 0) yGap = 15;
+        // The lines usually come in reading order (the order of the .itp's
+        // boxes); that order is what the blocks and their lines follow.
+        final boolean ordered = inReadingOrder(items);
         List<Box> sorted = new ArrayList<>(items);
-        Collections.sort(sorted, new Comparator<Box>() {
-            @Override
-            public int compare(Box a, Box b) {
-                if (Math.abs(a.top() - b.top()) < Math.min(a.height, b.height) * 0.5) {
-                    return Double.compare(a.left(), b.left());
+        if (!ordered) {
+            Collections.sort(sorted, new Comparator<Box>() {
+                @Override
+                public int compare(Box a, Box b) {
+                    if (Math.abs(a.top() - b.top()) < Math.min(a.height, b.height) * 0.5) {
+                        return Double.compare(a.left(), b.left());
+                    }
+                    return Double.compare(a.top(), b.top());
                 }
-                return Double.compare(a.top(), b.top());
-            }
-        });
+            });
+        }
 
         int tall = 0;
         for (int i = 0; i < items.size(); i++) {
@@ -128,14 +133,18 @@ final class PanelMerger {
                     line.add(part);
                 }
             }
-            // A line reads left to right (right to left for Arabic).
-            Collections.sort(line, new Comparator<Box>() {
-                @Override
-                public int compare(Box a, Box b) {
-                    if (rightToLeft) return Double.compare(b.left(), a.left());
-                    return Double.compare(a.left(), b.left());
-                }
-            });
+            // A horizontal line reads left to right (right to left for
+            // Arabic), a vertical one from top to bottom (which is also the
+            // order the fragments came in), unless the input order is used.
+            if (!ordered) {
+                Collections.sort(line, new Comparator<Box>() {
+                    @Override
+                    public int compare(Box a, Box b) {
+                        if (rightToLeft) return Double.compare(b.left(), a.left());
+                        return Double.compare(a.left(), b.left());
+                    }
+                });
+            }
             lines.add(line);
         }
 
@@ -178,25 +187,28 @@ final class PanelMerger {
                     changed = true;
                 }
             }
-            // Rows from top to bottom (by y); lines on one row from left to
-            // right (by x). Arabic and vertical text read right to left.
-            // Rows from top to bottom (by y); lines on a row from left to
-            // right (by x). Arabic and vertical text read right to left.
-            // A narrow fragment (half a line the OCR split off) just before
-            // the next row belongs to this row: "GREEN" sits a moment above
-            // the "L LEATHER." it continues.
-            final Map<Box, Double> rows = new IdentityHashMap<>();
-            for (Box box : group) rows.put(box, rowOf(box, rows));
-            Collections.sort(group, new Comparator<Box>() {
-                @Override
-                public int compare(Box a, Box b) {
-                    double rowA = rows.get(a);
-                    double rowB = rows.get(b);
-                    if (Math.abs(rowA - rowB) > 1) return Double.compare(rowA, rowB);
-                    if (vertical || rightToLeft) return Double.compare(b.left(), a.left());
-                    return Double.compare(a.left(), b.left());
+            // Lines keep their reading order: within a line the fragments
+            // were put in order in phase 1 (by x), and a block's lines
+            // follow the order they arrived in (top to bottom in a bubble,
+            // for vertical text right to left). Only a narrow fragment that
+            // is much shorter than the lines around it (the OCR split it
+            // off, "GREEN") moves up into the line above it.
+            if (group.size() > 1 && ordered) {
+                double typical = 0;
+                for (Box box : group) typical += Math.abs(box.width);
+                typical /= group.size();
+                List<Box> sequence = new ArrayList<>(group);
+                for (int k = sequence.size() - 1; k > 0; k--) {
+                    Box box = sequence.get(k);
+                    Box above = sequence.get(k - 1);
+                    if (Math.abs(box.width) > typical * FRAGMENT_WIDTH) continue;
+                    if (box.top() - above.top() > Math.abs(above.height)) continue;
+                    sequence.remove(k);
+                    sequence.add(k - 1, box);
                 }
-            });
+                group.clear();
+                group.addAll(sequence);
+            }
             if (nextParagraph != null) {
                 // The block reached the start of another paragraph: that
                 // line stands alone for now, and its paragraph joins it.
@@ -209,26 +221,36 @@ final class PanelMerger {
             groups.add(group);
         }
 
-        // Panels in reading order, lines in each in their natural order.
-        // The sort is stable, so lines and blocks already in order stay so.
-        final List<Box> source = new ArrayList<>(sorted);
-        Collections.sort(groups, new Comparator<List<Box>>() {
-            @Override
-            public int compare(List<Box> a, List<Box> b) {
-                int byPanel = Integer.compare(panels.order(groupUnion(a)), panels.order(groupUnion(b)));
-                if (byPanel != 0) return byPanel;
-                // Without panel info keep the lines' own order (e.g. the
-                // text order the caller sent); otherwise top to bottom and,
-                // for vertical text lines, right to left.
-                if (panels instanceof Estimated) return firstIndex(source, a) - firstIndex(source, b);
-                Box ua = groupUnion(a);
-                Box ub = groupUnion(b);
-                if (rightToLeft && ua.width < ua.height && ub.width < ub.height) {
-                    return Double.compare(ub.left(), ua.left());
+        // With the lines in reading order, the blocks follow it, and so do
+        // the lines inside each block. The sort is stable, and every block's
+        // first line comes before its other lines, so nothing gets shuffled.
+        if (ordered) {
+            final List<Box> source = new ArrayList<>(sorted);
+            Collections.sort(groups, new Comparator<List<Box>>() {
+                @Override
+                public int compare(List<Box> a, List<Box> b) {
+                    return firstIndex(source, a) - firstIndex(source, b);
                 }
-                return Double.compare(ua.top(), ub.top());
-            }
-        });
+            });
+        } else {
+            Collections.sort(groups, new Comparator<List<Box>>() {
+                @Override
+                public int compare(List<Box> a, List<Box> b) {
+                    int byPanel = Integer.compare(panels.order(groupUnion(a)), panels.order(groupUnion(b)));
+                    if (byPanel != 0) return byPanel;
+                    // Without panel info keep the lines' own order (e.g. the
+                    // text order the caller sent); otherwise top to bottom and,
+                    // for vertical text lines, right to left.
+                    if (panels instanceof Estimated) return firstIndex(sorted, a) - firstIndex(sorted, b);
+                    Box ua = groupUnion(a);
+                    Box ub = groupUnion(b);
+                    if (rightToLeft && ua.width < ua.height && ub.width < ub.height) {
+                        return Double.compare(ub.left(), ua.left());
+                    }
+                    return Double.compare(ua.top(), ub.top());
+                }
+            });
+        }
 
         List<Box> merged = new ArrayList<>();
         boolean cjk = false;
@@ -264,18 +286,26 @@ final class PanelMerger {
     }
 
     /**
-     * The row a line belongs to for ordering (its y). Lines whose tops are
-     * closer than half a line height share a row.
+     * Whether the lines are already in reading order: each line starts at
+     * or below the one before (a few pixels up is still fine), and to its
+     * right if it shares the row. Interleaved paragraphs (line 1 of a row
+     * of two columns) or geometry order are not.
      */
-    private static double rowOf(Box line, Map<Box, Double> rows) {
-        double row = line.top();
-        double half = 0.5 * Math.abs(line.height);
-        for (Map.Entry<Box, Double> other : rows.entrySet()) {
-            if (other.getKey() == line) continue;
-            if (Math.abs(other.getValue() - row) <= half) row = Math.min(row, other.getValue());
+    private static boolean inReadingOrder(List<Box> lines) {
+        if (lines.size() < 3) return true;
+        for (int i = 1; i < lines.size(); i++) {
+            Box before = lines.get(i - 1);
+            Box after = lines.get(i);
+            double row = Math.min(Math.abs(before.height), Math.abs(after.height)) * 0.5;
+            if (after.top() > before.top() + row) continue;
+            if (after.top() < before.top() - row) return false;
+            if (after.left() < before.left()) return false;
         }
-        return row;
+        return true;
     }
+
+    /** A line narrower than this share of a block's lines is a fragment. */
+    private static final double FRAGMENT_WIDTH = 0.75;
 
     /** Position of a block's first line in the given (ordered) lines. */    private static int firstIndex(List<Box> lines, List<Box> group) {
         int best = Integer.MAX_VALUE;
