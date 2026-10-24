@@ -433,20 +433,31 @@
 
             // The masks, in the boxes' order (a later box's mask covers an
             // earlier one's), for the whole area each box's text takes up.
+            // The boxes' edges are snapped to whole pixels, one beyond the
+            // text's, so a mask still covers it after the renderer rounds.
             for (var m = 0; m < placed.length; m++) {
                 var p = placed[m];
                 if (options.textRepairMode === 'none') continue;
+                var mx = Math.floor(p.x) - 1;
+                var my = Math.floor(p.y) - 1;
                 var m2 = document.createElement('div');
                 m2.style.cssText = importantCss(
                     'all:initial;position:absolute;display:block;box-sizing:border-box;' +
                     'margin:0;padding:0;background-color:' + p.color + ';' +
-                    'left:' + p.x + 'px;top:' + p.y + 'px;' +
-                    'width:' + p.w + 'px;height:' + p.h + 'px;'
+                    'left:' + mx + 'px;top:' + my + 'px;' +
+                    'width:' + (Math.ceil(p.x + p.w) + 1 - mx) + 'px;' +
+                    'height:' + (Math.ceil(p.y + p.h) + 1 - my) + 'px;'
                 );
                 masks.appendChild(m2);
             }
 
-            var piece = function () {
+            // Both layers are taken at the same whole-pixel size and offset,
+            // so the texts land on the pixels the masks cover (a fraction
+            // would make the two shift against each other).
+            var whole = function (value) {
+                return Math.max(0, Math.round(value)) + 'px';
+            };
+            var piece = function (layer) {
                 return htmlToImage.toCanvas(container, {
                     width: natW,
                     height: natH,
@@ -455,24 +466,44 @@
                     skipFonts: true,
                     pixelRatio: 1
                 }).then(function (canvas) {
-                    return canvas;
+                    log('[ImageTrans] piece', layer === masks ? 'masks' : 'texts',
+                        container.getBoundingClientRect().left, container.getBoundingClientRect().top,
+                        canvas.width, canvas.height);
+                    // The layer as it was drawn: its whole-pixel edges.
+                    var left = Math.round(parseFloat(layer.style.left) || 0);
+                    var top = Math.round(parseFloat(layer.style.top) || 0);
+                    var width = Math.round(parseFloat(layer.style.width) || natW);
+                    var height = Math.round(parseFloat(layer.style.height) || natH);
+                    return { canvas: canvas, left: left, top: top, width: width, height: height };
                 });
+            };
+            var compound = function (imgs) {
+                var out = document.createElement('canvas');
+                out.width = natW;
+                out.height = natH;
+                var ctx = out.getContext('2d');
+                for (var k = 0; k < imgs.length; k++) {
+                    var r = imgs[k];
+                    if (k === 0) {
+                        ctx.drawImage(r.canvas, 0, 0, natW, natH);
+                    } else {
+                        ctx.drawImage(r.canvas, r.left, r.top, r.width, r.height);
+                    }
+                }
+                wrapper.remove();
+                return out.toDataURL('image/webp', 0.8);
             };
             container.removeChild(textLayer);
             container.appendChild(masks);
-            return piece().then(function (maskCanvas) {
+            return piece(masks).then(function (mask) {
                 container.removeChild(masks);
                 container.appendChild(textLayer);
-                return piece().then(function (textCanvas) {
-                    var out = document.createElement('canvas');
-                    out.width = natW;
-                    out.height = natH;
-                    var ctx = out.getContext('2d');
-                    ctx.drawImage(img, 0, 0, natW, natH);
-                    ctx.drawImage(maskCanvas, 0, 0, natW, natH);
-                    ctx.drawImage(textCanvas, 0, 0, natW, natH);
-                    wrapper.remove();
-                    return out.toDataURL('image/webp', 0.8);
+                textLayer.style.setProperty('left', whole(mask.left), 'important');
+                textLayer.style.setProperty('top', whole(mask.top), 'important');
+                textLayer.style.setProperty('width', whole(mask.width), 'important');
+                textLayer.style.setProperty('height', whole(mask.height), 'important');
+                return piece(textLayer).then(function (textCanvas) {
+                    return compound([mask, textCanvas]);
                 });
             });
         });
