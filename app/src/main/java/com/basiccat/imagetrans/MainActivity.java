@@ -245,7 +245,10 @@ public class MainActivity extends LocalizedActivity {
         // A grant made in the system settings a moment ago continues from
         // checkOverlayGrant(), not from another trip to the settings.
         if (overlayPending) return;
-        ScreenshotTranslateService.stop(this);
+        // A windows-only session from a previous attempt is closed below,
+        // unless a server also runs: that case keeps its service and the
+        // window start replaces the windows.
+        if (!Prefs.isServerEnabled(this)) ScreenshotTranslateService.stop(this);
         if (!Prefs.hasOverlayPermission(this)) {
             if (Prefs.isOverlayAsked(this)) {
                 new AlertDialog.Builder(this)

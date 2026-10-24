@@ -118,17 +118,42 @@ public class ScreenshotTranslateService extends Service {
 
     /** Stops only the server; the floating windows (if any) stay. */
     public static void stopServer(Context context) {
-        context.startService(new Intent(context, ScreenshotTranslateService.class)
-                .setAction(ACTION_HIDE)
-                .putExtra(EXTRA_SERVER_ONLY, true));
+        hide(context, true);
     }
-
-    static final String EXTRA_SERVER_ONLY = "server_only";
 
     public static void stop(Context context) {
-        context.startService(new Intent(context, ScreenshotTranslateService.class)
-                .setAction(ACTION_HIDE));
+        hide(context, false);
     }
+
+    /**
+     * Sends the "close" command, but only to a running service. Starting a
+     * stopped one would have to post a foreground notification at once, which
+     * closing never does, and seconds later the system kills the app with
+     * ForegroundServiceDidNotStartInTime. A stopped service has nothing to
+     * stop anyway.
+     */
+    private static void hide(Context context, boolean serverOnly) {
+        if (!isRunning()) return;
+        Intent intent = new Intent(context, ScreenshotTranslateService.class)
+                .setAction(ACTION_HIDE);
+        if (serverOnly) intent.putExtra(EXTRA_SERVER_ONLY, true);
+        context.startService(intent);
+    }
+
+    /**
+     * Whether this service is live. It is only ever started from the app's
+     * own process (the main screen, the capture consent activity or a
+     * notification), which is where this static lives as well.
+     */
+    private static boolean isRunning() {
+        // Set in onCreate(), cleared when the instance really goes away; a
+        // "restart pending" onDestroy keeps the service alive.
+        return running;
+    }
+
+    private static volatile boolean running;
+
+    static final String EXTRA_SERVER_ONLY = "server_only";
 
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
@@ -188,6 +213,7 @@ public class ScreenshotTranslateService extends Service {
     @Override
     public void onCreate() {
         super.onCreate();
+        running = true;
         windowManager = (WindowManager) getSystemService(WINDOW_SERVICE);
         createChannels();
         if (Prefs.isServerEnabled(this)) {
@@ -312,6 +338,7 @@ public class ScreenshotTranslateService extends Service {
             Log.i(TAG, "service destroyed; server continues");
             return;
         }
+        running = false;
         releaseWakeLock();
         executor.shutdownNow();
         if (mediaProjection != null) mediaProjection.stop();
