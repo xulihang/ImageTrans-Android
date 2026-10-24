@@ -159,6 +159,9 @@
     <string name="settings_openai_prompt">提示词</string>
     <string name="settings_openai_prompt_note">可用占位符：{sourceLang}、{targetLang}、{texts}。{texts} 是待翻译文本的 JSON 数组，必须保留；结果需返回与输入顺序一致的 JSON 数组。留空则使用默认提示词。</string>
     <string name="settings_prompt_needs_texts">提示词必须包含 {texts} 占位符</string>
+    <string name="settings_openai_extra_params">额外参数（JSON）</string>
+    <string name="settings_openai_extra_params_note">附加到每次翻译请求里的字段，默认关闭 DeepSeek 的思考：{"thinking": {"type": "disabled"}}。留空表示不加。model 和 messages 由应用设置，不能在这里覆盖。</string>
+    <string name="settings_extra_params_invalid">额外参数不是有效的 JSON 对象</string>
     <string name="settings_render_section">排版渲染</string>
     <string name="settings_render_css">文本框 CSS</string>
     <string name="settings_vertical_text">竖排文字</string>

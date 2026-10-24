@@ -279,6 +279,27 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:text="@string/settings_openai_prompt_note" />
+
+            <TextView
+                style="@style/FieldLabel"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/settings_openai_extra_params" />
+
+            <EditText
+                android:id="@+id/editOpenAiExtraParams"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="top|start"
+                android:inputType="textMultiLine"
+                android:minLines="2"
+                android:textSize="14sp" />
+
+            <TextView
+                style="@style/Note"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/settings_openai_extra_params_note" />
         </LinearLayout>
 
         <TextView

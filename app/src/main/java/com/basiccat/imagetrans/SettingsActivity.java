@@ -39,6 +39,7 @@ public class SettingsActivity extends LocalizedActivity {
     private EditText editOpenAiKey;
     private EditText editOpenAiModel;
     private EditText editOpenAiPrompt;
+    private EditText editOpenAiExtraParams;
     private Spinner spinnerSource;
     private Spinner spinnerTarget;
     private EditText editRenderCss;
@@ -72,6 +73,7 @@ public class SettingsActivity extends LocalizedActivity {
         editOpenAiKey = findViewById(R.id.editOpenAiKey);
         editOpenAiModel = findViewById(R.id.editOpenAiModel);
         editOpenAiPrompt = findViewById(R.id.editOpenAiPrompt);
+        editOpenAiExtraParams = findViewById(R.id.editOpenAiExtraParams);
         spinnerSource = findViewById(R.id.spinnerSource);
         spinnerTarget = findViewById(R.id.spinnerTarget);
         editRenderCss = findViewById(R.id.editRenderCss);
@@ -159,6 +161,7 @@ public class SettingsActivity extends LocalizedActivity {
         editOpenAiKey.setText(Prefs.getOpenAiKey(this));
         editOpenAiModel.setText(Prefs.getOpenAiModel(this));
         editOpenAiPrompt.setText(Prefs.getOpenAiPrompt(this));
+        editOpenAiExtraParams.setText(Prefs.getOpenAiExtraParamsText(this));
 
         spinnerSource.setSelection(indexOfCode(Prefs.getSourceLang(this)));
         spinnerTarget.setSelection(indexOfCode(Prefs.getTargetLang(this)));
@@ -238,6 +241,20 @@ public class SettingsActivity extends LocalizedActivity {
             return;
         }
 
+        // Sent into the request as it is: a JSON object of the extra fields
+        // (null: empty, nothing added).
+        String extraParams = editOpenAiExtraParams.getText().toString().trim();
+        if (!extraParams.isEmpty()) {
+            try {
+                // A JSON object: an array or a bare value is refused.
+                Object value = new org.json.JSONTokener(extraParams).nextValue();
+                if (!(value instanceof org.json.JSONObject)) throw new org.json.JSONException("not an object");
+            } catch (Exception e) {
+                ImageUtils.toast(this, getString(R.string.settings_extra_params_invalid));
+                return;
+            }
+        }
+
         String newUiLang = UI_LANG_VALUES[spinnerUiLang.getSelectedItemPosition()];
         boolean uiLanguageChanged = !newUiLang.equals(Prefs.getUiLang(this));
 
@@ -253,6 +270,7 @@ public class SettingsActivity extends LocalizedActivity {
         Prefs.setOpenAiKey(this, editOpenAiKey.getText().toString().trim());
         Prefs.setOpenAiModel(this, editOpenAiModel.getText().toString().trim());
         Prefs.setOpenAiPrompt(this, prompt.isEmpty() ? Prefs.DEFAULT_PROMPT : prompt);
+        Prefs.setOpenAiExtraParamsText(this, extraParams);
         Prefs.setSourceLang(this, Prefs.LANG_CODES[spinnerSource.getSelectedItemPosition()]);
         Prefs.setTargetLang(this, Prefs.LANG_CODES[spinnerTarget.getSelectedItemPosition()]);
         Prefs.setRenderCss(this, editRenderCss.getText().toString());

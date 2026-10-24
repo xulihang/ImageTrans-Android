@@ -55,6 +55,15 @@ public final class OpenAiTranslator {
         JSONObject request = new JSONObject();
         request.put("model", model);
         request.put("messages", messages);
+        // Extra request fields from the settings (e.g. DeepSeek's
+        // {"thinking": {"type": "disabled"}}); "model" and "messages" stay
+        // the app's.
+        JSONObject extra = Prefs.getOpenAiExtraParams(context);
+        for (java.util.Iterator<String> it = extra.keys(); it.hasNext(); ) {
+            String key = it.next();
+            if ("model".equals(key) || "messages".equals(key)) continue;
+            request.put(key, extra.get(key));
+        }
 
         String base = apiUrl.trim();
         while (base.endsWith("/")) {

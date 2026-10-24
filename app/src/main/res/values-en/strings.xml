@@ -155,6 +155,9 @@
     <string name="settings_openai_prompt">Prompt</string>
     <string name="settings_openai_prompt_note">Placeholders: {sourceLang}, {targetLang}, {texts}. {texts} is the JSON array of texts to translate and is required; the reply must be a JSON array in the same order. Leave empty to use the default prompt.</string>
     <string name="settings_prompt_needs_texts">The prompt must contain the {texts} placeholder</string>
+    <string name="settings_openai_extra_params">Extra parameters (JSON)</string>
+    <string name="settings_openai_extra_params_note">Fields added to every translation request, DeepSeek thinking is off by default: {"thinking": {"type": "disabled"}}. Leave empty for none. model and messages are set by the app and cannot be overridden here.</string>
+    <string name="settings_extra_params_invalid">The extra parameters are not a valid JSON object</string>
     <string name="settings_render_section">Rendering</string>
     <string name="settings_render_css">Text box CSS</string>
     <string name="settings_vertical_text">Vertical text</string>

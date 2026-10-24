@@ -6,6 +6,10 @@ import android.content.Intent;
 import android.content.SharedPreferences;
 import android.net.Uri;
 import android.provider.Settings;
+import android.util.Log;
+
+import org.json.JSONException;
+import org.json.JSONObject;
 
 /**
  * Application settings stored in SharedPreferences.
@@ -29,6 +33,9 @@ public final class Prefs {
     private static final String LEGACY_DEFAULT_SERVER_URL = "https://local.basiccat.org:51043";
     public static final String DEFAULT_OPENAI_URL = "https://api.deepseek.com/v1";
     public static final String DEFAULT_OPENAI_MODEL = "deepseek-flash";
+    /** DeepSeek's switch for its thinking mode; translating does not need it. */
+    public static final String DEFAULT_OPENAI_EXTRA_PARAMS =
+            "{\"thinking\": {\"type\": \"disabled\"}}";
     /** The previous default, replaced automatically for settings saved before. */
     private static final String LEGACY_DEFAULT_OPENAI_MODEL = "deepseek-v4-flash";
     public static final String DEFAULT_RENDER_CSS = "text-align: center;\nborder-radius: 10%;";
@@ -187,6 +194,31 @@ public final class Prefs {
 
     public static void setOpenAiPrompt(Context context, String value) {
         get(context).edit().putString("openai_prompt", value).apply();
+    }
+
+    /**
+     * Extra fields of the chat/completions request, stored as JSON; DeepSeek
+     * turns its thinking off by default. Empty or invalid JSON means no
+     * extra fields.
+     */
+    public static String getOpenAiExtraParamsText(Context context) {
+        return get(context).getString("openai_extra_params", DEFAULT_OPENAI_EXTRA_PARAMS);
+    }
+
+    public static void setOpenAiExtraParamsText(Context context, String value) {
+        get(context).edit().putString("openai_extra_params",
+                value == null ? "" : value.trim()).apply();
+    }
+
+    public static JSONObject getOpenAiExtraParams(Context context) {
+        String text = getOpenAiExtraParamsText(context);
+        if (text.isEmpty()) return new JSONObject();
+        try {
+            return new JSONObject(text);
+        } catch (JSONException e) {
+            Log.w("Prefs", "openai_extra_params is not a JSON object: " + text, e);
+            return new JSONObject();
+        }
     }
 
     public static String getRenderCss(Context context) {
