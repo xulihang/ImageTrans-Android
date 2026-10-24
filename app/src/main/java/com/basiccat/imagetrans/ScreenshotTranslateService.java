@@ -639,6 +639,21 @@ public class ScreenshotTranslateService extends Service {
         showNotificationHint();
     }
 
+    /** Held on the ball without dragging: closes the overlay. */
+    private final Runnable closeAfterHold = () -> {
+        Log.i(TAG, "ball held: closing");
+        if (ballShown) {
+            ballShown = false;
+            try {
+                windowManager.removeViewImmediate(ball);
+            } catch (IllegalArgumentException ignored) {
+                // Already gone.
+            }
+            ball = null;
+        }
+        shutdown();
+    };
+
     /** The ball above the frame: a window added again goes on top. */
     private void raiseBall() {
         if (!ballShown || ball == null) return;
@@ -741,8 +756,11 @@ public class ScreenshotTranslateService extends Service {
     private void showBall() {
         Context themed = new ContextThemeWrapper(this, R.style.FloatingTheme);
         LinearLayout row = new LinearLayout(themed);
+        // The menu opens to the left of the ball and reads right to left:
+        // translate, close result, hide / show frame.
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setGravity(Gravity.CENTER_VERTICAL);
+        row.setLayoutDirection(android.view.View.LAYOUT_DIRECTION_RTL);
         row.setBackgroundResource(R.drawable.floating_ball_bg);
 
         TextView icon = new TextView(themed);
@@ -791,19 +809,6 @@ public class ScreenshotTranslateService extends Service {
         row.addView(frameItem, new LinearLayout.LayoutParams(
                 android.view.ViewGroup.LayoutParams.WRAP_CONTENT, dp(52)));
 
-        TextView hideItem = new TextView(themed);
-        hideItem.setText(R.string.action_close);
-        hideItem.setTextColor(getColor(R.color.text_secondary));
-        hideItem.setTextSize(14);
-        hideItem.setGravity(Gravity.CENTER);
-        hideItem.setPadding(dp(12), 0, dp(14), 0);
-        hideItem.setOnClickListener(v -> {
-            Log.i(TAG, "hide tapped");
-            shutdown();
-        });
-        row.addView(hideItem, new LinearLayout.LayoutParams(
-                android.view.ViewGroup.LayoutParams.WRAP_CONTENT, dp(52)));
-
         row.setOnTouchListener(new View.OnTouchListener() {
             private float downRawX, downRawY;
             private int downLeft, downTop;
@@ -818,6 +823,12 @@ public class ScreenshotTranslateService extends Service {
                         downLeft = ballParams.x;
                         downTop = ballParams.y;
                         dragging = false;
+                        if (!ballExpanded) {
+                            // Held still: closes the overlay (the menu's
+                            // close entry is gone).
+                            mainHandler.postDelayed(closeAfterHold, ViewConfiguration
+                                    .getLongPressTimeout() + 200L);
+                        }
                         return true;
                     case MotionEvent.ACTION_MOVE: {
                         float dx = event.getRawX() - downRawX;
@@ -835,6 +846,7 @@ public class ScreenshotTranslateService extends Service {
                         return true;
                     }
                     case MotionEvent.ACTION_UP:
+                        mainHandler.removeCallbacks(closeAfterHold);
                         if (dragging) {
                             Prefs.setFloatingBallX(ScreenshotTranslateService.this, ballParams.x);
                             Prefs.setFloatingBallY(ScreenshotTranslateService.this, ballParams.y);
@@ -904,6 +916,7 @@ public class ScreenshotTranslateService extends Service {
     }
 
     private void clampBall() {
+        if (ball == null) return;
         DisplayMetrics metrics = getResources().getDisplayMetrics();
         int maxX = Math.max(0, metrics.widthPixels - ball.getWidth());
         int maxY = Math.max(0, metrics.heightPixels - ball.getHeight());
