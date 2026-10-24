@@ -153,6 +153,8 @@ public class SelectionOverlay extends View {
         params.y = -1;
         frame.set(initialFrame);
         setVisibility(View.VISIBLE);
+        // Added before the flag, so a failed addView() does not leave the
+        // window manager updates below thinking the view is attached.
         windowManager.addView(this, params);
         attached = true;
         // Reopen the frame's touch area once the window knows the screen size.
@@ -168,7 +170,7 @@ public class SelectionOverlay extends View {
         params.y = -1;
         clearTranslation();
         setVisibility(View.GONE);
-        windowManager.removeView(this);
+        if (isAttachedToWindow()) windowManager.removeView(this);
         callback.onCancelled();
     }
 

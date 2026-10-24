@@ -12,6 +12,7 @@ import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.provider.Settings;
+import android.util.Log;
 import android.view.MotionEvent;
 import android.view.View;
 import android.widget.Button;
@@ -23,6 +24,12 @@ public class MainActivity extends LocalizedActivity {
     private static final int REQUEST_OVERLAY = 1003;
     private static final int REQUEST_NOTIFICATIONS = 1004;
     private static final int REQUEST_ACCESSIBILITY = 1005;
+    /**
+     * The notification permission is asked once per launch. Asked before
+     * starting a foreground service, Android 13+ treats an answer right after
+     * the dialog closed as a missing "visible UI" and refuses the start.
+     */
+    private boolean notificationRequested;
     /**
      * A capture grant (Android 10) was requested and its result is expected.
      * The system may still report RESULT_CANCELED to the recreated activity
@@ -37,6 +44,8 @@ public class MainActivity extends LocalizedActivity {
     private boolean overlayPending;
     private static final long OVERLAY_GRANT_POLL_MS = 200;
     private static final long OVERLAY_GRANT_TIMEOUT_MS = 3000;
+    /** Lets the notification permission dialog finish closing. */
+    private static final long FOREGROUND_START_DELAY_MS = 700;
     private final Runnable pollOverlayGrant = this::checkOverlayGrant;
 
     private TextView modeSummary;
@@ -260,9 +269,10 @@ public class MainActivity extends LocalizedActivity {
             startActivityForResult(Prefs.overlayPermissionIntent(this), REQUEST_OVERLAY);
             return;
         }
-        if (Build.VERSION.SDK_INT >= 33
+        if (Build.VERSION.SDK_INT >= 33 && !notificationRequested
                 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)
                 != PackageManager.PERMISSION_GRANTED) {
+            notificationRequested = true;
             requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS},
                     REQUEST_NOTIFICATIONS);
             return;
@@ -295,16 +305,28 @@ public class MainActivity extends LocalizedActivity {
             return;
         }
         Prefs.setFloatingEnabled(this, true);
-        ScreenshotTranslateService.enable(this);
-        ImageUtils.toast(this, getString(R.string.main_floating_started));
+        try {
+            ScreenshotTranslateService.enable(this);
+            ImageUtils.toast(this, getString(R.string.main_floating_started));
+        } catch (RuntimeException e) {
+            // e.g. ForegroundServiceStartNotAllowedException: the system
+            // refused the start instead of letting it crash the app.
+            Prefs.setFloatingEnabled(this, false);
+            Log.e("MainActivity", "floating start failed", e);
+            ImageUtils.toast(this, getString(R.string.main_floating_start_failed,
+                    ImageUtils.humanError(e)));
+        }
         updateFloatingButton();
     }
 
     @Override
     public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] results) {
         super.onRequestPermissionsResult(requestCode, permissions, results);
-        // The notification is only a convenience; continue either way.
-        if (requestCode == REQUEST_NOTIFICATIONS) startFloating();
+        if (requestCode != REQUEST_NOTIFICATIONS) return;
+        // The notification is only a convenience; continue either way. Let
+        // the dialog finish its exit animation first: a foreground-service
+        // start right in the callback is refused ("not in the foreground").
+        btnFloating.postDelayed(this::startFloating, FOREGROUND_START_DELAY_MS);
     }
 
     private void pickImage() {
@@ -322,8 +344,15 @@ public class MainActivity extends LocalizedActivity {
             capturePending = false;
             if (resultCode == RESULT_OK && data != null) {
                 Prefs.setFloatingEnabled(this, true);
-                ScreenshotTranslateService.show(this, resultCode, data);
-                ImageUtils.toast(this, getString(R.string.main_floating_started));
+                try {
+                    ScreenshotTranslateService.show(this, resultCode, data);
+                    ImageUtils.toast(this, getString(R.string.main_floating_started));
+                } catch (RuntimeException e) {
+                    Prefs.setFloatingEnabled(this, false);
+                    Log.e("MainActivity", "floating start failed", e);
+                    ImageUtils.toast(this, getString(R.string.main_floating_start_failed,
+                            ImageUtils.humanError(e)));
+                }
             } else if (asked) {
                 ImageUtils.toast(this, getString(R.string.main_floating_cancelled));
             }
@@ -332,7 +361,7 @@ public class MainActivity extends LocalizedActivity {
         }
         if (requestCode == REQUEST_ACCESSIBILITY) {
             if (!Prefs.hasAccessibilityService(this)) return;
-            startFloating();
+            enableFloating();
             return;
         }
         if (requestCode == REQUEST_OVERLAY) {
@@ -342,6 +371,11 @@ public class MainActivity extends LocalizedActivity {
         if (requestCode != REQUEST_PICK_IMAGE || resultCode != RESULT_OK || data == null) {
             return;
         }
+        startTranslate(data);
+    }
+
+    /** Opens an image in the translation screen. */
+    private void startTranslate(Intent data) {
         Uri uri = data.getData();
         if (uri == null) return;
         try {

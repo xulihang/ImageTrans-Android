@@ -115,6 +115,7 @@
     <string name="main_open_settings">Open Settings</string>
     <string name="main_floating_need_accessibility">Screenshot translation needs the ImageTrans accessibility service (used only to take screenshots). Turn it on once to capture at any time, even after switching apps. Enable it first.</string>
     <string name="main_floating_started">Screen capture translation turned on</string>
+    <string name="main_floating_start_failed">Screen capture translation could not start: %1$s</string>
     <string name="accessibility_service_label">ImageTrans</string>
     <string name="accessibility_service_description">ImageTrans takes a screenshot inside the floating frame for translation. It does not read anything else on the screen.</string>
 

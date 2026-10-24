@@ -115,6 +115,7 @@
     <string name="main_open_settings">去设置</string>
     <string name="main_floating_need_accessibility">截屏翻译需要在系统设置中开启 ImageTrans 的无障碍服务（用于截屏），开启一次后切换应用也可以随时截屏。请先开启该服务。</string>
     <string name="main_floating_started">截屏翻译已开启</string>
+    <string name="main_floating_start_failed">截屏翻译未能开启：%1$s</string>
     <string name="accessibility_service_label">ImageTrans</string>
     <string name="accessibility_service_description">ImageTrans 用于截屏：在悬浮框内截取屏幕并进行翻译。不会读取屏幕上的其他内容。</string>
 

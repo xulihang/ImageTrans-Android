@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Notification icon for the floating windows and the server: the
+     launcher's translation arrows as a white status-bar glyph (Android
+     draws small icons as a mask, so only the shape matters). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M20,30 h68 a6,6 0 0 1 6,6 v36 a6,6 0 0 1 -6,6 h-68 a6,6 0 0 1 -6,-6 v-36 a6,6 0 0 1 6,-6 z M28,38 v32 h52 v-32 z" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M38,48 h24 l-5,-5 4,-4 12,12 -12,12 -4,-4 5,-5 h-24 z" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M70,66 h-24 l5,5 -4,4 -12,-12 12,-12 4,4 -5,5 h24 z" />
+</vector>
