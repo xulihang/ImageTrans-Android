@@ -87,6 +87,9 @@ final class PanelMerger {
         // Vertical text: most lines are much taller than wide (a column
         // fragment is tall and narrow, a line of prose only slightly so).
         final boolean vertical = verticalText(items);
+        Log.d(TAG, "merge: " + items.size() + " lines, " + (vertical ? "vertical" : "horizontal")
+                + " text, " + (layout instanceof Estimated ? "estimated balloons" : "given panels")
+                + ", gaps " + xGap + "/" + yGap + ", sourceLang " + sourceLang);
 
         // Like the desktop merge, panel by panel (clusters of neighboring
         // lines): lines of different panels never join. Without panels the
@@ -101,8 +104,19 @@ final class PanelMerger {
         // reading order (ImageTrans numbers them when it detects the panels)
         // keeps its own order; otherwise the same rule sorts its blocks.
         List<Box> blocks = new ArrayList<>();
+        int panelIndex = 0;
         for (List<Box> panel : layout.partition(items, true)) {
             List<Box> ofPanel = mergePanel(panel, sourceLang, vertical, rightToLeft, xGap, yGap);
+            // What the panel's lines came to, before the panels are put in
+            // order: one block per entry, so a panel split in two shows.
+            StringBuilder text = new StringBuilder("panel ").append(panelIndex++)
+                    .append(": ").append(panel.size()).append(" lines -> ").append(ofPanel.size())
+                    .append(inReadingOrder(panel) ? " blocks (kept in the stored order)" : " blocks");
+            for (Box block : ofPanel) {
+                text.append(NEWLINE).append(String.format(Locale.US, "    %.0f,%.0f %.0fx%.0f %s",
+                        block.x, block.y, block.width, block.height, block.source));
+            }
+            Log.d(TAG, text.toString());
             if (!inReadingOrder(panel)) orderBlocks(ofPanel, vertical);
             blocks.addAll(ofPanel);
         }
@@ -697,15 +711,29 @@ final class PanelMerger {
             double pitch = pitch(lines);
             // The page's alignment: a pair of lines may be set both ways at
             // once (a left-aligned paragraph's lines may also be centred),
-            // and it counts for both.
+            // and it counts for both. The links of each way are logged as an
+            // array of indices, i * n + j, to compare with split_rules.py.
+            Log.d(TAG, "pitch " + pitch);
+            // For each way: the pairs linked, and those rejected and why (the
+            // reason of the first condition that failed), to compare with
+            // split_rules.py on the same page.
             for (int way = 0; way < 2; way++) {
+                boolean centred = way == 0;
+                StringBuilder links = new StringBuilder(centred ? "centred links" : "left links");
+                StringBuilder apart = new StringBuilder(centred ? "centred apart" : "left apart");
                 for (int i = 0; i < n; i++) {
                     for (int j = i + 1; j < n; j++) {
-                        if (linesTogether(lines, lines.get(i), lines.get(j), way == 0, pitch)) {
+                        Box a = lines.get(i), b = lines.get(j);
+                        if (linesTogether(lines, a, b, centred, pitch)) {
                             union(parent, i, j);
+                            links.append(' ').append(i * n + j);
+                        } else {
+                            apart.append(' ').append(i * n + j).append(':').append(apartReason(lines, a, b, centred, pitch));
                         }
                     }
                 }
+                Log.d(TAG, links.toString());
+                Log.d(TAG, apart.toString());
             }
         }
         int[] labels = new int[n];
@@ -754,15 +782,39 @@ final class PanelMerger {
 
     // --- horizontal text: lines in a paragraph or balloon -------------------
 
-    /** The usual distance between neighboring lines: the most common one. */
+    /**
+     * The usual distance between neighboring lines: the most common one.
+     *
+     * Only the lines of one column count: in a page of two columns the lines
+     * of the left and of the right come in turn, and the distances between
+     * them are not the line pitch but a fraction of it.
+     */
     private static double pitch(List<Box> lines) {
-        List<Double> tops = new ArrayList<>();
-        for (Box line : lines) tops.add(line.top());
-        Collections.sort(tops);
+        List<List<Box>> columns = new ArrayList<>();
+        for (Box line : lines) {
+            List<Box> column = null;
+            for (List<Box> candidate : columns) {
+                if (setAlike(line, candidate.get(0), false)
+                        || setAlike(line, candidate.get(0), true)) {
+                    column = candidate;
+                    break;
+                }
+            }
+            if (column == null) {
+                columns.add(new ArrayList<>(Collections.singletonList(line)));
+            } else {
+                column.add(line);
+            }
+        }
         List<Long> diffs = new ArrayList<>();
-        for (int i = 1; i < tops.size(); i++) {
-            double diff = tops.get(i) - tops.get(i - 1);
-            if (diff > 0) diffs.add(Math.round(diff / 2));
+        for (List<Box> column : columns) {
+            List<Double> tops = new ArrayList<>();
+            for (Box line : column) tops.add(line.top());
+            Collections.sort(tops);
+            for (int i = 1; i < tops.size(); i++) {
+                double diff = tops.get(i) - tops.get(i - 1);
+                if (diff > 0) diffs.add(Math.round(diff / 2));
+            }
         }
         // Ties go to the smaller distance (a page may have as many wider
         // gaps as its line pitch).
@@ -783,11 +835,33 @@ final class PanelMerger {
      * {@code centred}, otherwise left-aligned), close (no wider than the
      * pitch) and no line of another balloon lies between them.
      */
+    /** Why two lines are not one: the first test of linesTogether that failed. */
+    private static String apartReason(List<Box> lines, Box a, Box b, boolean centred, double pitch) {
+        double height = Math.max(Math.abs(a.height), Math.abs(b.height));
+        double step = Math.abs(a.top() - b.top());
+        if (step > LINE_GAP_HEIGHTS * pitch) return "gap";
+        if (step > LINE_PITCH * pitch) return "pitch";
+        double edge = LINE_EDGE * height;
+        boolean setAlike = centred
+                ? Math.abs(a.centerX() - b.centerX()) <= edge
+                : Math.abs(a.left() - b.left()) <= edge;
+        if (!setAlike) return "align";
+        for (Box middle : lines) {
+            if (middle == a || middle == b) continue;
+            if (liesBetween(a, b, middle, pitch)) return "between";
+        }
+        return "?";
+    }
+
     private static boolean linesTogether(List<Box> lines, Box a, Box b, boolean centred,
                                          double pitch) {
         double height = Math.max(Math.abs(a.height), Math.abs(b.height));
-        if (Math.abs(a.top() - b.top()) > LINE_GAP_HEIGHTS * pitch) return false;
-        if (b.top() - a.top() > LINE_PITCH * pitch) return false;
+        // What matters is the step from one to the next, whichever of the two
+        // comes first: in a page of columns the lines on the left and on the
+        // right come in turn, so their tops are not ordered.
+        double step = Math.abs(a.top() - b.top());
+        if (step > LINE_GAP_HEIGHTS * pitch) return false;
+        if (step > LINE_PITCH * pitch) return false;
         double edge = LINE_EDGE * height;
         boolean setAlike = centred
                 ? Math.abs(a.centerX() - b.centerX()) <= edge
@@ -795,9 +869,22 @@ final class PanelMerger {
         if (!setAlike) return false;
         for (Box middle : lines) {
             if (middle == a || middle == b) continue;
+            // Only a line in their own column separates them: one in another
+            // column runs across the gap between two columns' lines.
+            if (!setAlike(middle, a, centred) && !setAlike(middle, b, centred)) {
+                continue;
+            }
             if (liesBetween(a, b, middle, pitch)) return false;
         }
         return true;
+    }
+
+    /** Whether a line is set like {@code line}: centred or left-aligned with it. */
+    private static boolean setAlike(Box line, Box other, boolean centred) {
+        double edge = LINE_EDGE * Math.max(Math.abs(line.height), Math.abs(other.height));
+        return centred
+                ? Math.abs(line.centerX() - other.centerX()) <= edge
+                : Math.abs(line.left() - other.left()) <= edge;
     }
 
     /**
