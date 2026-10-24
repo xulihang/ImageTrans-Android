@@ -401,8 +401,15 @@
                 texts.appendChild(el);
                 placed.push({ el: el, x: c.x, y: c.y, w: c.w, h: c.h, color: maskColor });
 
+                // The font fits the box's sides, not its rounding: with a
+                // 50% radius scrollWidth and scrollHeight only report the
+                // rectangle past the rounded corners, which is empty, so the
+                // largest font would look as if it fitted.
+                var radius = el.style.getPropertyValue('border-radius');
+                el.style.setProperty('border-radius', '0', 'important');
                 var sized = fitBoxFontSize(el, userFontSize, options.minFontSize,
                         options.fontScale);
+                el.style.setProperty('border-radius', radius || '0', 'important');
                 // Larger than the box either because of the minimum size or
                 // because of fontScale: the mask follows the grown text.
                 if (sized.used > sized.fit) {
