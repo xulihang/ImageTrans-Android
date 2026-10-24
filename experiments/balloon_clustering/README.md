@@ -29,7 +29,8 @@ wide):
 
 The balloons are laid out in reading order after they are found: rows from
 top to bottom, where two balloons are on one row when their heights overlap
-(by half the shorter one), and the balloons of a row from left to right.
+(by half the shorter one); the balloons of a row from right to left for
+vertical text (a manga reads from the right) and left to right otherwise.
 
 ## Results on the sample pages
 

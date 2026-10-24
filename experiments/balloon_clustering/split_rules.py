@@ -179,9 +179,10 @@ def same_row(a, b):
     return bottom - top >= 0.5 * min(a[3] - a[1], b[3] - b[1])
 
 
-def order_balloons(groups):
+def order_balloons(groups, vertical=False):
     """The balloons in reading order: top to bottom, and the balloons on one
-    row (their heights overlap) left to right first."""
+    row (their heights overlap) right to left for vertical text (a manga is
+    read from the right), left to right for text written in lines."""
     rows = []
     for group in sorted(groups, key=lambda g: bounds(g)[1]):
         box = bounds(group)
@@ -193,7 +194,7 @@ def order_balloons(groups):
             rows.append([(box, group)])
     ordered = []
     for row in rows:
-        row.sort(key=lambda entry: entry[0][0])
+        row.sort(key=lambda entry: -entry[0][0] if vertical else entry[0][0])
         ordered.extend(group for _, group in row)
     return ordered
 
@@ -203,7 +204,7 @@ def main():
     if vertical(lines):
         groups = groups_of(lines, vertical_links(lines))
         bubble = 'vertical'
-        groups = order_balloons(groups)
+        groups = order_balloons(groups, True)
         order = lambda g: sorted(g, key=lambda l: (-right(l), l['y']))
     else:
         pitch = pitch_of(lines)
