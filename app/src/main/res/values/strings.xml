@@ -82,8 +82,8 @@
     <string name="copy_selection">复制所选</string>
     <string name="copy_all">复制全部</string>
     <string name="select_text_first">请先长按选择文字</string>
-    <string name="floating_ball_channel_name">截屏翻译悬浮球</string>
-    <string name="floating_running">截屏翻译已开启</string>
+    <string name="floating_ball_channel_name">悬浮窗翻译</string>
+    <string name="floating_running">悬浮窗翻译已开启</string>
     <string name="floating_running_hint">拖动调整选框，双击框内翻译</string>
     <string name="floating_need_notifications">请在系统设置中允许 ImageTrans 的通知，否则无法截屏</string>
     <string name="floating_need_overlay">请先允许「显示在其他应用上层」</string>
@@ -106,16 +106,16 @@
 %1$s</string>
     <string name="main_server_not_running">服务器没有在运行，请重新启动。</string>
     <string name="server_need_notifications">请在系统设置中允许 ImageTrans 的通知，否则无法在后台运行服务器</string>
-    <string name="main_floating">截屏翻译悬浮球</string>
+    <string name="main_floating">悬浮窗翻译</string>
     <string name="main_floating_hint">开启后屏幕上出现选框，拖动调整区域，双击框内截取该区域并翻译，译文显示在框中。</string>
-    <string name="main_floating_on">关闭悬浮球</string>
-    <string name="main_floating_off">开启悬浮球</string>
-    <string name="main_floating_need_permission">截屏翻译需要在其他应用上显示悬浮球，请先允许「显示在其他应用上层」权限。</string>
-    <string name="main_floating_need_permission_short">未获得悬浮窗权限，无法开启截屏翻译</string>
+    <string name="main_floating_on">关闭悬浮窗翻译</string>
+    <string name="main_floating_off">开启悬浮窗翻译</string>
+    <string name="main_floating_need_permission">悬浮窗翻译需要在其他应用上显示悬浮窗，请先允许「显示在其他应用上层」权限。</string>
+    <string name="main_floating_need_permission_short">未获得悬浮窗权限，无法开启悬浮窗翻译</string>
     <string name="main_open_settings">去设置</string>
-    <string name="main_floating_need_accessibility">截屏翻译需要在系统设置中开启 ImageTrans 的无障碍服务（用于截屏），开启一次后切换应用也可以随时截屏。请先开启该服务。</string>
-    <string name="main_floating_started">截屏翻译已开启</string>
-    <string name="main_floating_start_failed">截屏翻译未能开启：%1$s</string>
+    <string name="main_floating_need_accessibility">悬浮窗翻译需要在系统设置中开启 ImageTrans 的无障碍服务（用于截屏），开启一次后切换应用也可以随时截屏。请先开启该服务。</string>
+    <string name="main_floating_started">悬浮窗翻译已开启</string>
+    <string name="main_floating_start_failed">悬浮窗翻译未能开启：%1$s</string>
     <string name="accessibility_service_label">ImageTrans</string>
     <string name="accessibility_service_description">ImageTrans 用于截屏：在悬浮框内截取屏幕并进行翻译。不会读取屏幕上的其他内容。</string>
 
@@ -211,7 +211,7 @@
     <string name="floating_no_image">没有收到图像</string>
     <string name="floating_need_accessibility">请在系统设置中开启 ImageTrans 的无障碍服务（用于截屏）</string>
     <string name="floating_capture_error">截屏失败：%1$s</string>
-    <string name="main_floating_cancelled">未授权截屏，截屏翻译未开启</string>
+    <string name="main_floating_cancelled">未授权截屏，悬浮窗翻译未开启</string>
     <string name="floating_renderer_timeout">渲染器初始化超时</string>
     <string name="floating_renderer_failed">无法创建渲染器</string>
 

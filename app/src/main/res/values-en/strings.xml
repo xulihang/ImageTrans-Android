@@ -82,8 +82,8 @@
     <string name="copy_selection">Copy Selection</string>
     <string name="copy_all">Copy All</string>
     <string name="select_text_first">Long-press to select text first</string>
-    <string name="floating_ball_channel_name">Screenshot Translation Ball</string>
-    <string name="floating_running">Screenshot Translation On</string>
+    <string name="floating_ball_channel_name">Overlay Translation</string>
+    <string name="floating_running">Overlay Translation On</string>
     <string name="floating_running_hint">Drag to adjust the frame; double-tap inside to translate</string>
     <string name="floating_need_notifications">Allow ImageTrans notifications in system settings; otherwise screenshots cannot be translated</string>
     <string name="floating_need_overlay">Allow "Display over other apps" first</string>
@@ -106,16 +106,16 @@
 %1$s</string>
     <string name="main_server_not_running">The server is not running. Start it again.</string>
     <string name="server_need_notifications">Allow ImageTrans notifications in system settings; otherwise the server cannot run in the background</string>
-    <string name="main_floating">Screenshot Translation Ball</string>
+    <string name="main_floating">Overlay Translation</string>
     <string name="main_floating_hint">Adds a frame to the screen. Drag it to choose an area, then double-tap inside to capture and translate it; the translation appears in the frame.</string>
-    <string name="main_floating_on">Turn Off Ball</string>
-    <string name="main_floating_off">Turn On Ball</string>
-    <string name="main_floating_need_permission">Screenshot translation needs the "Display over other apps" permission. Allow it first.</string>
-    <string name="main_floating_need_permission_short">Overlay permission is missing; cannot start screenshot translation</string>
+    <string name="main_floating_on">Turn Off Overlay Translation</string>
+    <string name="main_floating_off">Turn On Overlay Translation</string>
+    <string name="main_floating_need_permission">Overlay translation needs the "Display over other apps" permission. Allow it first.</string>
+    <string name="main_floating_need_permission_short">Overlay permission is missing; cannot start overlay translation</string>
     <string name="main_open_settings">Open Settings</string>
-    <string name="main_floating_need_accessibility">Screenshot translation needs the ImageTrans accessibility service (used only to take screenshots). Turn it on once to capture at any time, even after switching apps. Enable it first.</string>
-    <string name="main_floating_started">Screen capture translation turned on</string>
-    <string name="main_floating_start_failed">Screen capture translation could not start: %1$s</string>
+    <string name="main_floating_need_accessibility">Overlay translation needs the ImageTrans accessibility service (used only to take screenshots). Turn it on once to capture at any time, even after switching apps. Enable it first.</string>
+    <string name="main_floating_started">Overlay translation turned on</string>
+    <string name="main_floating_start_failed">Overlay translation could not start: %1$s</string>
     <string name="accessibility_service_label">ImageTrans</string>
     <string name="accessibility_service_description">ImageTrans takes a screenshot inside the floating frame for translation. It does not read anything else on the screen.</string>
 
@@ -206,7 +206,7 @@
     <string name="floating_no_image">No image received</string>
     <string name="floating_need_accessibility">Turn on the ImageTrans accessibility service (used for screenshots) in system settings</string>
     <string name="floating_capture_error">Screenshot failed: %1$s</string>
-    <string name="main_floating_cancelled">Screen capture was not authorized; screenshot translation is off</string>
+    <string name="main_floating_cancelled">Screen capture was not authorized; overlay translation is off</string>
     <string name="floating_renderer_timeout">Renderer initialization timed out</string>
     <string name="floating_renderer_failed">Could not create the renderer</string>
 
