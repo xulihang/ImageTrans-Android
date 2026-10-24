@@ -250,18 +250,16 @@ public class MainActivity extends LocalizedActivity {
         // window start replaces the windows.
         if (!Prefs.isServerEnabled(this)) ScreenshotTranslateService.stop(this);
         if (!Prefs.hasOverlayPermission(this)) {
-            if (Prefs.isOverlayAsked(this)) {
-                new AlertDialog.Builder(this)
-                        .setMessage(R.string.main_floating_need_permission)
-                        .setPositiveButton(R.string.main_open_settings,
-                                (dialog, which) -> startActivityForResult(
-                                        Prefs.overlayPermissionIntent(this), REQUEST_OVERLAY))
-                        .setNegativeButton(android.R.string.cancel, null)
-                        .show();
-                return;
-            }
-            Prefs.setOverlayAsked(this);
-            startActivityForResult(Prefs.overlayPermissionIntent(this), REQUEST_OVERLAY);
+            // Always say why first: jumping straight to the settings screen
+            // leaves the user wondering what they are supposed to switch on.
+            new AlertDialog.Builder(this)
+                    .setTitle(R.string.main_floating)
+                    .setMessage(R.string.main_floating_need_permission)
+                    .setPositiveButton(R.string.main_open_settings,
+                            (dialog, which) -> startActivityForResult(
+                                    Prefs.overlayPermissionIntent(this), REQUEST_OVERLAY))
+                    .setNegativeButton(android.R.string.cancel, null)
+                    .show();
             return;
         }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R

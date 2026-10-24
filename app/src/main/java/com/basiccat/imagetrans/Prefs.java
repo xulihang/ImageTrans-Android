@@ -299,14 +299,6 @@ public final class Prefs {
         get(context).edit().putBoolean("server_enabled", value).apply();
     }
 
-    public static boolean isOverlayAsked(Context context) {
-        return get(context).getBoolean("overlay_asked", false);
-    }
-
-    public static void setOverlayAsked(Context context) {
-        get(context).edit().putBoolean("overlay_asked", true).apply();
-    }
-
     public static Intent overlayPermissionIntent(Context context) {
         return new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
                 Uri.parse("package:" + context.getPackageName()));
