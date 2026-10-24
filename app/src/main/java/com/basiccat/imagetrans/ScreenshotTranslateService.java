@@ -1357,12 +1357,13 @@ public class ScreenshotTranslateService extends Service {
 
     private void imageOnCaptured(Bitmap bitmap, String error) {
         if (frameHidden) {
-            // Nothing was on screen for the work: a result is shown in a
-            // window of its own; a failure is only said.
+            // Nothing was on screen for the work. A result is translated
+            // without its own window (see showTranslated), a failure is only
+            // said.
             if (bitmap == null) {
                 showFailure(error);
             } else {
-                resultViewForCapture();
+                ImageUtils.toast(this, getString(R.string.floating_translating));
                 onCaptured(forHiddenResult(bitmap));
             }
             return;
@@ -1406,14 +1407,18 @@ public class ScreenshotTranslateService extends Service {
     }
 
     private void onCaptured(Bitmap bitmap) {
-        if (overlay == null) {
+        if (overlay == null && !frameHidden) {
             ImageUtils.recycle(bitmap);
             return;
         }
         final SelectionOverlay frame = overlay;
-        frame.showStatus(getString(R.string.floating_translating));
+        if (frame != null) frame.showStatus(getString(R.string.floating_translating));
         if (bitmap == null) {
-            frame.showResult(null, getString(R.string.floating_capture_failed));
+            if (frame != null) {
+                frame.showResult(null, getString(R.string.floating_capture_failed));
+            } else {
+                showFailure(null);
+            }
             return;
         }
 
@@ -1430,8 +1435,13 @@ public class ScreenshotTranslateService extends Service {
                 Log.i(TAG, "detected " + (result == null ? 0 : result.boxes.size()) + " boxes");
                 if (result == null) {
                     mainHandler.post(() -> {
-                        if (current == generation && overlay == frame) {
-                            frame.showResult(null, getString(R.string.floating_no_text));
+                        if (current != generation) return;
+                        if (frame != null) {
+                            if (overlay == frame) {
+                                frame.showResult(null, getString(R.string.floating_no_text));
+                            }
+                        } else {
+                            showFailure(getString(R.string.floating_no_text));
                         }
                     });
                     return;
@@ -1442,7 +1452,7 @@ public class ScreenshotTranslateService extends Service {
                 final List<Box> boxes = result.boxes;
                 final String imageDataUrl = ImageUtils.bitmapToDataUrl(bitmap);
                 mainHandler.post(() -> {
-                    if (current != generation || overlay != frame) return;
+                    if (current != generation || (frame != null && overlay != frame)) return;
                     try {
                         List<Box> renderable = new ArrayList<>();
                         for (Box box : boxes) {
@@ -1453,7 +1463,7 @@ public class ScreenshotTranslateService extends Service {
                                 new Renderer.Callback() {
                                     @Override
                                     public void onSuccess(Bitmap rendered, String url) {
-                                        if (current != generation || overlay != frame) {
+                                        if (current != generation || (frame != null && overlay != frame)) {
                                             rendered.recycle();
                                             return;
                                         }
@@ -1462,26 +1472,41 @@ public class ScreenshotTranslateService extends Service {
 
                                     @Override
                                     public void onError(String message) {
-                                        if (current == generation && overlay == frame) {
-                                            frame.showResult(null, getString(
-                                                    R.string.floating_translate_failed, message));
+                                        if (current == generation && (frame == null || overlay == frame)) {
+                                            if (frame != null) {
+                                                frame.showResult(null, getString(
+                                                        R.string.floating_translate_failed, message));
+                                            } else {
+                                                showFailure(getString(
+                                                        R.string.floating_translate_failed, message));
+                                            }
                                         }
                                     }
                                 });
                     } catch (Throwable throwable) {
-                        if (current == generation && overlay == frame) {
-                            frame.showResult(null, getString(
-                                    R.string.floating_translate_failed,
-                                    ImageUtils.humanError(throwable)));
+                        if (current == generation && (frame == null || overlay == frame)) {
+                            if (frame != null) {
+                                frame.showResult(null, getString(
+                                        R.string.floating_translate_failed,
+                                        ImageUtils.humanError(throwable)));
+                            } else {
+                                showFailure(getString(R.string.floating_translate_failed,
+                                        ImageUtils.humanError(throwable)));
+                            }
                         }
                     }
                 });
             } catch (Throwable throwable) {
                 Log.e(TAG, "translation failed", throwable);
                 mainHandler.post(() -> {
-                    if (current != generation || overlay != frame) return;
-                    frame.showResult(null, getString(R.string.floating_translate_failed,
-                            ImageUtils.humanError(throwable)));
+                    if (current != generation || (frame != null && overlay != frame)) return;
+                    if (frame != null) {
+                        frame.showResult(null, getString(R.string.floating_translate_failed,
+                                ImageUtils.humanError(throwable)));
+                    } else {
+                        showFailure(getString(R.string.floating_translate_failed,
+                                ImageUtils.humanError(throwable)));
+                    }
                 });
             } finally {
                 // Renderer must be destroyed on the main thread, after the
@@ -1513,8 +1538,11 @@ public class ScreenshotTranslateService extends Service {
     }
 
     private void showTranslated(Bitmap bitmap, List<Box> boxes) {
-        captureRegion = null;
         SelectionOverlay shown = overlay;
+        if (shown == null && frameHidden) {
+            // Whole screen, no frame: the result gets its own window now.
+            shown = resultViewForCapture();
+        }
         if (shown == null) {
             ImageUtils.recycle(bitmap);
             return;
@@ -1526,6 +1554,7 @@ public class ScreenshotTranslateService extends Service {
             if (box != null && box.hasText()) hitBoxes.add(box);
         }
         shown.showResult(bitmap, null);
+        captureRegion = null;
         Log.i(TAG, "translation shown, " + hitBoxes.size() + " boxes");
     }
 
