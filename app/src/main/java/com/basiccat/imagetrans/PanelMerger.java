@@ -29,6 +29,8 @@ import java.util.Map;
 final class PanelMerger {
     private static final String TAG = "PanelMerger";
     private static final String NEWLINE = System.lineSeparator();
+    /** A line joins a column when this share of it lies in it. */
+    private static final double MIN_COLUMN_OVERLAP = 0.5;
     /** Default gaps between two lines of one block, for callers that pass 0. */
     private static final double DEFAULT_X_GAP = 15;
     private static final double DEFAULT_Y_GAP = 15;
@@ -358,6 +360,53 @@ final class PanelMerger {
         return gap <= xGap;
     }
 
+    /**
+     * The vertical columns of a panel: in the boxes' order, each fragment is
+     * appended to the column it lies in (sideways) or continues (directly
+     * below it), the first one that fits.
+     */
+    private static List<List<Box>> columns(List<Box> order) {
+        List<List<Box>> columns = new ArrayList<>();
+        List<Double> bestScore = new ArrayList<>();
+        for (Box box : order) {
+            int best = -1;
+            double score = MIN_COLUMN_OVERLAP;
+            for (int c = 0; c < columns.size(); c++) {
+                double overlap = columnOverlap(columns.get(c), box);
+                if (overlap > score) {
+                    score = overlap;
+                    best = c;
+                }
+            }
+            if (best < 0) {
+                columns.add(new ArrayList<>(Collections.singletonList(box)));
+                bestScore.add(0.0);
+            } else {
+                columns.get(best).add(box);
+            }
+        }
+        return columns;
+    }
+
+    /**
+     * How much of a (narrow) line lies in a column, as a share of its width:
+     * most of it, and the line is beside the column's lines or right below.
+     * The neighbouring column of a narrow line may touch it by a pixel; a
+     * column's own fragments overlap it almost completely.
+     */
+    private static double columnOverlap(List<Box> column, Box line) {
+        double overlap = 0;
+        for (Box member : column) {
+            double contact = Math.min(line.right(), member.right()) - Math.max(line.left(), member.left());
+            if (contact <= 0) continue;
+            double gap = Math.max(0, Math.max(line.top(), member.top())
+                    - Math.min(line.bottom(), member.bottom()));
+            if (gap <= Math.abs(member.height) * 0.5) overlap = Math.max(overlap, contact);
+        }
+        double width = Math.abs(line.width);
+        return width <= 0 ? 0 : overlap / width;
+    }
+
     /** Whether {@code below} comes after {@code above} in its column. */
     private static boolean oneBelow(Box below, Box above, double xGap, double yGap) {
         double narrower = Math.min(Math.abs(below.width), Math.abs(above.width));
@@ -374,16 +423,19 @@ final class PanelMerger {
 
     /** Which lines share a panel. */
     abstract static class Layout {
-        /** Lines in the same panel (transitive within one panel). */
-        abstract boolean samePanel(Box a, Box b);
+        /** Whether a line belongs to the panel a group's first line is in. */
+        abstract boolean samePanel(Box first, Box box);
 
         /**
-         * The lines grouped by panel (clusters of neighboring lines). Each
-         * group is in reading order: the boxes' own order (the order
-         * ImageTrans numbered the panels and their lines), or, for flat
-         * coordinate order, down the page and across. The groups themselves
-         * are returned in the reading order of their first line, so the
-         * blocks come out in the order of the .itp's boxes.
+         * The lines grouped by panel (clusters of neighboring lines), each
+         * group in reading order: the boxes' own order (ImageTrans numbers
+         * the panels and their lines), or, for flat coordinate order, down
+         * the page and across. The groups come out in the reading order of
+         * their first line.
+         *
+         * For vertical text a group is a whole column (a column is what a
+         * bubble holds): its fragments in a row are joined by 列 first, so a
+         * column is never torn across two bubbles.
          */
         List<List<Box>> partition(List<Box> items, boolean vertical) {
             final List<Box> order = new ArrayList<>(items);
@@ -398,23 +450,38 @@ final class PanelMerger {
                     }
                 });
             }
+            List<List<Box>> units = new ArrayList<>();
+            if (vertical) {
+                units.addAll(columns(order));
+            } else {
+                for (Box box : order) {
+                    units.add(new ArrayList<>(Collections.singletonList(box)));
+                }
+            }
             List<List<Box>> groups = new ArrayList<>();
-            for (int i = 0; i < order.size(); i++) {
-                Box box = order.get(i);
+            for (List<Box> unit : units) {
                 int group = -1;
                 for (int g = 0; g < groups.size(); g++) {
-                    if (samePanel(groups.get(g).get(0), box)) {
+                    if (sameUnit(groups.get(g).get(0), unit, vertical)) {
                         group = g;
                         break;
                     }
                 }
                 if (group < 0) {
-                    groups.add(new ArrayList<>(Collections.singletonList(box)));
+                    groups.add(new ArrayList<>(unit));
                 } else {
-                    groups.get(group).add(box);
+                    groups.get(group).addAll(unit);
                 }
             }
             return groups;
+        }
+
+        /**
+         * Whether a unit joins the group of {@code first}: the same panel
+         * for the first line of a whole column, otherwise its first line.
+         */
+        private boolean sameUnit(Box first, List<Box> unit, boolean vertical) {
+            return samePanel(first, unit.get(0));
         }
 
         static Layout ofPanels(List<Box> items, List<Box> panelRects) {
@@ -498,11 +565,7 @@ final class PanelMerger {
 
         Estimated(List<Box> items) {
             int n = items.size();
-            if (n < 4) {
-                for (Box item : items) panelOf.put(item, 0);
-                return;
-            }
-            int[] labels = cluster(items);
+            int[] labels = n < 4 ? new int[n] : cluster(items);
             for (int i = 0; i < n; i++) panelOf.put(items.get(i), labels[i]);
         }
 
