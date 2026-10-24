@@ -675,7 +675,6 @@ public class ScreenshotTranslateService extends Service {
             // The place stays, for the capture and for showing it again.
             if (overlay != null) Prefs.setFrameRect(this, overlay.getFrame());
             destroyOverlay();
-            dismissResultView();
             // A translation still running belonged to the frame: it stops.
             captureRegion = null;
             generation++;
@@ -897,7 +896,8 @@ public class ScreenshotTranslateService extends Service {
 
     /** Whether a result is on screen, in the frame or in its own window. */
     private boolean hasResult() {
-        return overlay != null && overlay.hasResult();
+        return (overlay != null && overlay.hasResult())
+                || (resultView != null && resultView.hasResult());
     }
 
     /**
