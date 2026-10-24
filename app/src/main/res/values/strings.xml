@@ -84,7 +84,7 @@
     <string name="select_text_first">请先长按选择文字</string>
     <string name="floating_ball_channel_name">悬浮窗翻译</string>
     <string name="floating_running">悬浮窗翻译已开启</string>
-    <string name="floating_running_hint">拖动调整选框，点按框内翻译</string>
+    <string name="floating_running_hint">点按悬浮球翻译；拖动调整选框，点按框内也可翻译</string>
     <string name="floating_need_notifications">请在系统设置中允许 ImageTrans 的通知，否则无法截屏</string>
     <string name="floating_need_overlay">请先允许「显示在其他应用上层」</string>
     <string name="selection_hint">拖动边框调整区域，点按框内翻译</string>
