@@ -27,10 +27,12 @@ import java.util.ArrayList;
  * The image opens fitted inside the view, whole if it fits at screen width
  * (tall images are fitted to the height, landscape ones to the width), and
  * can be zoomed out to see the whole picture or in until one image pixel
- * covers one device pixel (at most).
+ * covers {@link #MAX_PIXELS_ON_SCREEN} device pixels.
  */
 public class ZoomableImageView extends View {
 
+    /** At most this many device pixels per image pixel at maximum zoom. */
+    private static final float MAX_PIXELS_ON_SCREEN = 3f;
     private static final float DOUBLE_TAP_SCALE = 2.5f;
     private static final int SETTLE_DURATION_MS = 220;
     private static final int FLING_DURATION_MS = 450;
@@ -354,10 +356,10 @@ public class ZoomableImageView extends View {
         float fitInside = Math.min(fitWidth, getHeight() / (float) bitmap.getHeight());
         minScale = fitInside;
         initialScale = fitInside;
-        // Zooming in stops at one image pixel per device pixel: drawing the
-        // bitmap larger only invents pixels and looks blurrier than the
-        // original. Double tap still reaches at least twice the opening size.
-        maxScale = Math.max(initialScale * 2f, 1f);
+        // Drawing more than MAX_PIXELS_ON_SCREEN device pixels per image pixel
+        // only blurs, so stop zooming there.
+        float nativeScale = MAX_PIXELS_ON_SCREEN * getResources().getDisplayMetrics().density;
+        maxScale = Math.max(initialScale * 2f, nativeScale);
     }
 
     private void fitToView() {
