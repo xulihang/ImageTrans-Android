@@ -318,7 +318,7 @@
         return { x: x, y: y, w: w, h: h };
     }
 
-        function renderTranslatedImageDOM(base64Image, boxes, options) {
+    function renderTranslatedImageDOM(base64Image, boxes, options) {
         return loadImageElement(base64Image).then(function (img) {
             var natW = img.naturalWidth;
             var natH = img.naturalHeight;
@@ -390,19 +390,21 @@
                     el.style.setProperty('direction', getRenderedTextDirection(box, targetText, options), 'important');
                 }
                 el.textContent = targetText;
+                // A box at the edge of the image keeps its place (the text
+                // keeps its alignment); a text larger than its box runs over
+                // (the element grows to the text) rather than being cut at
+                // the box's edge.
+                el.style.setProperty('overflow', 'visible', 'important');
                 container.appendChild(el);
                 var piece = { el: el, x: c.x, y: c.y, w: c.w, h: c.h, color: maskColor, text: targetText };
 
                 var sized = fitBoxFontSize(el, userFontSize, options.minFontSize,
                         options.fontScale);
                 // Larger than the box either because of the minimum size or
-                // because of fontScale: grow the box around the text.
-                if (sized.used > sized.fit) {
-                    piece.w = Math.min(el.scrollWidth, natW);
-                    piece.h = Math.min(el.scrollHeight, natH);
-                    if (piece.x + piece.w > natW) piece.x = Math.max(0, natW - piece.w);
-                    if (piece.y + piece.h > natH) piece.y = Math.max(0, natH - piece.h);
-                }
+                // because of fontScale: the text keeps its size and runs
+                // over the neighbouring boxes, as it did in the app before
+                // (the mask stays the box's), never pushed back in, which
+                // would cut it in half.
                 // The text stays in the page: html-to-image draws it (vertical
                 // text, alignment and all) on top of the masks filled in
                 // below.
