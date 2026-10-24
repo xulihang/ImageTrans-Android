@@ -4,7 +4,9 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.IdentityHashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Groups recognized text lines into the blocks that are translated and
@@ -178,13 +180,19 @@ final class PanelMerger {
             }
             // Rows from top to bottom (by y); lines on one row from left to
             // right (by x). Arabic and vertical text read right to left.
+            // Rows from top to bottom (by y); lines on a row from left to
+            // right (by x). Arabic and vertical text read right to left.
+            // A narrow fragment (half a line the OCR split off) just before
+            // the next row belongs to this row: "GREEN" sits a moment above
+            // the "L LEATHER." it continues.
+            final Map<Box, Double> rows = new IdentityHashMap<>();
+            for (Box box : group) rows.put(box, rowOf(box, rows));
             Collections.sort(group, new Comparator<Box>() {
                 @Override
                 public int compare(Box a, Box b) {
-                    double row = Math.min(Math.abs(a.height), Math.abs(b.height)) * 0.5;
-                    if (Math.abs(a.top() - b.top()) > row) {
-                        return Double.compare(a.top(), b.top());
-                    }
+                    double rowA = rows.get(a);
+                    double rowB = rows.get(b);
+                    if (Math.abs(rowA - rowB) > 1) return Double.compare(rowA, rowB);
                     if (vertical || rightToLeft) return Double.compare(b.left(), a.left());
                     return Double.compare(a.left(), b.left());
                 }
@@ -255,8 +263,21 @@ final class PanelMerger {
         return false;
     }
 
-    /** Position of a block's first line in the given (ordered) lines. */
-    private static int firstIndex(List<Box> lines, List<Box> group) {
+    /**
+     * The row a line belongs to for ordering (its y). Lines whose tops are
+     * closer than half a line height share a row.
+     */
+    private static double rowOf(Box line, Map<Box, Double> rows) {
+        double row = line.top();
+        double half = 0.5 * Math.abs(line.height);
+        for (Map.Entry<Box, Double> other : rows.entrySet()) {
+            if (other.getKey() == line) continue;
+            if (Math.abs(other.getValue() - row) <= half) row = Math.min(row, other.getValue());
+        }
+        return row;
+    }
+
+    /** Position of a block's first line in the given (ordered) lines. */    private static int firstIndex(List<Box> lines, List<Box> group) {
         int best = Integer.MAX_VALUE;
         for (Box box : group) {
             int index = lines.indexOf(box);
