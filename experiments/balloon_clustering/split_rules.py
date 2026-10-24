@@ -222,5 +222,14 @@ def main():
     print('written', sys.argv[1] + '.result.txt')
 
 
+# --- lines outside the detected balloons ------------------------------------
+#
+# The app takes the balloons the detector found as the panels, and groups the
+# lines that fall in none of them by their distances, as above: a line taken
+# in by a balloon's box but far from the balloon's own lines is worked out on
+# its own as well. check_itp.py --estimate shows the app's result without any
+# panels; check_itp.py shows it with the .itp's panels.
+
 if __name__ == '__main__':
     main()
+

@@ -582,23 +582,63 @@ final class PanelMerger {
             }
         }
 
+        /**
+         * The lines outside every panel (a caption, or a balloon the detector
+         * missed), grouped by their distances as if there were no panels, and
+         * never joined to the lines of a panel. Filled in by partition().
+         */
+        private List<Box> outside = new ArrayList<>();
+        private int[] outsideLabels = new int[0];
+        private final IdentityHashMap<Box, Integer> outsideIndex = new IdentityHashMap<>();
+
+        @Override
+        List<List<Box>> partition(List<Box> items, boolean vertical) {
+            outside = new ArrayList<>();
+            for (Box line : items) {
+                if (panelOf.get(line) == null) outside.add(line);
+            }
+            for (int i = 0; i < outside.size(); i++) outsideIndex.put(outside.get(i), i);
+            outsideLabels = outside.isEmpty() ? new int[0] : cluster(outside, vertical);
+            List<List<Box>> panels = super.partition(items, vertical);
+            List<List<Box>> groups = new ArrayList<>();
+            for (List<Box> group : panels) {
+                List<Box> inPanel = new ArrayList<>();
+                for (Box line : group) {
+                    if (panelOf.get(line) != null) inPanel.add(line);
+                }
+                if (!inPanel.isEmpty()) groups.add(inPanel);
+            }
+            // The lines outside the panels: one group per cluster, the groups
+            // in the order of their first line (as the panels come).
+            java.util.LinkedHashMap<Integer, List<Box>> clusters = new java.util.LinkedHashMap<>();
+            for (Box line : outside) {
+                Integer label = outsideLabels[outsideIndex.get(line)];
+                List<Box> group = clusters.get(label);
+                if (group == null) {
+                    group = new ArrayList<>();
+                    clusters.put(label, group);
+                }
+                group.add(line);
+            }
+            groups.addAll(clusters.values());
+            return groups;
+        }
+
         @Override
         boolean samePanel(Box a, Box b) {
             Integer pa = panelOf.get(a);
             Integer pb = panelOf.get(b);
-            // A line that falls in no panel (a caption) joins a neighbor;
-            // a line outside the drawn panels joins one unless a panel was
-            // drawn between them (e.g. a box around the title only).
-            if (pa == null && pb == null) return true;
-            if (pa == null || pb == null) {
-                return !separated(panels.get(pa == null ? pb : pa), a, b);
+            if (pa == null && pb == null) {
+                Integer ia = outsideIndex.get(a), ib = outsideIndex.get(b);
+                if (ia == null || ib == null) return false;
+                return outsideLabels[ia] == outsideLabels[ib];
             }
+            // A line outside every panel does not join one of them.
+            if (pa == null || pb == null) return false;
             return pa.equals(pb);
         }
     }
 
-    /** Slack in pixels when deciding which panel a line belongs to. */
-    private static final double AROUND_LINE = 1;
     /** Slack for a panel detected from the image (a balloon's box): half a line. */
     private static final double AROUND_CENTER = 18;
 
@@ -610,18 +650,6 @@ final class PanelMerger {
 
     private static double area(Box box) {
         return Math.abs(box.width * box.height);
-    }
-
-    /** Does the panel sit between the two lines, rather than around them? */
-    private static boolean separated(Box panel, Box a, Box b) {
-        return panel.right() <= Math.max(a.left(), b.left()) + AROUND_LINE
-                && panel.right() <= Math.min(a.right(), b.right()) + AROUND_LINE
-                || panel.left() >= Math.max(a.right(), b.right()) - AROUND_LINE
-                && panel.left() >= Math.min(a.left(), b.left()) - AROUND_LINE
-                || panel.bottom() <= Math.max(a.top(), b.top()) + AROUND_LINE
-                && panel.bottom() <= Math.min(a.bottom(), b.bottom()) + AROUND_LINE
-                || panel.top() >= Math.max(a.bottom(), b.bottom()) - AROUND_LINE
-                && panel.top() >= Math.min(a.top(), b.top()) - AROUND_LINE;
     }
 
     /** Panels estimated from the lines. */
