@@ -71,6 +71,10 @@
     <string name="action_next">Next</string>
     <string name="floating_ball_label">T</string>
     <string name="floating_capture">Translate</string>
+    <string name="floating_hide_frame">Hide frame</string>
+    <string name="floating_show_frame">Show frame</string>
+    <string name="floating_running_hint_hidden">Tap the ball to translate the frame’s area</string>
+    <string name="floating_need_frame">No frame area yet; show the frame and set it first</string>
     <string name="floating_preparing">Preparing screenshot translation…</string>
     <string name="floating_translating">Translating screenshot…</string>
     <string name="floating_loading">Translating…</string>

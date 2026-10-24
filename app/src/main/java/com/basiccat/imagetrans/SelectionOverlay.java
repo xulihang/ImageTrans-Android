@@ -48,6 +48,10 @@ public class SelectionOverlay extends View {
          */
         boolean onTap(float x, float y, float displayScale);
 
+        /** "×" was tapped and the result taken away. */
+        default void onResultCleared() {
+        }
+
         /** A tap inside the frame, on what it shows (not on its edges). */
         default void onTapInFrame() {
         }
@@ -165,6 +169,27 @@ public class SelectionOverlay extends View {
         post(this::updateTouchableArea);
     }
 
+    /** Saves where the frame is and how far the window sits down the screen. */
+    private void rememberPlace() {
+        Prefs.setFrameRect(getContext(), frame);
+        int[] at = new int[2];
+        getLocationOnScreen(at);
+        Prefs.setFrameScreenOffsetY(getContext(), at[1] - contentOffsetY);
+    }
+
+    /** Like remove(), finished at once so a new window can follow. */
+    void removeImmediately() {
+        attached = false;
+        params.width = -1;
+        params.height = -1;
+        params.x = -1;
+        params.y = -1;
+        clearTranslation();
+        setVisibility(View.GONE);
+        windowManager.removeViewImmediate(this);
+        callback.onCancelled();
+    }
+
     void remove() {
         attached = false;
         // Reset the placement so a later show() places the window anew.
@@ -189,8 +214,13 @@ public class SelectionOverlay extends View {
         screenWidth = metrics.widthPixels;
         screenHeight = metrics.heightPixels;
         if (frame.isEmpty()) {
-            frame.set(Math.round(screenWidth * 0.06f), Math.round(screenHeight * 0.18f),
-                    Math.round(screenWidth * 0.94f), Math.round(screenHeight * 0.82f));
+            // Where the frame was last put, if anywhere.
+            if (Prefs.hasFrameRect(getContext())) {
+                frame.set(Prefs.getFrameRect(getContext()));
+            } else {
+                frame.set(Math.round(screenWidth * 0.06f), Math.round(screenHeight * 0.18f),
+                        Math.round(screenWidth * 0.94f), Math.round(screenHeight * 0.82f));
+            }
         }
         updateTouchableArea();
         android.util.Log.i("ImageTransFrame", "size " + screenWidth + "x" + screenHeight
@@ -456,6 +486,11 @@ public class SelectionOverlay extends View {
 
     private boolean attached;
 
+    /** The frame in the window's own space, so a new window can take it. */
+    Rect getFrame() {
+        return new Rect(frame);
+    }
+
     /**
      * The frame in real screen coordinates. The frame is kept in the
      * overlay window's own space, which starts below the status bar (the
@@ -701,6 +736,7 @@ public class SelectionOverlay extends View {
                     return handleUp(event, x, y);
                 } finally {
                     fitWindowToFrame();
+                    if (state != STATE_RESULT) rememberPlace();
                 }
             default:
                 return super.onTouchEvent(event);
@@ -711,6 +747,7 @@ public class SelectionOverlay extends View {
         if (clearing) {
             clearing = false;
             clearTranslation();
+            if (tapListener != null) tapListener.onResultCleared();
             return true;
         }
         if (dragged) return true;

@@ -353,6 +353,44 @@ public final class Prefs {
         get(context).edit().putInt("floating_ball_y", value).apply();
     }
 
+    /** The frame was hidden from the ball's menu (the ball is all there is). */
+    public static boolean isFrameHidden(Context context) {
+        return get(context).getBoolean("frame_hidden", false);
+    }
+
+    public static void setFrameHidden(Context context, boolean value) {
+        get(context).edit().putBoolean("frame_hidden", value).apply();
+    }
+
+    /** The frame's last place, in the window's coordinates. */
+    public static boolean hasFrameRect(Context context) {
+        return get(context).getBoolean("frame_rect_set", false);
+    }
+
+    public static android.graphics.Rect getFrameRect(Context context) {
+        SharedPreferences prefs = get(context);
+        return new android.graphics.Rect(prefs.getInt("frame_left", 0),
+                prefs.getInt("frame_top", 0), prefs.getInt("frame_right", 0),
+                prefs.getInt("frame_bottom", 0));
+    }
+
+    public static void setFrameRect(Context context, android.graphics.Rect rect) {
+        get(context).edit()
+                .putInt("frame_left", rect.left).putInt("frame_top", rect.top)
+                .putInt("frame_right", rect.right).putInt("frame_bottom", rect.bottom)
+                .putBoolean("frame_rect_set", true)
+                .apply();
+    }
+
+    /** How far down the window sits from the screen's top, as the frame saw it. */
+    public static int getFrameScreenOffsetY(Context context) {
+        return get(context).getInt("frame_screen_offset_y", 0);
+    }
+
+    public static void setFrameScreenOffsetY(Context context, int value) {
+        get(context).edit().putInt("frame_screen_offset_y", value).apply();
+    }
+
     public static int getFloatingPanelX(Context context) {
         return get(context).getInt("floating_panel_x",
                 Math.round(24 * context.getResources().getDisplayMetrics().density));
