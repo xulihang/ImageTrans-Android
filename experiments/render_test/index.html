@@ -70,6 +70,11 @@
 <span id="status"></span>
 
 <script src="html-to-image.js"></script>
+<script>
+// Keep the layers on the page (the inspector shows them) instead of removing
+// them once drawn.
+window.__keepLayers = true;
+</script>
 <script src="render.js"></script>
 <script>
 function readSettings() {

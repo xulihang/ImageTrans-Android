@@ -357,17 +357,12 @@
                 'overflow:hidden;line-height:1.3;color:#000;-webkit-text-fill-color:#000;' +
                 'font-family:sans-serif;';
             var texts = document.createElement('div');
-            var masks = document.createElement('div');
+            texts.setAttribute('data-layer', 'texts');
             texts.style.cssText = importantCss(
                 'all:initial;position:absolute;display:block;left:0;top:0;' +
                 'width:' + natW + 'px;height:' + natH + 'px;'
             );
-            masks.style.cssText = importantCss(
-                'all:initial;position:absolute;display:block;left:0;top:0;' +
-                'width:' + natW + 'px;height:' + natH + 'px;'
-            );
             container.appendChild(texts);
-            container.appendChild(masks);
 
             // What each box comes to after it is laid out (the element grows
             // around a larger font), for its mask.
@@ -429,16 +424,8 @@
             // The masks: the text elements' own box with the background on
             // and the text out, and their final style (font size and all)
             // kept, so the CSS, border-radius included, is the very same.
-            // The texts are put on their own while the masks go up.
-            var containerParent = container.parentNode;
-            var containerNext = container.nextSibling;
-            containerParent.removeChild(container);
-            var wrapperMasks = document.createElement('div');
-            wrapperMasks.style.cssText = importantCss(
-                'all:initial;display:block;position:fixed;left:-99999px;top:0;' +
-                'width:' + natW + 'px;height:' + natH + 'px;'
-            );
             var masks = document.createElement('div');
+            masks.setAttribute('data-layer', 'masks');
             masks.style.cssText = importantCss(
                 'all:initial;position:relative;display:block;left:0;top:0;' +
                 'width:' + natW + 'px;height:' + natH + 'px;'
@@ -452,14 +439,31 @@
                 mask.style.cssText = style + ';background-color:' + p.color + ' !important;';
                 masks.appendChild(mask);
             }
-            wrapperMasks.appendChild(masks);
-            (document.body || document.documentElement).appendChild(wrapperMasks);
+            // Each layer gets a box of its own: the one html-to-image draws,
+            // and the one to look at or edit in the browser's inspector.
+            var boxes = {};
+            var layerBox = function (layer, name) {
+                var box = document.createElement('div');
+                box.setAttribute('data-layer-box', name);
+                box.style.cssText = importantCss(
+                    'all:initial;display:block;position:relative;left:0;top:0;' +
+                    'width:' + natW + 'px;height:' + natH + 'px;' +
+                    'background-color:transparent;'
+                );
+                box.appendChild(layer);
+                boxes[name] = box;
+                return box;
+            };
+            var textsBox = layerBox(texts, 'texts');
+            var masksBox = layerBox(masks, 'masks');
+            container.appendChild(textsBox);
+            container.appendChild(masksBox);
 
             // The masks first, then the texts, each taken on its own: a text
             // that lies beside an opaque block is dropped by html-to-image,
             // and a layer of absolutely positioned boxes alone measures empty.
-            var shot = function (element) {
-                return htmlToImage.toCanvas(element, {
+            var shot = function (box) {
+                return htmlToImage.toCanvas(box, {
                     width: natW,
                     height: natH,
                     canvasWidth: natW,
@@ -468,10 +472,8 @@
                     pixelRatio: 1
                 });
             };
-            return shot(masks).then(function (maskCanvas) {
-                wrapperMasks.remove();
-                containerParent.insertBefore(container, containerNext);
-                return shot(container).then(function (textCanvas) {
+            return shot(masksBox).then(function (maskCanvas) {
+                return shot(textsBox).then(function (textCanvas) {
                     var out = document.createElement('canvas');
                     out.width = natW;
                     out.height = natH;
@@ -479,7 +481,8 @@
                     ctx.drawImage(img, 0, 0, natW, natH);
                     ctx.drawImage(maskCanvas, 0, 0, natW, natH);
                     ctx.drawImage(textCanvas, 0, 0, natW, natH);
-                    wrapper.remove();
+                    // The test page keeps the layers on the page to look at.
+                    if (!window.__keepLayers) wrapper.remove();
                     return out.toDataURL('image/webp', 0.8);
                 });
             }).catch(function (err) {
