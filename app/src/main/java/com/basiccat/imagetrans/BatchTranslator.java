@@ -89,7 +89,7 @@ final class BatchTranslator {
         if (boxes.isEmpty()) throw new Exception(context.getString(R.string.error_no_text));
 
         progress.onProgress(context.getString(R.string.translate_status_merge));
-        boxes = TextBoxMerger.merge(boxes, sourceLang, 15, 15);
+        boxes = PanelMerger.merge(boxes, sourceLang, 15, 15, null);
 
         if (Prefs.MODE_OPENAI.equals(mode) || Prefs.MODE_MYMEMORY.equals(mode)) {
             boolean mymemory = Prefs.MODE_MYMEMORY.equals(mode);

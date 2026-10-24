@@ -85,12 +85,7 @@ final class PanelMerger {
 
         // Vertical text: most lines are much taller than wide (a column
         // fragment is tall and narrow, a line of prose only slightly so).
-        int tall = 0;
-        for (int i = 0; i < items.size(); i++) {
-            Box item = items.get(i);
-            if (item.height > item.width * TALL_RATIO) tall++;
-        }
-        final boolean vertical = tall > items.size() / 2;
+        final boolean vertical = verticalText(items);
 
         // Like the desktop merge, panel by panel (clusters of neighboring
         // lines): lines of different panels never join. Without panels the
@@ -317,6 +312,16 @@ final class PanelMerger {
     private static final double SAME_LINE_OVERLAP = 0.6;
     /** A line this many times taller than wide is vertical text. */
     private static final double TALL_RATIO = 1.5;
+
+    /** Vertical text: most lines are much taller than wide. */
+    private static boolean verticalText(List<Box> items) {
+        int tall = 0;
+        for (int i = 0; i < items.size(); i++) {
+            Box item = items.get(i);
+            if (item.height > item.width * TALL_RATIO) tall++;
+        }
+        return tall * 2 > items.size();
+    }
     /** A row overlapping this share of the row above continues its block. */
     private static final double CONTINUE_OVERLAP = 0.5;
 
@@ -565,7 +570,7 @@ final class PanelMerger {
 
         Estimated(List<Box> items) {
             int n = items.size();
-            int[] labels = n < 4 ? new int[n] : cluster(items);
+            int[] labels = cluster(items, verticalText(items));
             for (int i = 0; i < n; i++) panelOf.put(items.get(i), labels[i]);
         }
 
@@ -606,28 +611,54 @@ final class PanelMerger {
     }
 
     // --- panels estimated from the lines ----------------------------------
+    //
+    // Worked out with the pages in experiments/balloon_clustering: two sets
+    // of rules, one for text written in lines (horizontal) and one for
+    // columns (vertical).
 
-    /** Lines closer than this (in heights) can be in the same panel. */
-    private static final double NEIGHBOR_GAP_HEIGHTS = 1.5;
+    /** Vertical text: tops within this many pixels are one row. */
+    private static final double COLUMN_ROW = 8;
+    /** Vertical text: columns of one balloon are at most this far apart. */
+    private static final double COLUMN_SIDE = 70;
+    /** Vertical text: one column's right edges are this close. */
+    private static final double COLUMN_EDGE = 8;
+    /** Vertical text: stacked lines of one balloon are this far apart. */
+    private static final double COLUMN_BELOW = 40;
+    /** Horizontal text: centres or left edges within this share of the height. */
+    private static final double LINE_EDGE = 0.3;
+    /** Horizontal text: lines further apart than this many heights are apart. */
+    private static final double LINE_GAP_HEIGHTS = 1.6;
+    /** Horizontal text: ... nor than this many usual line pitches. */
+    private static final double LINE_PITCH = 1.7;
 
     /**
-     * Groups the lines as the desktop does when it counts few lines
-     * (panel detection, horizontal text): a line joins the group of a line
-     * beside it (overlapping its column of the page) or right below it, less
-     * than a line and a half apart; a longer gap - to the balloon above or
-     * below, or to the next bubble - starts a new group. Groups are
-     * transitive, so the lines of a paragraph or a bubble stay together.
+     * Groups the lines into the panels they belong to (speech balloons or
+     * paragraphs) from the lines alone, for text that comes without panels.
      */
-    private static int[] cluster(List<Box> lines) {
+    private static int[] cluster(List<Box> lines, boolean vertical) {
         int n = lines.size();
         int[] parent = new int[n];
         for (int i = 0; i < n; i++) parent[i] = i;
-        for (int i = 0; i < n; i++) {
-            for (int j = i + 1; j < n; j++) {
-                if (neighbors(lines.get(i), lines.get(j))) {
-                    int a = find(parent, i);
-                    int b = find(parent, j);
-                    if (a != b) parent[a] = b;
+        if (vertical) {
+            for (int i = 0; i < n; i++) {
+                for (int j = i + 1; j < n; j++) {
+                    if (columnsTogether(lines, lines.get(i), lines.get(j))) {
+                        union(parent, i, j);
+                    }
+                }
+            }
+        } else {
+            double pitch = pitch(lines);
+            // The page's alignment: a pair of lines may be set both ways at
+            // once (a left-aligned paragraph's lines may also be centred),
+            // and it counts for both.
+            for (int way = 0; way < 2; way++) {
+                for (int i = 0; i < n; i++) {
+                    for (int j = i + 1; j < n; j++) {
+                        if (linesTogether(lines, lines.get(i), lines.get(j), way == 0, pitch)) {
+                            union(parent, i, j);
+                        }
+                    }
                 }
             }
         }
@@ -645,6 +676,111 @@ final class PanelMerger {
         return labels;
     }
 
+    // --- vertical text: columns, top to bottom, right to left ---------------
+
+    /**
+     * Two columns belong to one balloon when the gaps in both directions are
+     * small: on one row (tops within {@link #COLUMN_ROW}) and at most
+     * {@link #COLUMN_SIDE} apart, with no other column between them; or one
+     * right below the other in the same column (right edges within
+     * {@link #COLUMN_EDGE}, at most {@link #COLUMN_BELOW} apart).
+     */
+    private static boolean columnsTogether(List<Box> lines, Box a, Box b) {
+        double side = Math.max(a.left(), b.left()) - Math.min(a.right(), b.right());
+        double below = Math.max(a.top(), b.top()) - Math.min(a.bottom(), b.bottom());
+        if (Math.abs(a.top() - b.top()) <= COLUMN_ROW && side <= COLUMN_SIDE) {
+            Box left = a.left() <= b.left() ? a : b;
+            Box right = left == a ? b : a;
+            if (!columnBetween(lines, left, right)) return true;
+        }
+        return Math.abs(a.right() - b.right()) <= COLUMN_EDGE && below <= COLUMN_BELOW;
+    }
+
+    /** Whether another line on their row stands between the two columns. */
+    private static boolean columnBetween(List<Box> lines, Box left, Box right) {
+        for (Box other : lines) {
+            if (other == left || other == right) continue;
+            if (Math.abs(other.top() - left.top()) > COLUMN_ROW) continue;
+            if (other.left() > left.left() && other.right() < right.right()) return true;
+        }
+        return false;
+    }
+
+    // --- horizontal text: lines in a paragraph or balloon -------------------
+
+    /** The usual distance between neighboring lines: the most common one. */
+    private static double pitch(List<Box> lines) {
+        List<Double> tops = new ArrayList<>();
+        for (Box line : lines) tops.add(line.top());
+        Collections.sort(tops);
+        List<Long> diffs = new ArrayList<>();
+        for (int i = 1; i < tops.size(); i++) {
+            double diff = tops.get(i) - tops.get(i - 1);
+            if (diff > 0) diffs.add(Math.round(diff / 2));
+        }
+        // Ties go to the smaller distance (a page may have as many wider
+        // gaps as its line pitch).
+        long best = 0;
+        int bestCount = 0;
+        for (Long diff : diffs) {
+            int count = Collections.frequency(diffs, diff);
+            if (count > bestCount || count == bestCount && (best == 0 || diff < best)) {
+                bestCount = count;
+                best = diff;
+            }
+        }
+        return best > 0 ? best * 2 : 20;
+    }
+
+    /**
+     * Two lines belong to one balloon when they are set alike (centred for
+     * {@code centred}, otherwise left-aligned), close (no wider than the
+     * pitch) and no line of another balloon lies between them.
+     */
+    private static boolean linesTogether(List<Box> lines, Box a, Box b, boolean centred,
+                                         double pitch) {
+        double height = Math.max(Math.abs(a.height), Math.abs(b.height));
+        if (Math.abs(a.top() - b.top()) > LINE_GAP_HEIGHTS * pitch) return false;
+        if (b.top() - a.top() > LINE_PITCH * pitch) return false;
+        double edge = LINE_EDGE * height;
+        boolean setAlike = centred
+                ? Math.abs(a.centerX() - b.centerX()) <= edge
+                : Math.abs(a.left() - b.left()) <= edge;
+        if (!setAlike) return false;
+        for (Box middle : lines) {
+            if (middle == a || middle == b) continue;
+            if (liesBetween(a, b, middle, pitch)) return false;
+        }
+        return true;
+    }
+
+    /**
+     * Whether a line of another balloon lies between the two: it starts below
+     * one and above the other, and runs across their column (most of their
+     * shared width, with a gap wider than the pitch) or right beside them
+     * (much of its own width).
+     */
+    private static boolean liesBetween(Box a, Box b, Box middle, double pitch) {
+        Box top = a.top() <= b.top() ? a : b;
+        Box bottom = top == a ? b : a;
+        if (!(middle.top() > top.top() + Math.abs(top.height) * 0.5
+                && middle.top() < bottom.top() - Math.abs(bottom.height) * 0.5)) {
+            return false;
+        }
+        double left = Math.max(a.left(), b.left());
+        double right = Math.min(a.right(), b.right());
+        double shared = right - left;
+        double overlap = Math.min(right, middle.right()) - Math.max(left, middle.left());
+        if (shared > 0 && overlap >= 0.5 * shared) {
+            return middle.top() - top.top() > LINE_PITCH * pitch;
+        }
+        for (Box line : new Box[]{a, b}) {
+            double own = Math.min(line.right(), middle.right()) - Math.max(line.left(), middle.left());
+            if (own >= 0.5 * Math.min(line.width, middle.width)) return true;
+        }
+        return false;
+    }
+
     private static int find(int[] parent, int i) {
         while (parent[i] != i) {
             parent[i] = parent[parent[i]];
@@ -653,22 +789,10 @@ final class PanelMerger {
         return i;
     }
 
-    /**
-     * Whether two lines are neighbors in the sense of cluster(): less than a
-     * line and a half apart, with a side of one lying within the other
-     * (their columns of the page overlap, a margin of a third of the line
-     * height allows for lines that do not quite line up). Balloons stacked
-     * on a page nearly touch, so a longer vertical gap is what separates
-     * them; sideways, a wide and a narrow line seldom share an exact column.
-     */
-    private static boolean neighbors(Box a, Box b) {
-        double h = Math.max(Math.abs(a.height), Math.abs(b.height));
-        if (h <= 0) return false;
-        if (Math.abs(a.top() - b.top()) > NEIGHBOR_GAP_HEIGHTS * h) return false;
-        double margin = h / 3;
-        double overlap = Math.min(a.right(), b.right()) + margin
-                - Math.max(a.left() - margin, b.left());
-        return overlap > 0;
+    private static void union(int[] parent, int a, int b) {
+        int ra = find(parent, a);
+        int rb = find(parent, b);
+        if (ra != rb) parent[ra] = rb;
     }
 
     // --- logging ----------------------------------------------------------

@@ -236,10 +236,11 @@ public class TranslateActivity extends LocalizedActivity {
             throw new Exception(getString(R.string.error_no_text_local_support));
         }
 
-        // Same as doOCRYolo(): merge neighbouring lines into paragraphs before
-        // translating/rendering.
+        // Merge neighbouring lines into paragraphs before
+        // translating/rendering, grouped by panels (comics: one speech
+        // balloon each; the panels are estimated from the lines).
         status(getString(R.string.translate_status_merge));
-        boxes = TextBoxMerger.merge(boxes, sourceLang, 15, 15);
+        boxes = PanelMerger.merge(boxes, sourceLang, 15, 15, null);
 
         if (Prefs.MODE_OPENAI.equals(mode) || Prefs.MODE_MYMEMORY.equals(mode)) {
             boolean mymemory = Prefs.MODE_MYMEMORY.equals(mode);
