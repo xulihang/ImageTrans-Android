@@ -717,6 +717,7 @@ public class ScreenshotTranslateService extends Service {
         if (resultView == null) return;
         SelectionOverlay removing = resultView;
         resultView = null;
+        if (overlay == removing) overlay = null;
         try {
             removing.removeImmediately();
         } catch (IllegalArgumentException e) {
@@ -1540,13 +1541,15 @@ public class ScreenshotTranslateService extends Service {
     private void showTranslated(Bitmap bitmap, List<Box> boxes) {
         SelectionOverlay shown = overlay;
         if (shown == null && frameHidden) {
-            // Whole screen, no frame: the result gets its own window now.
+            // No frame: the result gets its own window now.
             shown = resultViewForCapture();
         }
         if (shown == null) {
             ImageUtils.recycle(bitmap);
             return;
         }
+        // A tap on it is read as the frame's own (see onOverlayTap).
+        if (frameHidden) overlay = shown;
         // The boxes with text, in the same order for the taps, the numbering
         // and the source/target texts; a box without text has nothing to show.
         hitBoxes.clear();
