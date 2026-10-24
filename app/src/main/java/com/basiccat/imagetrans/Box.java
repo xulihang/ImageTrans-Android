@@ -9,10 +9,10 @@ import org.json.JSONObject;
  * target text.
  */
 public class Box {
-    public double x;
-    public double y;
-    public double width;
-    public double height;
+    public double x = Double.NaN;
+    public double y = Double.NaN;
+    public double width = Double.NaN;
+    public double height = Double.NaN;
     public String source = "";
     public String target = "";
 

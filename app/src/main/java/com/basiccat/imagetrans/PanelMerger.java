@@ -60,246 +60,266 @@ final class PanelMerger {
     private static List<Box> merge(List<Box> items, Layout layout, String sourceLang,
                                    double xGap, double yGap, org.json.JSONArray panelsOut) {
         if (items == null || items.isEmpty()) return new ArrayList<>();
-        if (xGap <= 0) xGap = 15;
-        if (yGap <= 0) yGap = 15;
-        // The lines usually come in reading order (the order of the .itp's
-        // boxes); that order is what the blocks and their lines follow.
-        // The order the lines arrived in (the .itp's boxes) is the reading
-        // order: the blocks and their lines follow it as long as it is
-        // consistent with the layout (a line never jumps back above the
-        // previous one). Flat coordinate order, where paragraphs interleave
-        // row by row, is not, and then geometry is used.
-        final boolean ordered = inReadingOrder(items);
-        List<Box> sorted = new ArrayList<>(items);
-        if (!ordered) {
-            Collections.sort(sorted, new Comparator<Box>() {
-                @Override
-                public int compare(Box a, Box b) {
-                    if (Math.abs(a.top() - b.top()) < Math.min(a.height, b.height) * 0.5) {
-                        return Double.compare(a.left(), b.left());
-                    }
-                    return Double.compare(a.top(), b.top());
-                }
-            });
-        }
+        if (xGap <= 0) xGap = DEFAULT_X_GAP;
+        if (yGap <= 0) yGap = DEFAULT_Y_GAP;
+        final boolean rightToLeft = "ar".equals(sourceLang);
 
+        // Vertical text: most lines are much taller than wide (a column
+        // fragment is tall and narrow, a line of prose only slightly so).
         int tall = 0;
         for (int i = 0; i < items.size(); i++) {
             Box item = items.get(i);
-            if (item.height > item.width) tall++;
+            if (item.height > item.width * TALL_RATIO) tall++;
         }
-        if (tall > items.size() / 2) {
-            // Vertical text: keep the desktop merge (columns joined top to
-            // bottom); panels are a horizontal-reading feature.
-            return TextBoxMerger.merge(items, sourceLang, xGap, yGap);
-        }
+        final boolean vertical = tall > items.size() / 2;
 
+        // Like the desktop merge, panel by panel (clusters of neighboring
+        // lines): lines of different panels never join. Without panels the
+        // estimated ones are used, and reported to the server.
         if (panelsOut != null && layout instanceof Estimated) {
             ((Estimated) layout).toJson(items, panelsOut);
         }
-        final boolean rightToLeft = "ar".equals(sourceLang);
-        // Vertical columns run down each line and right to left across them.
-        final boolean vertical = tall > items.size() / 2;
-
-        // Phase 1: text fragments on the same line.
-        List<List<Box>> lines = new ArrayList<>();
-        boolean[] used = new boolean[sorted.size()];
-        for (int i = 0; i < sorted.size(); i++) {
-            if (used[i]) continue;
-            List<Box> line = new ArrayList<>();
-            line.add(sorted.get(i));
-            used[i] = true;
-            boolean changed = true;
-            while (changed) {
-                changed = false;
-                for (int j = 0; j < sorted.size(); j++) {
-                    if (used[j]) continue;
-                    Box candidate = sorted.get(j);
-                    for (int k = 0; k < line.size(); k++) {
-                        Box member = line.get(k);
-                        if (yOverlapRatio(member, candidate) >= 0.15
-                                && xCloseEnough(member, candidate, xGap)
-                                && layout.samePanel(member, candidate)) {
-                            line.add(candidate);
-                            used[j] = true;
-                            changed = true;
-                            break;
-                        }
-                    }
-                }
-            }
-            if (line.size() == 1 && layout instanceof Detected) {
-                // A panel holding one line also keeps the rest of a line the
-                // OCR split off, or words just outside it on the same row.
-                for (Box part : layout.addParts(sorted, line.get(0))) {
-                    int index = sorted.indexOf(part);
-                    if (index < 0 || used[index]) continue;
-                    used[index] = true;
-                    line.add(part);
-                }
-            }
-            // A horizontal line reads left to right (right to left for
-            // Arabic), a vertical one from top to bottom (which is also the
-            // order the fragments came in), unless the input order is used.
-            if (!ordered) {
-                Collections.sort(line, new Comparator<Box>() {
+        // Blocks keep their panel's reading order (the order the lines are
+        // stored in), with the lines of the other panels filled in after
+        // them: see Layout.partition().
+        // The blocks follow the .itp's order where its lines (boxes) are in
+        // reading order: the order the panels are first reached. Otherwise
+        // they are sorted by position, as the merge produces them.
+        List<Box> blocks = new ArrayList<>();
+        for (List<Box> panel : layout.partition(items, vertical)) {
+            List<Box> ofPanel = mergePanel(panel, sourceLang, vertical, rightToLeft, xGap, yGap);
+            if (!inReadingOrder(panel)) {
+                Collections.sort(ofPanel, new Comparator<Box>() {
                     @Override
                     public int compare(Box a, Box b) {
-                        if (rightToLeft) return Double.compare(b.left(), a.left());
-                        return Double.compare(a.left(), b.left());
+                        return vertical ? Double.compare(b.right(), a.right())
+                                : Double.compare(a.top(), b.top());
                     }
                 });
             }
-            lines.add(line);
+            blocks.addAll(ofPanel);
         }
+        return blocks;
+    }
 
-        // Phase 2: lines into blocks. Blocks that continue a panel go first,
-        // so a single-line panel is not swallowed by a neighbour: the longest
-        // panel claims its lines before a short one tries to.
-        final Layout panels = layout;
-        Collections.sort(lines, new Comparator<List<Box>>() {
-            @Override
-            public int compare(List<Box> a, List<Box> b) {
-                return Integer.compare(panels.weight(b), panels.weight(a));
+    /**
+     * One panel's lines into text blocks.
+     *
+     * Horizontal text: first the fragments on one line are joined from left
+     * to right (by x), then the resulting lines into paragraphs from top to
+     * bottom (by y); two fragments are on one line when their rows overlap
+     * most of the smaller one's height (the lines of a paragraph may overlap
+     * a little, so this must not be slack). Vertical text: first the columns
+     * (fragments one below the other, from top to bottom), then the columns
+     * from right to left.
+     */
+    private static List<Box> mergePanel(List<Box> panel, String sourceLang, boolean vertical,
+                                        boolean rightToLeft, double xGap, double yGap) {
+        // The lines (".itp" boxes) of a panel are grouped row by row, in the
+        // order they are stored: line fragments, then the next line.
+        List<List<Box>> rows = new ArrayList<>();
+        boolean[] used = new boolean[panel.size()];
+        for (int i = 0; i < panel.size(); i++) {
+            if (used[i]) continue;
+            List<Box> row = new ArrayList<>();
+            row.add(panel.get(i));
+            used[i] = true;
+            for (int j = i; j < panel.size(); j++) {
+                if (used[j]) continue;
+                boolean part = false;
+                for (Box member : row) part |= isPartOfRow(panel.get(j), member, vertical, xGap, yGap);
+                if (part) {
+                    row.add(panel.get(j));
+                    used[j] = true;
+                }
             }
-        });
-        List<List<Box>> groups = new ArrayList<>();
-        boolean[] usedLine = new boolean[lines.size()];
-        for (int i = 0; i < lines.size(); i++) {
-            if (usedLine[i]) continue;
-            List<Box> group = new ArrayList<>(lines.get(i));
-            usedLine[i] = true;
-            // Prose lines narrow towards the end of a paragraph and widen
-            // again at the next one's start; two lines of about equal width
-            // can still be joined inside a paragraph, narrower ones not.
-            final double typicalWidth = typicalWidth(lines);
-            boolean narrowing = lines.get(i).size() == 1
-                    && lines.get(i).get(0).width < typicalWidth * 0.7;
-            List<Box> nextParagraph = null;
-            boolean changed = true;
-            while (changed) {
-                changed = false;
-                for (int j = 0; j < lines.size(); j++) {
-                    if (usedLine[j]) continue;
-                    List<Box> other = lines.get(j);
-                    if (!joins(panels, group, other, yGap)) continue;
-                    if (narrowing && other.size() == 1
-                            && other.get(0).width >= lines.get(i).get(0).width * 1.5) {
-                        nextParagraph = other;
+            Collections.sort(row, new Comparator<Box>() {
+                @Override
+                public int compare(Box a, Box b) {
+                    if (vertical) {
+                        int byColumn = Double.compare(b.right(), a.right());
+                        return byColumn != 0 ? byColumn : Double.compare(a.top(), b.top());
                     }
-                    group.addAll(other);
-                    usedLine[j] = true;
-                    changed = true;
+                    if (rightToLeft) return Double.compare(b.left(), a.left());
+                    return Double.compare(a.left(), b.left());
                 }
-            }
-            // Lines keep their reading order: within a line the fragments
-            // were put in order in phase 1 (by x), and a block's lines
-            // follow the order they arrived in (top to bottom in a bubble,
-            // for vertical text right to left). Only a narrow fragment that
-            // is much shorter than the lines around it (the OCR split it
-            // off, "GREEN") moves up into the line above it.
-            if (group.size() > 1 && ordered) {
-                double typical = 0;
-                for (Box box : group) typical += Math.abs(box.width);
-                typical /= group.size();
-                List<Box> sequence = new ArrayList<>(group);
-                for (int k = sequence.size() - 1; k > 0; k--) {
-                    Box box = sequence.get(k);
-                    Box above = sequence.get(k - 1);
-                    if (Math.abs(box.width) > typical * FRAGMENT_WIDTH) continue;
-                    if (box.top() - above.top() > Math.abs(above.height)) continue;
-                    sequence.remove(k);
-                    sequence.add(k - 1, box);
-                }
-                group.clear();
-                group.addAll(sequence);
-            }
-            if (nextParagraph != null) {
-                // The block reached the start of another paragraph: that
-                // line stands alone for now, and its paragraph joins it.
-                int j = lines.indexOf(nextParagraph);
-                group.removeAll(nextParagraph);
-                lines.add(nextParagraph);
-                usedLine = Arrays.copyOf(usedLine, lines.size());
-                usedLine[j] = false;
-            }
-            groups.add(group);
+            });
+            rows.add(row);
         }
 
-        // With the lines in reading order, the blocks follow it, and so do
-        // the lines inside each block. The sort is stable, and every block's
-        // first line comes before its other lines, so nothing gets shuffled.
-        if (ordered) {
-            final List<Box> source = new ArrayList<>(sorted);
-            Collections.sort(groups, new Comparator<List<Box>>() {
+        // The second phase: rows into blocks, in reading order. Horizontal
+        // text reads top to bottom, vertical text each column top to bottom
+        // and the columns right to left.
+        if (!vertical) {
+            Collections.sort(rows, new Comparator<List<Box>>() {
                 @Override
                 public int compare(List<Box> a, List<Box> b) {
-                    return firstIndex(source, a) - firstIndex(source, b);
+                    return Double.compare(top(a), top(b));
                 }
             });
         } else {
-            Collections.sort(groups, new Comparator<List<Box>>() {
+            Collections.sort(rows, new Comparator<List<Box>>() {
                 @Override
                 public int compare(List<Box> a, List<Box> b) {
-                    int byPanel = Integer.compare(panels.order(groupUnion(a)), panels.order(groupUnion(b)));
-                    if (byPanel != 0) return byPanel;
-                    // Without panel info keep the lines' own order (e.g. the
-                    // text order the caller sent); otherwise top to bottom and,
-                    // for vertical text lines, right to left.
-                    if (panels instanceof Estimated) return firstIndex(sorted, a) - firstIndex(sorted, b);
-                    Box ua = groupUnion(a);
-                    Box ub = groupUnion(b);
-                    if (rightToLeft && ua.width < ua.height && ub.width < ub.height) {
-                        return Double.compare(ub.left(), ua.left());
-                    }
-                    return Double.compare(ua.top(), ub.top());
+                    int byColumn = Double.compare(right(a), right(b));
+                    return byColumn != 0 ? -byColumn : Double.compare(top(a), top(b));
                 }
             });
         }
-
-        List<Box> merged = new ArrayList<>();
-        boolean cjk = false;
-        for (int i = 0; i < items.size() && !cjk; i++) cjk = containsCjk(items.get(i).source);
-        for (List<Box> group : groups) {
-            StringBuilder text = new StringBuilder();
-            // Chinese, Japanese and Thai are written without spaces between
-            // words; Korean and everything else keep them.
-            boolean noSpace = "zh".equals(sourceLang) || "ja".equals(sourceLang)
-                    || "th".equals(sourceLang) || (cjk && !"ko".equals(sourceLang));
-            for (int i = 0; i < group.size(); i++) {
-                Box box = group.get(i);
-                if (i > 0 && !noSpace) text.append(' ');
-                text.append(box.source == null ? "" : box.source.trim());
-            }
-            Box union = groupUnion(group);
-            union.source = text.toString();
-            merged.add(union);
-        }
-        return merged;
-    }
-
-    private static boolean joins(final Layout panels, List<Box> group, List<Box> other,                                 double yGap) {
-        for (Box a : group) {
-            for (Box b : other) {
-                if (xOverlapRatio(a, b) >= 0.15 && yCloseEnough(a, b, yGap)
-                        && panels.samePanel(a, b) && panels.mayJoin(a, b)) {
-                    return true;
+        // A row continues the block it overlaps most in its last row, which
+        // keeps a column's lines together; a row beside another block is not
+        // pulled into that block only because they nearly touch.
+        List<List<Box>> groups = new ArrayList<>();
+        List<int[]> lastRow = new ArrayList<>();
+        for (List<Box> row : rows) {
+            int bestStart = -1;
+            double bestOverlap = 0;
+            for (int g = 0; g < groups.size(); g++) {
+                int[] last = lastRow.get(g);
+                List<Box> above = groups.get(g).subList(last[0], last[1]);
+                double overlap = vertical ? columnOverlap(above, row) : horizontalOverlap(above, row);
+                if (overlap > bestOverlap) {
+                    bestOverlap = overlap;
+                    bestStart = g;
                 }
             }
+            if (bestStart >= 0 && bestOverlap >= CONTINUE_OVERLAP) {
+                List<Box> group = groups.get(bestStart);
+                int from = group.size();
+                group.addAll(row);
+                lastRow.set(bestStart, new int[]{from, group.size()});
+            } else {
+                List<Box> group = new ArrayList<>(row);
+                groups.add(group);
+                lastRow.add(new int[]{0, group.size()});
+            }
         }
-        return false;
+
+        List<Box> blocks = new ArrayList<>();
+        for (List<Box> group : groups) {
+            Box union = groupUnion(group);
+            union.source = joinText(group, sourceLang);
+            blocks.add(union);
+        }
+        return blocks;
     }
+
+    /** Share of the narrower row that lies above (or below) the other. */
+    private static double horizontalOverlap(List<Box> above, List<Box> below) {
+        double overlap = Math.min(right(above), right(below)) - Math.max(left(above), left(below));
+        double narrower = Math.min(width(above), width(below));
+        return narrower <= 0 ? 0 : Math.max(0, overlap) / narrower;
+    }
+
+    /** Share of the narrower column that lies beside the other. */
+    private static double columnOverlap(List<Box> left, List<Box> right) {
+        double overlap = Math.min(bottom(left), bottom(right)) - Math.max(top(left), top(right));
+        double shorter = Math.min(height(left), height(right));
+        return shorter <= 0 ? 0 : Math.max(0, overlap) / shorter;
+    }
+
+    /** Whether a row continues the block whose last row it overlaps enough. */
+    private static boolean continues(List<Box> above, List<Box> row, boolean vertical) {
+        double overlap = vertical ? columnOverlap(above, row) : horizontalOverlap(above, row);
+        double height = vertical ? height(above) + height(row) : width(above) + width(row);
+        return overlap >= CONTINUE_OVERLAP || height <= 0;
+    }
+
+    /** Whether {@code line} is part of the row that {@code member} is on. */
+    private static boolean isPartOfRow(Box line, Box member, boolean vertical,
+                                       double xGap, double yGap) {
+        if (vertical) {
+            // One below the other in the same column.
+            double overlap = Math.min(line.right(), member.right())
+                    - Math.max(line.left(), member.left());
+            double narrower = Math.min(Math.abs(line.width), Math.abs(member.width));
+            return narrower > 0 && overlap / narrower >= 0.5
+                    && yCloseEnough(line, member, yGap) && xCloseEnough(line, member, xGap);
+        }
+        return sameLine(member, line, false, xGap, yGap);
+    }
+
+    /**
+     * The text of a block, line after line. Chinese, Japanese and Thai are
+     * written without spaces between words; Korean and the other languages
+     * keep them.
+     */
+    private static String joinText(List<Box> block, String sourceLang) {
+        boolean cjk = false;
+        for (Box box : block) cjk |= containsCjk(box.source);
+        boolean noSpace = "zh".equals(sourceLang) || "ja".equals(sourceLang)
+                || "th".equals(sourceLang) || (cjk && !"ko".equals(sourceLang));
+        StringBuilder text = new StringBuilder();
+        for (int i = 0; i < block.size(); i++) {
+            if (i > 0 && !noSpace) text.append(' ');
+            text.append(block.get(i).source == null ? "" : block.get(i).source.trim());
+        }
+        return text.toString();
+    }
+
+    private static double width(List<Box> row) {
+        return right(row) - left(row);
+    }
+
+    private static double height(List<Box> row) {
+        return bottom(row) - top(row);
+    }
+
+    private static double left(List<Box> row) {
+        double value = 0;
+        boolean first = true;
+        for (Box box : row) {
+            value = first ? box.left() : Math.min(value, box.left());
+            first = false;
+        }
+        return value;
+    }
+
+    private static double right(List<Box> row) {
+        double value = 0;
+        boolean first = true;
+        for (Box box : row) {
+            value = first ? box.right() : Math.max(value, box.right());
+            first = false;
+        }
+        return value;
+    }
+
+    private static double top(List<Box> row) {
+        double value = 0;
+        boolean first = true;
+        for (Box box : row) {
+            value = first ? box.top() : Math.min(value, box.top());
+            first = false;
+        }
+        return value;
+    }
+
+    private static double bottom(List<Box> row) {
+        double value = 0;
+        boolean first = true;
+        for (Box box : row) {
+            value = first ? box.bottom() : Math.max(value, box.bottom());
+            first = false;
+        }
+        return value;
+    }
+
+    /** Rows must overlap this share to be one line (overlapping only a little is not). */
+    private static final double SAME_LINE_OVERLAP = 0.6;
+    /** A line this many times taller than wide is vertical text. */
+    private static final double TALL_RATIO = 1.5;
+    /** A row overlapping this share of the row above continues its block. */
+    private static final double CONTINUE_OVERLAP = 0.5;
+    /** Default gaps between two lines of one block, for callers that pass 0. */
+    private static final double DEFAULT_X_GAP = 15;
+    private static final double DEFAULT_Y_GAP = 15;
 
     /**
      * Whether the lines are already in reading order: each line starts at
      * or below the one before (a few pixels up is still fine), and to its
-     * right if it shares the row. Interleaved paragraphs (line 1 of a row
-     * of two columns) or geometry order are not.
-     */
-    /**
-     * Whether the lines are already in reading order: each line starts at
-     * or below the one before (a few pixels up is still fine), and to its
-     * right if it shares the row.
+     * right if it shares the row. Flat coordinate order, where paragraphs
+     * interleave row by row, is not.
      */
     private static boolean inReadingOrder(List<Box> lines) {
         if (lines.size() < 3) return true;
@@ -314,69 +334,38 @@ final class PanelMerger {
         return true;
     }
 
-    /** A line narrower than this share of a block's lines is a fragment. */
-    private static final double FRAGMENT_WIDTH = 0.75;
-
-    /** Position of a block's first line in the given (ordered) lines. */
-    private static int firstIndex(List<Box> lines, List<Box> group) {
-        int best = Integer.MAX_VALUE;
-        for (Box box : group) {
-            int index = lines.indexOf(box);
-            if (index >= 0) best = Math.min(best, index);
+    /** Whether two boxes are side by side on one line (horizontal text). */
+    private static boolean sameLine(Box a, Box b, boolean vertical, double xGap, double yGap) {
+        if (vertical) {
+            return oneBelow(a, b, xGap, yGap) || oneBelow(b, a, xGap, yGap);
         }
-        return best;
+        double smaller = Math.min(Math.abs(a.height), Math.abs(b.height));
+        double overlap = Math.min(a.bottom(), b.bottom()) - Math.max(a.top(), b.top());
+        return smaller > 0 && overlap >= SAME_LINE_OVERLAP * smaller
+                && sideBySide(a, b, xGap);
     }
 
     /**
-     * Width most lines have, so a short last line does not pass for the
-     * normal width. Lines whose end is the end of a sentence are left out:
-     * those are the last lines of paragraphs.
+     * Whether two pieces on one line meet from the left to the right (they
+     * overlap or the gap is a few pixels). Below each other on the page
+     * (which may happen when the OCR boxes overlap) they do not.
      */
-    private static double typicalWidth(List<List<Box>> lines) {
-        List<Double> widths = new ArrayList<>();
-        for (List<Box> line : lines) {
-            if (line.size() != 1) continue;
-            String text = line.get(0).source;
-            if (endsSentence(text)) continue;
-            widths.add(Math.abs(line.get(0).width));
-        }
-        if (widths.isEmpty()) return 0;
-        Collections.sort(widths);
-        return widths.get(widths.size() / 2);
+    private static boolean sideBySide(Box a, Box b, double xGap) {
+        double gap = Math.max(0, Math.max(a.left(), b.left()) - Math.min(a.right(), b.right()));
+        return gap <= xGap;
     }
 
-    private static boolean endsSentence(String text) {
-        if (text == null) return false;
-        String trimmed = text.trim();
-        if (trimmed.isEmpty()) return false;
-        char last = trimmed.charAt(trimmed.length() - 1);
-        return ".?!。？！…:：".indexOf(last) >= 0;
-    }
-
-    /**
-     * Whether a line runs across its column. Lines of different paragraphs
-     * only join where both are full-width: a short line is the end of a
-     * paragraph or a heading of its own, not something a following line
-     * continues.
-     */
-    private static boolean fullWidth(Box line, double typicalWidth) {
-        return typicalWidth <= 0 || Math.abs(line.width) >= typicalWidth * 0.7;
-    }
-
-    private static Box first(List<Box> line) {
-        return line.get(0);
+    /** Whether {@code below} comes after {@code above} in its column. */
+    private static boolean oneBelow(Box below, Box above, double xGap, double yGap) {
+        double narrower = Math.min(Math.abs(below.width), Math.abs(above.width));
+        double overlap = Math.min(below.right(), above.right()) - Math.max(below.left(), above.left());
+        return narrower > 0 && overlap / narrower >= 0.5
+                && yCloseEnough(above, below, yGap) && xCloseEnough(above, below, xGap);
     }
 
     private static Box groupUnion(List<Box> group) {
-        double left = Double.MAX_VALUE, top = Double.MAX_VALUE;
-        double right = -Double.MAX_VALUE, bottom = -Double.MAX_VALUE;
-        for (Box box : group) {
-            left = Math.min(left, box.left());
-            top = Math.min(top, box.top());
-            right = Math.max(right, box.right());
-            bottom = Math.max(bottom, box.bottom());
-        }
-        return new Box(left, top, right - left, bottom - top, "");
+        return new Box(left(group), top(group),
+                right(group) - left(group), bottom(group) - top(group), "");
     }
 
     // --- panel layout -----------------------------------------------------
@@ -386,9 +375,46 @@ final class PanelMerger {
         /** Lines in the same panel (transitive within one panel). */
         abstract boolean samePanel(Box a, Box b);
 
-        /** Whether two lines may join at all (prose keeps paragraph ends apart). */
-        boolean mayJoin(Box a, Box b) {
-            return true;
+        /**
+         * The lines grouped by panel (clusters of neighboring lines). Each
+         * group is in reading order: the boxes' own order (the order
+         * ImageTrans numbered the panels and their lines), or, for flat
+         * coordinate order, down the page and across. The groups themselves
+         * are returned in the reading order of their first line, so the
+         * blocks come out in the order of the .itp's boxes.
+         */
+        List<List<Box>> partition(List<Box> items, boolean vertical) {
+            final List<Box> order = new ArrayList<>(items);
+            if (!inReadingOrder(items)) {
+                Collections.sort(order, new Comparator<Box>() {
+                    @Override
+                    public int compare(Box a, Box b) {
+                        if (Math.abs(a.top() - b.top()) < Math.min(a.height, b.height) * 0.5) {
+                            return Double.compare(a.left(), b.left());
+                        }
+                        return Double.compare(a.top(), b.top());
+                    }
+                });
+            }
+            List<List<Box>> groups = new ArrayList<>();
+            List<Integer> first = new ArrayList<>();
+            for (int i = 0; i < order.size(); i++) {
+                Box box = order.get(i);
+                int group = -1;
+                for (int g = 0; g < groups.size(); g++) {
+                    if (samePanel(groups.get(g).get(0), box)) {
+                        group = g;
+                        break;
+                    }
+                }
+                if (group < 0) {
+                    groups.add(new ArrayList<>(Collections.singletonList(box)));
+                    first.add(i);
+                } else {
+                    groups.get(group).add(box);
+                }
+            }
+            return groups;
         }
 
         /** Larger for a longer panel: its blocks are formed first. */
@@ -398,15 +424,6 @@ final class PanelMerger {
 
         // Ordering key of a block, smaller is read first.
         abstract int order(Box block);
-
-        /**
-         * Lines a single-line panel keeps along with its line: the rest of a
-         * line the OCR split off, or words just outside it on the same row.
-         * None by default.
-         */
-        List<Box> addParts(List<Box> all, Box line) {
-            return new ArrayList<>();
-        }
 
         static Layout ofPanels(List<Box> items, List<Box> panelRects) {
             return new Detected(items, panelRects);
@@ -426,12 +443,7 @@ final class PanelMerger {
         /** Where each panel sits in the readings order. */
         private final List<Integer> rank = new ArrayList<>();
 
-        private final double typical;
-
         Detected(List<Box> items, List<Box> panelRects) {
-            List<List<Box>> asLines = new ArrayList<>();
-            for (Box item : items) asLines.add(Collections.singletonList(item));
-            typical = typicalWidth(asLines);
             sortedPanels = new ArrayList<>(panelRects);
             // Reading order: top to bottom, left to right.
             Collections.sort(sortedPanels, new Comparator<Box>() {
@@ -499,36 +511,6 @@ final class PanelMerger {
         }
 
         @Override
-        boolean mayJoin(Box a, Box b) {
-            // Within one panel lines join freely; across panels only
-            // full-width lines do, so the heading "Home" stays apart while
-            // the paragraphs of prose still connect.
-            Integer pa = panelOf.get(a);
-            Integer pb = panelOf.get(b);
-            return pa == null || pb == null || pa.equals(pb)
-                    || fullWidth(a, typical) && fullWidth(b, typical);
-        }
-
-        @Override
-        List<Box> addParts(List<Box> all, Box line) {
-            List<Box> extra = new ArrayList<>();
-            Integer index = panelOf.get(line);
-            if (index == null || weights.get(index) != 1) return extra;
-            Box panel = sortedPanels.get(index);
-            double reach = Math.abs(panel.height) * 2;
-            for (Box box : all) {
-                if (panelOf.containsKey(box)) continue;
-                if (rowOverlap(box, panel) < 0.5) continue;
-                boolean rightNext = box.left() >= panel.right() - AROUND_LINE
-                        && box.left() - panel.right() <= reach;
-                boolean leftNext = box.right() <= panel.left() + AROUND_LINE
-                        && panel.left() - box.right() <= reach;
-                if (rightNext || leftNext) extra.add(box);
-            }
-            return extra;
-        }
-
-        @Override
         int order(Box block) {
             for (int c = 0; c < sortedPanels.size(); c++) {
                 if (contains(sortedPanels.get(c), block, AROUND_LINE)) return rank.get(c);
@@ -549,12 +531,6 @@ final class PanelMerger {
 
     private static double area(Box box) {
         return Math.abs(box.width * box.height);
-    }
-
-    /** Share of a box's height that overlaps a panel's rows. */
-    private static double rowOverlap(Box box, Box panel) {
-        double overlap = Math.min(box.bottom(), panel.bottom()) - Math.max(box.top(), panel.top());
-        return Math.abs(box.height) <= 0 ? 0 : Math.max(0, overlap) / Math.abs(box.height);
     }
 
     /** Does the panel sit between the two lines, rather than around them? */
