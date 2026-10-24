@@ -641,6 +641,7 @@ public class ScreenshotTranslateService extends Service {
 
     /** Held on the ball without dragging: closes the overlay. */
     private final Runnable closeAfterHold = () -> {
+        if (ball == null) return;
         Log.i(TAG, "ball held: closing");
         if (ballShown) {
             ballShown = false;
@@ -825,8 +826,11 @@ public class ScreenshotTranslateService extends Service {
                         dragging = false;
                         if (!ballExpanded) {
                             // Held still: closes the overlay (the menu's
-                            // close entry is gone).
-                            mainHandler.postDelayed(closeAfterHold, ViewConfiguration
+                            // close entry is gone). Posted on the ball: the
+                            // wait is dropped by the view as soon as it goes,
+                            // and moving it does not make the view go.
+                            v.removeCallbacks(closeAfterHold);
+                            v.postDelayed(closeAfterHold, ViewConfiguration
                                     .getLongPressTimeout() + 200L);
                         }
                         return true;
@@ -836,6 +840,8 @@ public class ScreenshotTranslateService extends Service {
                         if (!dragging && Math.hypot(dx, dy) > ViewConfiguration.get(
                                 ScreenshotTranslateService.this).getScaledTouchSlop()) {
                             dragging = true;
+                            // Moving the ball is not holding it.
+                            v.removeCallbacks(closeAfterHold);
                         }
                         if (dragging) {
                             ballParams.x = downLeft + (int) dx;
@@ -846,7 +852,7 @@ public class ScreenshotTranslateService extends Service {
                         return true;
                     }
                     case MotionEvent.ACTION_UP:
-                        mainHandler.removeCallbacks(closeAfterHold);
+                        v.removeCallbacks(closeAfterHold);
                         if (dragging) {
                             Prefs.setFloatingBallX(ScreenshotTranslateService.this, ballParams.x);
                             Prefs.setFloatingBallY(ScreenshotTranslateService.this, ballParams.y);
