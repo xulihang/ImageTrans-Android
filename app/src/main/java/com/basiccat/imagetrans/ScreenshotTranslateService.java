@@ -48,12 +48,11 @@ import java.util.concurrent.TimeUnit;
 /**
  * Screenshot translation as floating windows.
  *
- * Two things stay on screen together: a draggable ball and a selection frame
- * ("选框"). Tapping "翻译" on the ball captures the frame's region; the
- * translated image is shown inside the same frame (tapping its text opens the
- * source/target dialog). The frame's "×" clears the result and leaves the
- * frame ready for the next capture. The ball is hidden while capturing so it
- * does not end up in the screenshot.
+ * A selection frame ("选框") stays on screen; a double tap in it captures
+ * its region and the translated image is shown inside the same frame
+ * (tapping its text opens the source/target dialog). The frame's "×" clears the result and leaves the
+ * frame ready for the next capture. The frame is hidden while capturing so
+ * it does not end up in the screenshot.
  */
 public class ScreenshotTranslateService extends Service {
     private static final String TAG = "ScreenshotTranslate";
@@ -101,7 +100,7 @@ public class ScreenshotTranslateService extends Service {
                 .putExtra(EXTRA_RESULT_DATA, resultData));
     }
 
-    /** Starts the floating ball in the background (frame shown on capture). */
+    /** Starts the frame in the background (shown at once, ready to capture). */
     public static void enable(Context context) {
         context.startForegroundService(new Intent(context, ScreenshotTranslateService.class)
                 .setAction(ACTION_SHOW));
@@ -159,13 +158,6 @@ public class ScreenshotTranslateService extends Service {
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
     private WindowManager windowManager;
-
-    // Floating ball
-    private LinearLayout ball;
-    private WindowManager.LayoutParams ballParams;
-    private boolean ballShown;
-    private boolean ballExpanded;
-    private final Runnable collapseBall = () -> setBallExpanded(false);
 
     // Selection frame, which also shows the result
     private SelectionOverlay overlay;
@@ -263,7 +255,7 @@ public class ScreenshotTranslateService extends Service {
                 // cannot see the old value and start the service again.
                 Prefs.setServerEnabled(this, false);
                 stopApiServer();
-                if (ballShown || overlay != null) {
+                if (overlay != null) {
                     showWindows();
                 } else {
                     // Nothing else is running: stop the whole service.
@@ -291,7 +283,7 @@ public class ScreenshotTranslateService extends Service {
                 stopSelf();
                 return START_NOT_STICKY;
             }
-            if (!ballShown && overlay == null) {
+            if (overlay == null) {
                 // Server only: an ongoing foreground notification.
                 serverOnly = true;
                 enterServerForeground();
@@ -335,7 +327,6 @@ public class ScreenshotTranslateService extends Service {
             shutdown();
             return START_NOT_STICKY;
         }
-        if (!ballShown) showBall();
         showOverlay();
         return START_NOT_STICKY;
     }
@@ -442,17 +433,12 @@ public class ScreenshotTranslateService extends Service {
                 Log.w(TAG, "frame removal failed: " + e);
             }
         }
-        if (ballShown) {
-            windowManager.removeView(ball);
-            ball = null;
-            ballShown = false;
-        }
     }
 
     /** Resumes the foreground notification whichever mode is active. */
     private void restoreForegroundNotification() {
         if (!Prefs.isServerEnabled(this)) return;
-        if (ballShown || overlay != null) {
+        if (overlay != null) {
             // Floating windows: the foreground belongs to them; the server
             // address is appended to their notification.
             enterForeground(getString(R.string.floating_running));
@@ -565,7 +551,7 @@ public class ScreenshotTranslateService extends Service {
      * the address is added to it instead of a second notification.
      */
     private void showServerNotification() {
-        if (!ballShown && overlay == null) return;
+        if (overlay == null) return;
         NotificationManager manager = getSystemService(NotificationManager.class);
         String text = getString(R.string.server_notification_title) + " · "
                 + serverNotificationText();
@@ -587,7 +573,6 @@ public class ScreenshotTranslateService extends Service {
     private void showWindows() {
         enterForeground(getString(R.string.floating_running));
         try {
-            if (!ballShown) showBall();
             showOverlay();
         } catch (RuntimeException e) {
             // e.g. BadTokenException when the overlay grant was revoked: say
@@ -597,7 +582,7 @@ public class ScreenshotTranslateService extends Service {
             shutdown();
             return;
         }
-        // The ball is only needed as a launcher; shrink its notification.
+        // The frame's notification says how it is used.
         NotificationManager manager = getSystemService(NotificationManager.class);
         Notification.Builder builder = new Notification.Builder(this, CHANNEL_BALL_ID)
                 .setSmallIcon(R.drawable.ic_stat_floating)
@@ -613,141 +598,6 @@ public class ScreenshotTranslateService extends Service {
         return Build.VERSION.SDK_INT >= 26
                 ? WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
                 : WindowManager.LayoutParams.TYPE_PHONE;
-    }
-
-    // --- floating ball ----------------------------------------------------
-
-    private void showBall() {
-        Context themed = new ContextThemeWrapper(this, R.style.FloatingTheme);
-        LinearLayout row = new LinearLayout(themed);
-        row.setOrientation(LinearLayout.HORIZONTAL);
-        row.setGravity(Gravity.CENTER_VERTICAL);
-        row.setBackgroundResource(R.drawable.floating_ball_bg);
-
-        TextView icon = new TextView(themed);
-        icon.setText(R.string.floating_ball_label);
-        icon.setTextColor(getColor(R.color.white));
-        icon.setTextSize(18);
-        icon.setGravity(Gravity.CENTER);
-        row.addView(icon, new LinearLayout.LayoutParams(dp(52), dp(52)));
-
-        TextView captureItem = new TextView(themed);
-        captureItem.setText(R.string.floating_capture);
-        captureItem.setTextColor(getColor(R.color.text_primary));
-        captureItem.setTextSize(14);
-        captureItem.setGravity(Gravity.CENTER);
-        captureItem.setPadding(dp(12), 0, dp(12), 0);
-        captureItem.setOnClickListener(v -> {
-            Log.i(TAG, "translate tapped");
-            setBallExpanded(false);
-            capture();
-        });
-        row.addView(captureItem, new LinearLayout.LayoutParams(
-                android.view.ViewGroup.LayoutParams.WRAP_CONTENT, dp(52)));
-
-        TextView hideItem = new TextView(themed);
-        hideItem.setText(R.string.action_close);
-        hideItem.setTextColor(getColor(R.color.text_secondary));
-        hideItem.setTextSize(14);
-        hideItem.setGravity(Gravity.CENTER);
-        hideItem.setPadding(dp(12), 0, dp(14), 0);
-        hideItem.setOnClickListener(v -> {
-            Log.i(TAG, "hide tapped");
-            shutdown();
-        });
-        row.addView(hideItem, new LinearLayout.LayoutParams(
-                android.view.ViewGroup.LayoutParams.WRAP_CONTENT, dp(52)));
-
-        row.setOnTouchListener(new View.OnTouchListener() {
-            private float downRawX, downRawY;
-            private int downLeft, downTop;
-            private boolean dragging;
-
-            @Override
-            public boolean onTouch(View v, MotionEvent event) {
-                switch (event.getActionMasked()) {
-                    case MotionEvent.ACTION_DOWN:
-                        downRawX = event.getRawX();
-                        downRawY = event.getRawY();
-                        downLeft = ballParams.x;
-                        downTop = ballParams.y;
-                        dragging = false;
-                        return true;
-                    case MotionEvent.ACTION_MOVE: {
-                        float dx = event.getRawX() - downRawX;
-                        float dy = event.getRawY() - downRawY;
-                        if (!dragging && Math.hypot(dx, dy) > ViewConfiguration.get(
-                                ScreenshotTranslateService.this).getScaledTouchSlop()) {
-                            dragging = true;
-                        }
-                        if (dragging) {
-                            ballParams.x = downLeft + (int) dx;
-                            ballParams.y = downTop + (int) dy;
-                            clampBall();
-                            windowManager.updateViewLayout(ball, ballParams);
-                        }
-                        return true;
-                    }
-                    case MotionEvent.ACTION_UP:
-                        if (dragging) {
-                            Prefs.setFloatingBallX(ScreenshotTranslateService.this, ballParams.x);
-                            Prefs.setFloatingBallY(ScreenshotTranslateService.this, ballParams.y);
-                        } else {
-                            setBallExpanded(!ballExpanded);
-                        }
-                        dragging = false;
-                        return true;
-                    default:
-                        return false;
-                }
-            }
-        });
-
-        ballParams = new WindowManager.LayoutParams(
-                WindowManager.LayoutParams.WRAP_CONTENT,
-                WindowManager.LayoutParams.WRAP_CONTENT,
-                overlayType(),
-                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
-                PixelFormat.TRANSLUCENT);
-        ballParams.gravity = Gravity.TOP | Gravity.START;
-        ballParams.x = Prefs.getFloatingBallX(this);
-        ballParams.y = Prefs.getFloatingBallY(this);
-        ball = row;
-        windowManager.addView(ball, ballParams);
-        ballShown = true;
-        setBallExpanded(false);
-        ball.post(this::clampBallAtStart);
-    }
-
-    /** Keeps a saved position valid after a screen size change. */
-    private void clampBallAtStart() {
-        if (!ballShown || ball == null) return;
-        int x = ballParams.x;
-        int y = ballParams.y;
-        clampBall();
-        if (x != ballParams.x || y != ballParams.y) {
-            windowManager.updateViewLayout(ball, ballParams);
-            Prefs.setFloatingBallX(this, ballParams.x);
-            Prefs.setFloatingBallY(this, ballParams.y);
-        }
-    }
-
-    private void setBallExpanded(boolean expanded) {
-        mainHandler.removeCallbacks(collapseBall);
-        if (!ballShown) return;
-        ballExpanded = expanded;
-        for (int i = 1; i < ball.getChildCount(); i++) {
-            ball.getChildAt(i).setVisibility(expanded ? View.VISIBLE : View.GONE);
-        }
-        if (expanded) mainHandler.postDelayed(collapseBall, 5000);
-    }
-
-    private void clampBall() {
-        DisplayMetrics metrics = getResources().getDisplayMetrics();
-        int maxX = Math.max(0, metrics.widthPixels - ball.getWidth());
-        int maxY = Math.max(0, metrics.heightPixels - ball.getHeight());
-        ballParams.x = Math.max(0, Math.min(maxX, ballParams.x));
-        ballParams.y = Math.max(0, Math.min(maxY, ballParams.y));
     }
 
     // --- selection frame --------------------------------------------------
@@ -775,7 +625,18 @@ public class ScreenshotTranslateService extends Service {
                 // Only while shutting down.
             }
         });
-        overlay.setTapListener(this::onOverlayTap);
+        overlay.setTapListener(new SelectionOverlay.TapListener() {
+            @Override
+            public boolean onTap(float x, float y, float displayScale) {
+                return onOverlayTap(x, y, displayScale);
+            }
+
+            @Override
+            public void onDoubleTap() {
+                Log.i(TAG, "frame double-tapped");
+                capture();
+            }
+        });
         Rect frame = new Rect(
                 Math.round(getResources().getDisplayMetrics().widthPixels * 0.06f),
                 Math.round(getResources().getDisplayMetrics().heightPixels * 0.18f),
@@ -788,7 +649,8 @@ public class ScreenshotTranslateService extends Service {
 
     private void capture() {
         if (overlay == null) {
-            // The windows went away (or were rebuilt) since the tap.
+            // The frame went away (or was rebuilt) since the tap: a new
+            // frame has nothing to capture yet.
             showWindows();
             return;
         }
@@ -926,7 +788,7 @@ public class ScreenshotTranslateService extends Service {
             reader.close();
         };
         final long startedAt = SystemClock.uptimeMillis();
-        // Hide the frame and ball first, then give the screen a moment to
+        // Hide the frame first, then give the screen a moment to
         // redraw without them before grabbing pixels.
         overlay.setVisibility(View.INVISIBLE);
         mainHandler.postDelayed(() -> {
@@ -1100,7 +962,6 @@ public class ScreenshotTranslateService extends Service {
     /** Undoes what capture() changed about the windows. */
     private void restoreWindows() {
         if (overlay != null) overlay.setVisibility(View.VISIBLE);
-        if (ballShown) ball.setVisibility(View.VISIBLE);
     }
 
     private void onCaptured(Bitmap bitmap) {
@@ -1108,7 +969,6 @@ public class ScreenshotTranslateService extends Service {
             ImageUtils.recycle(bitmap);
             return;
         }
-        if (ballShown) ball.setVisibility(View.VISIBLE);
         overlay.showStatus(getString(R.string.floating_translating));
         if (bitmap == null) {
             overlay.showResult(null, getString(R.string.floating_capture_failed));

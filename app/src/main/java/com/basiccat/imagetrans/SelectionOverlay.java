@@ -47,6 +47,10 @@ public class SelectionOverlay extends View {
          * @return true when the tap was handled (a text dialog opened).
          */
         boolean onTap(float x, float y, float displayScale);
+
+        /** Two quick taps inside the frame, on what it shows. */
+        default void onDoubleTap() {
+        }
     }
 
     private static final int STATE_SELECT = 0;
@@ -710,21 +714,56 @@ public class SelectionOverlay extends View {
             return true;
         }
         if (dragged) return true;
-        // Only text in the result reacts to a tap; starting the translation
-        // is the ball's job. Map through the current zoom/pan.
-        if (state != STATE_RESULT || translated == null) return true;
+        if (state != STATE_RESULT || translated == null) {
+            // Nothing to read: a double tap in the frame starts the
+            // translation of what is in it.
+            if (frame.contains((int) x, (int) y) && !doubleTapped(x, y)) {
+                if (tapListener != null) tapListener.onDoubleTap();
+            }
+            return true;
+        }
+        // Only text in the result reacts to a tap; a second one on the image
+        // means it is not being read but translated again. Map through the
+        // current zoom/pan.
         RectF image = resultDestRect();
         if (image.contains(x, y) && frame.contains((int) x, (int) y)) {
             float scale = displayScale();
             if (scale > 0f) {
-                newResultTap((x - image.left) / scale, (y - image.top) / scale, scale);
+                boolean reading = newResultTap((x - image.left) / scale,
+                        (y - image.top) / scale, scale);
+                if (!reading && !doubleTapped(x, y) && tapListener != null) {
+                    tapListener.onDoubleTap();
+                }
             }
         }
         return true;
     }
 
-    private void newResultTap(float imageX, float imageY, float displayScale) {
-        if (tapListener != null) tapListener.onTap(imageX, imageY, displayScale);
+    /** Where the first tap of a possible pair was. */
+    private float firstTapX = -1;
+    private float firstTapY = -1;
+    private long lastTapAt;
+
+    /** Counts a tap; true when it is the second of a pair, close to the first. */
+    private boolean doubleTapped(float x, float y) {
+        long now = android.os.SystemClock.uptimeMillis();
+        long timeout = ViewConfiguration.getDoubleTapTimeout();
+        float span = 100 * density;
+        boolean second = firstTapX >= 0 && now - lastTapAt <= timeout
+                && Math.hypot(x - firstTapX, y - firstTapY) <= span;
+        lastTapAt = now;
+        if (second) {
+            firstTapX = -1;
+            firstTapY = -1;
+        } else {
+            firstTapX = x;
+            firstTapY = y;
+        }
+        return second;
+    }
+
+    private boolean newResultTap(float imageX, float imageY, float displayScale) {
+        return tapListener != null && tapListener.onTap(imageX, imageY, displayScale);
     }
 
     /** Corner handles 0-3, edge handles 4 (top) and 5 (bottom). */
