@@ -1,6 +1,7 @@
 package com.basiccat.imagetrans;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
@@ -149,6 +150,13 @@ final class PanelMerger {
             if (usedLine[i]) continue;
             List<Box> group = new ArrayList<>(lines.get(i));
             usedLine[i] = true;
+            // Prose lines narrow towards the end of a paragraph and widen
+            // again at the next one's start; two lines of about equal width
+            // can still be joined inside a paragraph, narrower ones not.
+            final double typicalWidth = typicalWidth(lines);
+            boolean narrowing = lines.get(i).size() == 1
+                    && lines.get(i).get(0).width < typicalWidth * 0.7;
+            List<Box> nextParagraph = null;
             boolean changed = true;
             while (changed) {
                 changed = false;
@@ -156,6 +164,10 @@ final class PanelMerger {
                     if (usedLine[j]) continue;
                     List<Box> other = lines.get(j);
                     if (!joins(panels, group, other, yGap)) continue;
+                    if (narrowing && other.size() == 1
+                            && other.get(0).width >= lines.get(i).get(0).width * 1.5) {
+                        nextParagraph = other;
+                    }
                     group.addAll(other);
                     usedLine[j] = true;
                     changed = true;
@@ -171,6 +183,15 @@ final class PanelMerger {
                     return Double.compare(a.top(), b.top());
                 }
             });
+            if (nextParagraph != null) {
+                // The block reached the start of another paragraph: that
+                // line stands alone for now, and its paragraph joins it.
+                int j = lines.indexOf(nextParagraph);
+                group.removeAll(nextParagraph);
+                lines.add(nextParagraph);
+                usedLine = Arrays.copyOf(usedLine, lines.size());
+                usedLine[j] = false;
+            }
             groups.add(group);
         }
 
@@ -220,7 +241,7 @@ final class PanelMerger {
         for (Box a : group) {
             for (Box b : other) {
                 if (xOverlapRatio(a, b) >= 0.15 && yCloseEnough(a, b, yGap)
-                        && panels.samePanel(a, b)) {
+                        && panels.samePanel(a, b) && panels.mayJoin(a, b)) {
                     return true;
                 }
             }
@@ -236,6 +257,46 @@ final class PanelMerger {
             if (index >= 0) best = Math.min(best, index);
         }
         return best;
+    }
+
+    /**
+     * Width most lines have, so a short last line does not pass for the
+     * normal width. Lines whose end is the end of a sentence are left out:
+     * those are the last lines of paragraphs.
+     */
+    private static double typicalWidth(List<List<Box>> lines) {
+        List<Double> widths = new ArrayList<>();
+        for (List<Box> line : lines) {
+            if (line.size() != 1) continue;
+            String text = line.get(0).source;
+            if (endsSentence(text)) continue;
+            widths.add(Math.abs(line.get(0).width));
+        }
+        if (widths.isEmpty()) return 0;
+        Collections.sort(widths);
+        return widths.get(widths.size() / 2);
+    }
+
+    private static boolean endsSentence(String text) {
+        if (text == null) return false;
+        String trimmed = text.trim();
+        if (trimmed.isEmpty()) return false;
+        char last = trimmed.charAt(trimmed.length() - 1);
+        return ".?!。？！…:：".indexOf(last) >= 0;
+    }
+
+    /**
+     * Whether a line runs across its column. Lines of different paragraphs
+     * only join where both are full-width: a short line is the end of a
+     * paragraph or a heading of its own, not something a following line
+     * continues.
+     */
+    private static boolean fullWidth(Box line, double typicalWidth) {
+        return typicalWidth <= 0 || Math.abs(line.width) >= typicalWidth * 0.7;
+    }
+
+    private static Box first(List<Box> line) {
+        return line.get(0);
     }
 
     private static Box groupUnion(List<Box> group) {
@@ -256,6 +317,11 @@ final class PanelMerger {
     abstract static class Layout {
         /** Lines in the same panel (transitive within one panel). */
         abstract boolean samePanel(Box a, Box b);
+
+        /** Whether two lines may join at all (prose keeps paragraph ends apart). */
+        boolean mayJoin(Box a, Box b) {
+            return true;
+        }
 
         /** Larger for a longer panel: its blocks are formed first. */
         int weight(List<Box> line) {
@@ -290,7 +356,12 @@ final class PanelMerger {
                 new java.util.IdentityHashMap<>();
         private final List<Integer> weights = new ArrayList<>();
 
+        private final double typical;
+
         Detected(List<Box> items, List<Box> panelRects) {
+            List<List<Box>> asLines = new ArrayList<>();
+            for (Box item : items) asLines.add(Collections.singletonList(item));
+            typical = typicalWidth(asLines);
             sortedPanels = new ArrayList<>(panelRects);
             // Reading order: top to bottom, left to right.
             Collections.sort(sortedPanels, new Comparator<Box>() {
@@ -348,7 +419,23 @@ final class PanelMerger {
         boolean samePanel(Box a, Box b) {
             Integer pa = panelOf.get(a);
             Integer pb = panelOf.get(b);
-            return pa == null || pb == null || pa.equals(pb);
+            // A line outside the drawn panels joins a neighbor unless a panel
+            // was drawn between them (e.g. a box around the title only).
+            if (pa == null || pb == null) {
+                return !separated(sortedPanels.get(pa == null ? pb : pa), a, b);
+            }
+            return pa.equals(pb);
+        }
+
+        @Override
+        boolean mayJoin(Box a, Box b) {
+            // Within one panel lines join freely; across panels only
+            // full-width lines do, so the heading "Home" stays apart while
+            // the paragraphs of prose still connect.
+            Integer pa = panelOf.get(a);
+            Integer pb = panelOf.get(b);
+            return pa == null || pb == null || pa.equals(pb)
+                    || fullWidth(a, typical) && fullWidth(b, typical);
         }
 
         @Override
@@ -398,6 +485,18 @@ final class PanelMerger {
     private static double rowOverlap(Box box, Box panel) {
         double overlap = Math.min(box.bottom(), panel.bottom()) - Math.max(box.top(), panel.top());
         return Math.abs(box.height) <= 0 ? 0 : Math.max(0, overlap) / Math.abs(box.height);
+    }
+
+    /** Does the panel sit between the two lines, rather than around them? */
+    private static boolean separated(Box panel, Box a, Box b) {
+        return panel.right() <= Math.max(a.left(), b.left()) + AROUND_LINE
+                && panel.right() <= Math.min(a.right(), b.right()) + AROUND_LINE
+                || panel.left() >= Math.max(a.right(), b.right()) - AROUND_LINE
+                && panel.left() >= Math.min(a.left(), b.left()) - AROUND_LINE
+                || panel.bottom() <= Math.max(a.top(), b.top()) + AROUND_LINE
+                && panel.bottom() <= Math.min(a.bottom(), b.bottom()) + AROUND_LINE
+                || panel.top() >= Math.max(a.bottom(), b.bottom()) - AROUND_LINE
+                && panel.top() >= Math.min(a.top(), b.top()) - AROUND_LINE;
     }
 
     /** Panels estimated from the lines: k-means with a gap penalty. */
