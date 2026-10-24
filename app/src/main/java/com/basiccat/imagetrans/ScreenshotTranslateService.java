@@ -48,8 +48,8 @@ import java.util.concurrent.TimeUnit;
 /**
  * Screenshot translation as floating windows.
  *
- * A selection frame ("选框") stays on screen; a double tap in it captures
- * its region and the translated image is shown inside the same frame
+ * A selection frame ("选框") stays on screen; a tap in it captures its
+ * region and the translated image is shown inside the same frame
  * (tapping its text opens the source/target dialog). The frame's "×" clears the result and leaves the
  * frame ready for the next capture. The frame is hidden while capturing so
  * it does not end up in the screenshot.
@@ -632,8 +632,8 @@ public class ScreenshotTranslateService extends Service {
             }
 
             @Override
-            public void onDoubleTap() {
-                Log.i(TAG, "frame double-tapped");
+            public void onTapInFrame() {
+                Log.i(TAG, "frame tapped");
                 capture();
             }
         });

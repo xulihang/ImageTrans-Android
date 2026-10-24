@@ -84,10 +84,10 @@
     <string name="select_text_first">Long-press to select text first</string>
     <string name="floating_ball_channel_name">Overlay Translation</string>
     <string name="floating_running">Overlay Translation On</string>
-    <string name="floating_running_hint">Drag to adjust the frame; double-tap inside to translate</string>
+    <string name="floating_running_hint">Drag to adjust the frame; tap inside to translate</string>
     <string name="floating_need_notifications">Allow ImageTrans notifications in system settings; otherwise screenshots cannot be translated</string>
     <string name="floating_need_overlay">Allow "Display over other apps" first</string>
-    <string name="selection_hint">Drag the frame to adjust the area; double-tap inside to translate</string>
+    <string name="selection_hint">Drag the frame to adjust the area; tap inside to translate</string>
     <string name="main_server">Translation Server (for browser extensions)</string>
     <string name="main_server_hint">Provides the ImageTrans server /translate endpoint (HTTP, port 51042) in the background. Use http://127.0.0.1:51042 in the browser extension on this phone or on a PC via adb reverse; no Wi-Fi is required. A PC on the same network can also use the phone’s LAN IP.</string>
     <string name="main_server_on">Stop Server</string>
@@ -107,7 +107,7 @@
     <string name="main_server_not_running">The server is not running. Start it again.</string>
     <string name="server_need_notifications">Allow ImageTrans notifications in system settings; otherwise the server cannot run in the background</string>
     <string name="main_floating">Overlay Translation</string>
-    <string name="main_floating_hint">Adds a frame to the screen. Drag it to choose an area, then double-tap inside to capture and translate it; the translation appears in the frame.</string>
+    <string name="main_floating_hint">Adds a frame to the screen. Drag it to choose an area, then tap inside to capture and translate it; the translation appears in the frame.</string>
     <string name="main_floating_on">Turn Off Overlay Translation</string>
     <string name="main_floating_off">Turn On Overlay Translation</string>
     <string name="main_floating_need_permission">Overlay translation needs the "Display over other apps" permission. Allow it first.</string>

@@ -84,10 +84,10 @@
     <string name="select_text_first">请先长按选择文字</string>
     <string name="floating_ball_channel_name">悬浮窗翻译</string>
     <string name="floating_running">悬浮窗翻译已开启</string>
-    <string name="floating_running_hint">拖动调整选框，双击框内翻译</string>
+    <string name="floating_running_hint">拖动调整选框，点按框内翻译</string>
     <string name="floating_need_notifications">请在系统设置中允许 ImageTrans 的通知，否则无法截屏</string>
     <string name="floating_need_overlay">请先允许「显示在其他应用上层」</string>
-    <string name="selection_hint">拖动边框调整区域，双击框内翻译</string>
+    <string name="selection_hint">拖动边框调整区域，点按框内翻译</string>
     <string name="main_server">翻译服务器（浏览器扩展用）</string>
     <string name="main_server_hint">在后台提供 ImageTrans 服务器的 /translate 接口（HTTP，端口 51042）。浏览器扩展填 http://127.0.0.1:51042（同一台手机，或电脑通过 adb reverse 转发），不需要连接 Wi-Fi；同一网络中的电脑也可以填手机的局域网 IP。</string>
     <string name="main_server_on">停止服务器</string>
@@ -107,7 +107,7 @@
     <string name="main_server_not_running">服务器没有在运行，请重新启动。</string>
     <string name="server_need_notifications">请在系统设置中允许 ImageTrans 的通知，否则无法在后台运行服务器</string>
     <string name="main_floating">悬浮窗翻译</string>
-    <string name="main_floating_hint">开启后屏幕上出现选框，拖动调整区域，双击框内截取该区域并翻译，译文显示在框中。</string>
+    <string name="main_floating_hint">开启后屏幕上出现选框，拖动调整区域，点按框内截取该区域并翻译，译文显示在框中。</string>
     <string name="main_floating_on">关闭悬浮窗翻译</string>
     <string name="main_floating_off">开启悬浮窗翻译</string>
     <string name="main_floating_need_permission">悬浮窗翻译需要在其他应用上显示悬浮窗，请先允许「显示在其他应用上层」权限。</string>
