@@ -94,32 +94,78 @@ final class PanelMerger {
         if (panelsOut != null && layout instanceof Estimated) {
             ((Estimated) layout).toJson(items, panelsOut);
         }
-        // Panel by panel, the blocks in the panels' reading order. A panel
-        // whose lines are stored in reading order keeps that order (ImageTrans
-        // numbers the lines when it detects the panels); the others are
-        // sorted: top to bottom, and on a row right to left for vertical text
-        // (the columns of a manga run right to left), left to right otherwise.
+        // Panel by panel, the blocks in reading order: the panels in rows from
+        // top to bottom, and the panels of a row from the right for vertical
+        // text (a manga reads from the right), from the left otherwise (see
+        // experiments/balloon_clustering). A panel whose lines are stored in
+        // reading order (ImageTrans numbers them when it detects the panels)
+        // keeps its own order; otherwise the same rule sorts its blocks.
         List<Box> blocks = new ArrayList<>();
         for (List<Box> panel : layout.partition(items, true)) {
             List<Box> ofPanel = mergePanel(panel, sourceLang, vertical, rightToLeft, xGap, yGap);
-            if (!inReadingOrder(panel)) {
-                Collections.sort(ofPanel, new Comparator<Box>() {
-                    @Override
-                    public int compare(Box a, Box b) {
-                        if (vertical) {
-                            double tolerance = Math.max(Math.abs(a.height), Math.abs(b.height)) * 0.5;
-                            if (Math.abs(a.top() - b.top()) > tolerance) {
-                                return Double.compare(a.top(), b.top());
-                            }
-                            return Double.compare(b.right(), a.right());
-                        }
-                        return Double.compare(a.top(), b.top());
-                    }
-                });
-            }
+            if (!inReadingOrder(panel)) orderBlocks(ofPanel, vertical);
             blocks.addAll(ofPanel);
         }
+        // The panels follow the same rule (a panel's start is its first
+        // line, which arrives first in the list).
+        orderBlocks(blocks, vertical);
         return blocks;
+    }
+
+    /**
+     * Puts a panel's blocks in reading order: rows from top to bottom, where
+     * two are on one row when their heights overlap by at least half the
+     * shorter one; the blocks of a row from the right for vertical text, from
+     * the left otherwise.
+     */
+    private static void orderBlocks(List<Box> blocks, boolean vertical) {
+        if (blocks.size() < 2) return;
+        List<List<Box>> rows = new ArrayList<>();
+        List<Box> rowAreas = new ArrayList<>();
+        for (Box block : blocks) {
+            int row = -1;
+            for (int r = 0; r < rows.size(); r++) {
+                if (sameRow(block, rowAreas.get(r))) {
+                    row = r;
+                    break;
+                }
+            }
+            if (row < 0) {
+                rows.add(new ArrayList<>(Collections.singletonList(block)));
+                rowAreas.add(block);
+            } else {
+                rows.get(row).add(block);
+                rowAreas.set(row, union(rowAreas.get(row), block));
+            }
+        }
+        blocks.clear();
+        for (final List<Box> row : rows) {
+            // A stable sort keeps the stored order of two blocks that start
+            // at the same place.
+            Collections.sort(row, new Comparator<Box>() {
+                @Override
+                public int compare(Box a, Box b) {
+                    return vertical ? Double.compare(b.left(), a.left())
+                            : Double.compare(a.left(), b.left());
+                }
+            });
+            blocks.addAll(row);
+        }
+    }
+
+    /** Whether two areas are on one row: their heights overlap by half. */
+    private static boolean sameRow(Box a, Box b) {
+        double overlap = Math.min(a.bottom(), b.bottom()) - Math.max(a.top(), b.top());
+        double shorter = Math.min(Math.abs(a.height), Math.abs(b.height));
+        return shorter > 0 && overlap >= 0.5 * shorter;
+    }
+
+    private static Box union(Box a, Box b) {
+        double left = Math.min(a.left(), b.left());
+        double top = Math.min(a.top(), b.top());
+        double right = Math.max(a.right(), b.right());
+        double bottom = Math.max(a.bottom(), b.bottom());
+        return new Box(left, top, right - left, bottom - top, "");
     }
 
     /**
