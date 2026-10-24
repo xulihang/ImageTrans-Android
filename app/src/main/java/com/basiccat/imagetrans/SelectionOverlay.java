@@ -193,12 +193,12 @@ public class SelectionOverlay extends View {
         setVisibility(View.VISIBLE);
     }
 
-    /** The small frame in the middle, sized to the screen. */
+    /** The small frame above the middle, sized to the screen. No border is drawn for it. */
     private void resetMessageFrame() {
         int w = Math.round(screenWidth * 0.62f);
         int h = Math.round(screenHeight * 0.26f);
-        frame.set((screenWidth - w) / 2, (screenHeight - h) / 2,
-                (screenWidth + w) / 2, (screenHeight + h) / 2);
+        int top = Math.round(screenHeight * 0.30f);
+        frame.set((screenWidth - w) / 2, top, (screenWidth + w) / 2, top + h);
         contentOffsetX = 0;
         contentOffsetY = 0;
         // Added as a whole screen, it can only be taken away now: the frame
@@ -605,7 +605,8 @@ public class SelectionOverlay extends View {
             canvas.drawBitmap(translated, null, dst, imagePaint);
             canvas.restore();
         }
-        canvas.drawRect(frame, borderPaint);
+        // The full-screen message frame has none: only its bubble is seen.
+        if (!messageFrame) canvas.drawRect(frame, borderPaint);
         int clearSize = clearButtonSize();
         Rect clear = clearButtonRect(clearSize);
 
