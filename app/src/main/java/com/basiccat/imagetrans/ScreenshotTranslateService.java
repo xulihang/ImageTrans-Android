@@ -172,6 +172,8 @@ public class ScreenshotTranslateService extends Service {
     private final List<Box> hitBoxes = new ArrayList<>();
     /** The source/target overlay, if open. */
     private View textBoxDialog;
+    /** The box the open dialog shows (see showTextBoxDialog). */
+    private int textBoxIndex;
     private LinearLayout selectionBar;
     private TextView sourceText;
     private TextView textBoxTitle;
@@ -1261,13 +1263,15 @@ public class ScreenshotTranslateService extends Service {
         buttons.setGravity(Gravity.END);
         buttons.setPadding(dp(12), dp(4), dp(12), dp(8));
         if (hitBoxes.size() > 1) {
+            // From the box shown now, not from the one the dialog was
+            // opened with: the dialog stays up while the box changes.
             TextView previous = dialogButton(themed, R.string.action_previous);
             previous.setOnClickListener(v ->
-                    showTextBoxDialog((index - 1 + hitBoxes.size()) % hitBoxes.size()));
+                    showTextBoxDialog((textBoxIndex - 1 + hitBoxes.size()) % hitBoxes.size()));
             buttons.addView(previous);
             TextView next = dialogButton(themed, R.string.action_next);
             next.setOnClickListener(v ->
-                    showTextBoxDialog((index + 1) % hitBoxes.size()));
+                    showTextBoxDialog((textBoxIndex + 1) % hitBoxes.size()));
             buttons.addView(next);
         }
         // Tapping a text copies it; long press selects part of it.
@@ -1466,6 +1470,7 @@ public class ScreenshotTranslateService extends Service {
     /** Shows another box's text in the dialog that is already open. */
     private void fillTextBoxDialog(int index) {
         if (index < 0 || index >= hitBoxes.size()) return;
+        textBoxIndex = index;
         if (textBoxTitle != null) {
             textBoxTitle.setText(getString(R.string.text_box_title, index + 1, hitBoxes.size()));
         }
