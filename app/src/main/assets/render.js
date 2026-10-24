@@ -310,6 +310,38 @@
         });
     }
 
+    /** The four corner radii of a box's text element: top-left, top-right, bottom-right, bottom-left. */
+    function cornerRadii(el, w, h) {
+        var style = getComputedStyle(el);
+        var read = function (corner, size) {
+            var value = style.getPropertyValue('border' + corner) || '0';
+            var amount = parseFloat(value) || 0;
+            // A percentage is of the box's width (its height once the radii
+            // no longer fit the width).
+            return /%/.test(value) ? amount / 100 * size : amount;
+        };
+        return [read('.top-left-radius', w), read('.top-right-radius', w),
+                read('.bottom-right-radius', w), read('.bottom-left-radius', w)]
+            .map(function (r) { return Math.max(0, Math.min(r, w / 2, h / 2)); });
+    }
+
+    /** A filled rectangle whose corners have their own radii. */
+    function fillRoundedRect(ctx, x, y, w, h, r) {
+        var tl = r[0], tr = r[1], br = r[2], bl = r[3];
+        ctx.beginPath();
+        ctx.moveTo(x + tl, y);
+        ctx.lineTo(x + w - tr, y);
+        if (tr > 0) ctx.arcTo(x + w, y, x + w, y + tr, tr);
+        ctx.lineTo(x + w, y + h - br);
+        if (br > 0) ctx.arcTo(x + w, y + h, x + w - br, y + h, br);
+        ctx.lineTo(x + bl, y + h);
+        if (bl > 0) ctx.arcTo(x, y + h, x, y + h - bl, bl);
+        ctx.lineTo(x, y + tl);
+        if (tl > 0) ctx.arcTo(x, y, x + tl, y, tl);
+        ctx.closePath();
+        ctx.fill();
+    }
+
     function clampBox(x, y, w, h, natW, natH) {
         x = Math.max(0, x);
         y = Math.max(0, y);
@@ -428,7 +460,12 @@
                 var mx = Math.floor(p.x);
                 var my = Math.floor(p.y);
                 ctx.fillStyle = p.color;
-                ctx.fillRect(mx, my, Math.ceil(p.x + p.w) - mx, Math.ceil(p.y + p.h) - my);
+                var corners = cornerRadii(p.el, p.w, p.h);
+                if (corners.every(function (r) { return r <= 0; })) {
+                    ctx.fillRect(mx, my, Math.ceil(p.x + p.w) - mx, Math.ceil(p.y + p.h) - my);
+                } else {
+                    fillRoundedRect(ctx, p.x, p.y, p.w, p.h, corners);
+                }
             }
             return htmlToImage.toCanvas(container, {
                 backgroundColor: 'transparent',
