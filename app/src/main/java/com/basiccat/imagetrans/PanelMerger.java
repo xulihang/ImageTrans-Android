@@ -64,6 +64,11 @@ final class PanelMerger {
         if (yGap <= 0) yGap = 15;
         // The lines usually come in reading order (the order of the .itp's
         // boxes); that order is what the blocks and their lines follow.
+        // The order the lines arrived in (the .itp's boxes) is the reading
+        // order: the blocks and their lines follow it as long as it is
+        // consistent with the layout (a line never jumps back above the
+        // previous one). Flat coordinate order, where paragraphs interleave
+        // row by row, is not, and then geometry is used.
         final boolean ordered = inReadingOrder(items);
         List<Box> sorted = new ArrayList<>(items);
         if (!ordered) {
@@ -291,6 +296,11 @@ final class PanelMerger {
      * right if it shares the row. Interleaved paragraphs (line 1 of a row
      * of two columns) or geometry order are not.
      */
+    /**
+     * Whether the lines are already in reading order: each line starts at
+     * or below the one before (a few pixels up is still fine), and to its
+     * right if it shares the row.
+     */
     private static boolean inReadingOrder(List<Box> lines) {
         if (lines.size() < 3) return true;
         for (int i = 1; i < lines.size(); i++) {
@@ -307,7 +317,8 @@ final class PanelMerger {
     /** A line narrower than this share of a block's lines is a fragment. */
     private static final double FRAGMENT_WIDTH = 0.75;
 
-    /** Position of a block's first line in the given (ordered) lines. */    private static int firstIndex(List<Box> lines, List<Box> group) {
+    /** Position of a block's first line in the given (ordered) lines. */
+    private static int firstIndex(List<Box> lines, List<Box> group) {
         int best = Integer.MAX_VALUE;
         for (Box box : group) {
             int index = lines.indexOf(box);
