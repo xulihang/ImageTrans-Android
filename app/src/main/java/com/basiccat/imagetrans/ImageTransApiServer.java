@@ -407,6 +407,45 @@ public final class ImageTransApiServer {
 
     // --- /translate -------------------------------------------------------
 
+    private static List<Box> mergeForTranslation(Context context, Map<String, String> form,
+                                                 Bitmap bitmap, String sourceLang)
+            throws Exception {
+        List<Box> panels = parseBoxes(form.get("panels"), false);
+        List<Box> lines = parseBoxes(form.get("boxes"), true);
+        if (lines != null && !lines.isEmpty()) {
+            if (panels != null && !panels.isEmpty()) {
+                return PanelMerger.merge(lines, panels, sourceLang, 15, 15);
+            }
+            // Without panels the lines are already the final boxes.
+            return lines;
+        }
+        return PanelMerger.merge(ImageUtils.detectOnly(context, bitmap, sourceLang),
+                sourceLang, 15, 15, null);
+    }
+
+    /** Boxes from a JSON array sent in the form (X/Y or x/y), or null. */
+    private static List<Box> parseBoxes(String json, boolean withText) throws Exception {
+        if (json == null || json.trim().isEmpty()) return null;
+        JSONArray array = new JSONArray(json);
+        List<Box> boxes = new ArrayList<>();
+        for (int i = 0; i < array.length(); i++) {
+            JSONObject item = array.optJSONObject(i);
+            if (item == null) continue;
+            JSONObject geometry = item.optJSONObject("geometry");
+            if (geometry == null) geometry = item;
+            double x = geometry.optDouble("X", geometry.optDouble("x", Double.NaN));
+            double y = geometry.optDouble("Y", geometry.optDouble("y", Double.NaN));
+            double width = geometry.optDouble("width", Double.NaN);
+            double height = geometry.optDouble("height", Double.NaN);
+            if (Double.isNaN(x) || Double.isNaN(y) || Double.isNaN(width) || Double.isNaN(height)) {
+                continue;
+            }
+            String text = withText ? item.optString("text", item.optString("source", "")) : "";
+            boxes.add(new Box(x, y, width, height, text));
+        }
+        return boxes;
+    }
+
     private String translate(Context context, String formBody) throws Exception {
         Map<String, String> form = parseForm(formBody);
         String src = form.get("src");
@@ -431,10 +470,11 @@ public final class ImageTransApiServer {
             }
             boolean onlyBoxes = "true".equals(form.get("withoutImage"));
 
-            // Merge lines into paragraphs, as the desktop server does: the
-            // extension translates what it gets.
-            List<Box> boxes = TextBoxMerger.merge(
-                    ImageUtils.detectOnly(context, bitmap, sourceLang), sourceLang, 15, 15);
+            // Merge lines into panels, as the desktop server does: the
+            // extension translates what it gets. Lines (and the panels they
+            // belong to) sent along, as the app does when it translates on a
+            // desktop server, are used instead of recognizing the text again.
+            List<Box> boxes = mergeForTranslation(context, form, bitmap, sourceLang);
             String mode = Prefs.getMode(context);
             if (Prefs.MODE_OPENAI.equals(mode) || Prefs.MODE_MYMEMORY.equals(mode)) {
                 List<String> texts = new ArrayList<>();

@@ -37,6 +37,16 @@ public final class ImageTransServer {
     }
 
     public static Result translate(Context context, String imageDataUrl) throws Exception {
+        return translate(context, imageDataUrl, null, null);
+    }
+
+    /**
+     * @param boxes  text lines to translate instead of detecting them again,
+     *               or null to let the server recognize the text
+     * @param panels the panels the lines belong to (comics), or null
+     */
+    public static Result translate(Context context, String imageDataUrl,
+                                   JSONArray boxes, JSONArray panels) throws Exception {
         String serverUrl = Prefs.getServerUrl(context);
         if (serverUrl == null || serverUrl.trim().isEmpty()) {
             throw new Exception("未设置 ImageTrans 服务器地址");
@@ -60,6 +70,8 @@ public final class ImageTransServer {
         if (Prefs.SERVER_RENDER_APP.equals(Prefs.getServerRenderMode(context))) {
             form.put("withoutImage", "true");
         }
+        if (boxes != null) form.put("boxes", boxes.toString());
+        if (panels != null) form.put("panels", panels.toString());
 
         String sourceLang = Prefs.getSourceLang(context);
         String targetLang = Prefs.getTargetLang(context);

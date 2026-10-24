@@ -22,6 +22,7 @@ import android.widget.Toast;
 
 import androidx.core.content.FileProvider;
 
+import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
@@ -359,12 +360,12 @@ public final class ImageUtils {
         String mode = Prefs.getMode(context);
         List<Box> boxes;
         if (Prefs.MODE_IMAGETRANS.equals(mode)) {
-            boxes = ImageTransServer.translate(context, bitmapToDataUrl(bitmap)).boxes;
+            boxes = translateOnServer(context, bitmap);
         } else {
             String sourceLang = Prefs.getSourceLang(context);
             boxes = OcrEngine.getInstance(context).recognize(bitmap, sourceLang, message -> { });
             if (boxes.isEmpty()) throw new Exception(context.getString(R.string.error_no_text));
-            boxes = TextBoxMerger.merge(boxes, sourceLang, 15, 15);
+            boxes = PanelMerger.merge(boxes, sourceLang, 15, 15, null);
             if (Prefs.MODE_OPENAI.equals(mode) || Prefs.MODE_MYMEMORY.equals(mode)) {
                 List<String> texts = new ArrayList<>();
                 for (Box box : boxes) texts.add(box.source);
@@ -382,6 +383,36 @@ public final class ImageUtils {
             if (box.target != null && !box.target.trim().isEmpty()) return new Result(boxes);
         }
         return null;
+    }
+
+    /**
+     * Desktop server mode: the app recognizes the text and groups the lines
+     * into panels itself, and the server only translates them. Letting the
+     * server recognize and merge again would group the lines its own way.
+     */
+    private static List<Box> translateOnServer(Context context, Bitmap bitmap) throws Exception {
+        String sourceLang = Prefs.getSourceLang(context);
+        List<Box> lines = OcrEngine.getInstance(context).recognize(bitmap, sourceLang,
+                message -> { });
+        if (lines.isEmpty()) throw new Exception(context.getString(R.string.error_no_text));
+        JSONArray panels = new JSONArray();
+        List<Box> merged = PanelMerger.merge(lines, sourceLang, 15, 15, panels);
+        JSONArray boxes = new JSONArray();
+        for (Box box : merged) {
+            JSONObject item = box.toJson();
+            JSONObject geometry = item.optJSONObject("geometry");
+            if (geometry != null) {
+                // "text" with x/y, the form the extension sends.
+                geometry.put("x", box.x);
+                geometry.put("y", box.y);
+                geometry.remove("X");
+                geometry.remove("Y");
+            }
+            item.remove("source");
+            item.put("text", box.source == null ? "" : box.source);
+            boxes.put(item);
+        }
+        return ImageTransServer.translate(context, bitmapToDataUrl(bitmap), boxes, panels).boxes;
     }
 
     /**
