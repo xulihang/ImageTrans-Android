@@ -86,6 +86,8 @@ final class PanelMerger {
             ((Estimated) layout).toJson(items, panelsOut);
         }
         final boolean rightToLeft = "ar".equals(sourceLang);
+        // Vertical columns run down each line and right to left across them.
+        final boolean vertical = tall > items.size() / 2;
 
         // Phase 1: text fragments on the same line.
         List<List<Box>> lines = new ArrayList<>();
@@ -124,6 +126,7 @@ final class PanelMerger {
                     line.add(part);
                 }
             }
+            // A line reads left to right (right to left for Arabic).
             Collections.sort(line, new Comparator<Box>() {
                 @Override
                 public int compare(Box a, Box b) {
@@ -173,14 +176,17 @@ final class PanelMerger {
                     changed = true;
                 }
             }
+            // Rows from top to bottom (by y); lines on one row from left to
+            // right (by x). Arabic and vertical text read right to left.
             Collections.sort(group, new Comparator<Box>() {
                 @Override
                 public int compare(Box a, Box b) {
-                    if (Math.abs(a.top() - b.top()) < Math.min(a.height, b.height) * 0.5) {
-                        if (rightToLeft) return Double.compare(b.left(), a.left());
-                        return Double.compare(a.left(), b.left());
+                    double row = Math.min(Math.abs(a.height), Math.abs(b.height)) * 0.5;
+                    if (Math.abs(a.top() - b.top()) > row) {
+                        return Double.compare(a.top(), b.top());
                     }
-                    return Double.compare(a.top(), b.top());
+                    if (vertical || rightToLeft) return Double.compare(b.left(), a.left());
+                    return Double.compare(a.left(), b.left());
                 }
             });
             if (nextParagraph != null) {
@@ -355,6 +361,8 @@ final class PanelMerger {
         private final java.util.IdentityHashMap<Box, Integer> panelOf =
                 new java.util.IdentityHashMap<>();
         private final List<Integer> weights = new ArrayList<>();
+        /** Where each panel sits in the readings order. */
+        private final List<Integer> rank = new ArrayList<>();
 
         private final double typical;
 
@@ -403,6 +411,7 @@ final class PanelMerger {
                 }
             }
             for (int size : sizes) weights.add(size);
+            for (int c = 0; c < sortedPanels.size(); c++) rank.add(c);
         }
 
         @Override
@@ -459,12 +468,11 @@ final class PanelMerger {
 
         @Override
         int order(Box block) {
-            int index = 0;
-            for (Box panel : sortedPanels) {
-                if (contains(panel, block, AROUND_LINE)) return index;
-                index++;
+            for (int c = 0; c < sortedPanels.size(); c++) {
+                if (contains(sortedPanels.get(c), block, AROUND_LINE)) return rank.get(c);
             }
-            return index;
+            // Outside every panel: after the last one.
+            return rank.size();
         }
     }
 
