@@ -110,8 +110,6 @@
     <string name="main_floating_hint">开启后屏幕上出现悬浮球，点按截取屏幕区域并翻译，译文显示在悬浮框中。</string>
     <string name="main_floating_on">关闭悬浮球</string>
     <string name="main_floating_off">开启悬浮球</string>
-    <string name="main_floating_mode_area">区域翻译：显示选框，只翻译选框内的区域</string>
-    <string name="main_floating_mode_full">全屏翻译：不显示选框，直接翻译整个屏幕</string>
     <string name="main_floating_need_permission">截屏翻译需要在其他应用上显示悬浮球，请先允许「显示在其他应用上层」权限。</string>
     <string name="main_floating_need_permission_short">未获得悬浮窗权限，无法开启截屏翻译</string>
     <string name="main_open_settings">去设置</string>

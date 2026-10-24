@@ -300,22 +300,6 @@ public final class Prefs {
         get(context).edit().putBoolean("floating_enabled", value).apply();
     }
 
-    /** Translate the selected frame only ("area") or the whole screen. */
-    public static final String FLOATING_MODE_AREA = "area";
-    public static final String FLOATING_MODE_FULL = "full";
-
-    public static String getFloatingMode(Context context) {
-        return get(context).getString("floating_mode", FLOATING_MODE_AREA);
-    }
-
-    public static void setFloatingMode(Context context, String value) {
-        get(context).edit().putString("floating_mode", value).apply();
-    }
-
-    public static boolean isFloatingFullScreen(Context context) {
-        return FLOATING_MODE_FULL.equals(getFloatingMode(context));
-    }
-
     public static boolean hasOverlayPermission(Context context) {
         return Settings.canDrawOverlays(context);
     }

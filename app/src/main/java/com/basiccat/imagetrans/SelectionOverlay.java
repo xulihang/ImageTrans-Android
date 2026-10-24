@@ -82,11 +82,6 @@ public class SelectionOverlay extends View {
     private int screenHeight;
 
     private int state = STATE_SELECT;
-    /**
-     * Full-screen mode's frame: it only appears with a message, in the
-     * middle of the screen, and cannot be moved or resized.
-     */
-    private boolean messageFrame;
     private String status;
     private Bitmap translated;
     private TapListener tapListener;
@@ -179,43 +174,6 @@ public class SelectionOverlay extends View {
         callback.onCancelled();
     }
 
-    // --- full-screen mode -------------------------------------------------
-
-    /**
-     * Full-screen mode shows no selection frame: tapping the ball calls this
-     * to put a small frame in the middle of the screen, where the progress
-     * and any error are shown (the ball is hidden for the screenshot, so
-     * the frame has to say what is happening). The result later fills it.
-     */
-    void showMessageFrame() {
-        messageFrame = true;
-        resetMessageFrame();
-        setVisibility(View.VISIBLE);
-    }
-
-    /** The small frame above the middle, sized to the screen. No border is drawn for it. */
-    private void resetMessageFrame() {
-        int w = Math.round(screenWidth * 0.62f);
-        int h = Math.round(screenHeight * 0.26f);
-        int top = Math.round(screenHeight * 0.30f);
-        frame.set((screenWidth - w) / 2, top, (screenWidth + w) / 2, top + h);
-        contentOffsetX = 0;
-        contentOffsetY = 0;
-        // Added as a whole screen, it can only be taken away now: the frame
-        // is placed at once, before it could hold a touch.
-        params.x = 0;
-        params.y = 0;
-        params.width = 0;
-        params.height = 0;
-        updateTouchableArea();
-        invalidate();
-    }
-
-    /** The frame is only in the way before the result: then it fills the screen. */
-    private boolean fillsWithResult() {
-        return messageFrame && state == STATE_RESULT;
-    }
-
     // --- geometry ---------------------------------------------------------
 
     @Override
@@ -255,42 +213,6 @@ public class SelectionOverlay extends View {
      */
     private void updateTouchableArea() {
         if (screenWidth == 0 || screenHeight == 0) return;
-        if (fillsWithResult()) {
-            frame.set(0, 0, screenWidth, screenHeight);
-            contentOffsetX = 0;
-            contentOffsetY = 0;
-            params.x = 0;
-            params.y = 0;
-            params.width = screenWidth;
-            params.height = screenHeight;
-            if (attached) {
-                try {
-                    windowManager.updateViewLayout(this, params);
-                } catch (IllegalArgumentException | IllegalStateException ignored) {
-                    // Detached.
-                }
-            }
-            return;
-        }
-        if (messageFrame) {
-            // The frame stays where showMessageFrame() put it; only the
-            // window around it has to be placed, and nothing outside it is
-            // touched.
-            if (params.width == WindowManager.LayoutParams.MATCH_PARENT) {
-                params.x = 0;
-                params.y = 0;
-                params.width = 0;
-                params.height = 0;
-                if (attached) {
-                    try {
-                        windowManager.updateViewLayout(this, params);
-                    } catch (IllegalArgumentException | IllegalStateException ignored) {
-                        // Detached.
-                    }
-                }
-            }
-            return;
-        }
         if (params.width > 0 && params.x != -1) {
             // Already placed: keep the window where it is unless the frame
             // moved away from it. A position change during a drag would
@@ -548,24 +470,17 @@ public class SelectionOverlay extends View {
 
     /** Shows the translation inside the frame ("null": just the message). */
     void showResult(Bitmap bitmap, String message) {
-        // A new translation starts: back in the small frame of full-screen
-        // mode while it is worked out or if it fails.
-        if (fillsWithResult()) resetMessageFrame();
         if (translated != null && translated != bitmap) translated.recycle();
         translated = bitmap;
         status = message;
         resetResultTransform();
         state = bitmap != null ? STATE_RESULT : STATE_SELECT;
-        // Full-screen: the result fills the screen, a failure stays in the
-        // small frame in the middle.
-        updateTouchableArea();
         invalidate();
     }
 
     void showStatus(String message) {
         status = message;
         state = STATE_TRANSLATING;
-        updateTouchableArea();
         invalidate();
     }
 
@@ -577,7 +492,6 @@ public class SelectionOverlay extends View {
         status = null;
         resetResultTransform();
         state = STATE_SELECT;
-        updateTouchableArea();
         invalidate();
     }
 
@@ -605,8 +519,7 @@ public class SelectionOverlay extends View {
             canvas.drawBitmap(translated, null, dst, imagePaint);
             canvas.restore();
         }
-        // The full-screen message frame has none: only its bubble is seen.
-        if (!messageFrame) canvas.drawRect(frame, borderPaint);
+        canvas.drawRect(frame, borderPaint);
         int clearSize = clearButtonSize();
         Rect clear = clearButtonRect(clearSize);
 
@@ -616,7 +529,6 @@ public class SelectionOverlay extends View {
                     // A message after a failed/empty capture.
                     drawBubble(canvas, status);
                 }
-                if (messageFrame) break;
                 float r = handleSize();
                 float[] hx = {frame.left, frame.right, frame.left, frame.right,
                         frame.exactCenterX(), frame.exactCenterX()};
@@ -711,7 +623,7 @@ public class SelectionOverlay extends View {
                     }
                     return true;
                 }
-                dragCorner = messageFrame ? -1 : cornerAt(x, y);
+                dragCorner = cornerAt(x, y);
                 return true;
             case MotionEvent.ACTION_MOVE: {
                 if (clearing) return true;
@@ -736,10 +648,6 @@ public class SelectionOverlay extends View {
                 }
                 if (!dragged) {
                     dragged = true;
-                    if (messageFrame) {
-                        // Fixed place: only the frame and its message are drawn.
-                        return true;
-                    }
                     if (dragCorner < 0) {
                         // Moving: the window must pan exactly as far as the
                         // frame, otherwise the view slides under the finger
