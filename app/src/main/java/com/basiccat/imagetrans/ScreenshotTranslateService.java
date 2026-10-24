@@ -885,31 +885,20 @@ public class ScreenshotTranslateService extends Service {
     private void setBallExpanded(boolean expanded) {
         if (!ballShown) return;
         ballExpanded = expanded;
-        boolean hasResult = hasResult();
         for (int i = 1; i < ball.getChildCount(); i++) {
-            View item = ball.getChildAt(i);
-            // Closing a result is offered only while there is one.
-            boolean relevant = item != resultItem || hasResult;
-            item.setVisibility(expanded && relevant ? View.VISIBLE : View.GONE);
+            ball.getChildAt(i).setVisibility(expanded ? View.VISIBLE : View.GONE);
         }
-    }
-
-    /** Whether a result is on screen, in the frame or in its own window. */
-    private boolean hasResult() {
-        return (overlay != null && overlay.hasResult())
-                || (resultView != null && resultView.hasResult());
     }
 
     /**
-     * Closes what a translation left on screen. A frame's result is cleared
-     * in place (the frame stays, ready for the next one); a result shown
-     * without the frame is taken away, leaving only the ball.
+     * Closes every result on screen. A frame's result is cleared in place
+     * (the frame stays, ready for the next one); a result shown without the
+     * frame is taken away, leaving only the ball.
      */
     private void closeResult() {
-        if (overlay != null && overlay.hasResult()) {
-            overlay.clearTranslation();
-        }
+        if (overlay != null) overlay.clearTranslation();
         dismissResultView();
+        dismissTextBoxDialog();
         hitBoxes.clear();
         if (ballShown) ball.setVisibility(View.VISIBLE);
     }
