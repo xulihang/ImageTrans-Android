@@ -267,35 +267,12 @@
         return detectTextDirection(text);
     }
 
-    /**
-     * Fits the font to the box, then applies options.fontScale. The scaled
-     * size may overflow the box; the caller then grows the box to fit it.
-     */
-    function fitBoxFontSize(el, upperBound, minimum, fontScale) {
-        var cw = el.clientWidth;
-        var ch = el.clientHeight;
-        var tol = 1;
-        var min = (typeof minimum === 'number' && minimum > 0) ? minimum : 4;
-        var lo = 4;
-        var hi = Math.max(4, Math.min(upperBound || Math.min(ch, 200), 200));
-        var best = lo;
-        for (var i = 0; i < 12; i++) {
-            var mid = (lo + hi) / 2;
-            el.style.setProperty('font-size', mid + 'px', 'important');
-            if (el.scrollWidth <= cw + tol && el.scrollHeight <= ch + tol) {
-                best = mid;
-                lo = mid;
-            } else {
-                hi = mid;
-            }
-            if (hi - lo < 0.5) break;
-        }
-        var fit = Math.floor(best);
-        var scale = (typeof fontScale === 'number' && fontScale > 0) ? fontScale : 1;
-        var used = Math.max(min, Math.round(fit * scale));
-        el.style.setProperty('font-size', used + 'px', 'important');
-        return { fit: fit, used: used };
-    }
+    // The box of a text or a mask: all:initial, so that the page's own styles
+    // never reach it, then the app's base and the user's CSS on top.
+    var BOX_CSS =
+        'all:initial;position:absolute;display:block;box-sizing:border-box;margin:0;padding:2px;' +
+        'overflow:hidden;line-height:1.3;color:#000;-webkit-text-fill-color:#000;' +
+        'font-family:sans-serif;';
 
     function loadImageElement(source) {
         return new Promise(function (resolve, reject) {
@@ -319,6 +296,9 @@
     }
 
     function renderTranslatedImageDOM(base64Image, boxes, options) {
+        // The canvas renderer's CSS parsing and sizing, for both layers.
+        var textStyle = parseFontCSS(options.renderTextCSS);
+        var measureCtx = document.createElement('canvas').getContext('2d');
         return loadImageElement(base64Image).then(function (img) {
             var natW = img.naturalWidth;
             var natH = img.naturalHeight;
@@ -338,24 +318,12 @@
             );
 
             var userCssHasDirection = /(^|[;])\s*direction\s*:/.test(options.renderTextCSS);
-            var userFontSize = null;
-            var fontMatch = options.renderTextCSS.match(/font-size\s*:\s*([^;]+)/i);
-            if (fontMatch) {
-                var m = fontMatch[1].trim().match(/^([\d.]+)\s*(px|rem|em)?$/);
-                if (m) {
-                    var n = parseFloat(m[1]);
-                    userFontSize = (m[2] === 'em' || m[2] === 'rem') ? n * 16 : n;
-                }
-            }
 
             // The text layer and the mask layer: the same CSS on both, so a
             // rounded box (border-radius) is rounded in both. The text layer
             // spells the text out and paints no background; the mask layer
             // paints the background and holds no text.
-            var textBaseCSS =
-                'all:initial;position:absolute;display:block;box-sizing:border-box;margin:0;padding:2px;' +
-                'overflow:hidden;line-height:1.3;color:#000;-webkit-text-fill-color:#000;' +
-                'font-family:sans-serif;';
+            var textBaseCSS = BOX_CSS;
             var texts = document.createElement('div');
             texts.setAttribute('data-layer', 'texts');
             texts.style.cssText = importantCss(
@@ -386,6 +354,7 @@
                 } else if (options.textRepairMode !== 'none') {
                     maskColor = '#fff';
                 }
+                var displayText = applyTextTransform(targetText, textStyle.textTransform);
                 var el = document.createElement('div');
                 el.style.cssText = importantCss(
                     textBaseCSS +
@@ -397,79 +366,86 @@
                 if (!userCssHasDirection) {
                     el.style.setProperty('direction', getRenderedTextDirection(box, targetText, options), 'important');
                 }
-                el.textContent = targetText;
+                el.textContent = displayText;
+                // The rounding belongs to the mask: the text's own box is a
+                // plain rectangle, so its corners never cut it off, and the
+                // text may run over the box's edge (the canvas renderer
+                // keeps it too).
+                el.style.setProperty('border-radius', '0', 'important');
+                el.style.setProperty('overflow', 'visible', 'important');
                 texts.appendChild(el);
                 placed.push({ el: el, x: c.x, y: c.y, w: c.w, h: c.h, color: maskColor });
 
-                // The font fits the box's sides, not its rounding: with a
-                // 50% radius scrollWidth and scrollHeight only report the
-                // rectangle past the rounded corners, which is empty, so the
-                // largest font would look as if it fitted.
-                var radius = el.style.getPropertyValue('border-radius');
-                el.style.setProperty('border-radius', '0', 'important');
-                var sized = fitBoxFontSize(el, userFontSize, options.minFontSize,
-                        options.fontScale);
-                el.style.setProperty('border-radius', radius || '0', 'important');
-                // Larger than the box either because of the minimum size or
-                // because of fontScale: the mask follows the grown text.
-                if (sized.used > sized.fit) {
-                    var textW = Math.min(el.scrollWidth, natW);
-                    var textH = Math.min(el.scrollHeight, natH);
-                    var nx = c.x;
-                    var ny = c.y;
-                    if (nx + textW > natW) nx = Math.max(0, natW - textW);
-                    if (ny + textH > natH) ny = Math.max(0, natH - textH);
-                    placed[placed.length - 1].x = nx;
-                    placed[placed.length - 1].y = ny;
-                    placed[placed.length - 1].w = textW;
-                    placed[placed.length - 1].h = textH;
-                }
+                // The font size is worked out as the canvas renderer does:
+                // measured by the canvas, not by the page. The page lays the
+                // text out differently (a box with 'all:initial' takes a
+                // fallback font to be measured in, rounded corners clip the
+                // scroll sizes), so the two would not agree otherwise.
+                var fontSize = calcFontSize(measureCtx, displayText, c.w, c.h,
+                        textStyle, options.minFontSize, options.fontScale);
+                el.style.setProperty('font-size', fontSize + 'px', 'important');
             }
             wrapper.appendChild(container);
             (document.body || document.documentElement).appendChild(wrapper);
 
-            // The masks: the text elements' own box with the background on
-            // and the text out, and their final style (font size and all)
-            // kept, so the CSS, border-radius included, is the very same.
+            // The masks: the boxes the texts came to, filled with the
+            // background colour and holding no text, with the same CSS (so a
+            // border-radius comes out the same in both layers).
             var masks = document.createElement('div');
             masks.setAttribute('data-layer', 'masks');
             masks.style.cssText = importantCss(
-                'all:initial;position:relative;display:block;left:0;top:0;' +
+                'all:initial;position:absolute;display:block;left:0;top:0;' +
                 'width:' + natW + 'px;height:' + natH + 'px;'
             );
             for (var k = 0; k < placed.length; k++) {
                 var p = placed[k];
                 if (p.color == null) continue;
-                var style = p.el.getAttribute('style') || '';
-                style = style.replace(/background-color\s*:[^;]*;?/gi, '');
+                // The box the text came to, with the user's CSS (the font
+                // size too: a radius in em is sized by it). No text in it.
                 var mask = document.createElement('div');
-                mask.style.cssText = style + ';background-color:' + p.color + ' !important;';
+                mask.style.cssText = importantCss(
+                    textBaseCSS +
+                    'left:' + p.x + 'px;top:' + p.y + 'px;' +
+                    'width:' + p.w + 'px;height:' + p.h + 'px;' +
+                    'background-color:' + p.color + ';' +
+                    options.renderTextCSS
+                );
+                mask.style.setProperty('background-color', p.color, 'important');
+                mask.style.setProperty('box-shadow', 'none', 'important');
+                mask.style.setProperty('text-shadow', 'none', 'important');
+                // The colours are not for the box being laid out: a white
+                // background or a stroke would come out of the mask layer too.
+                mask.style.setProperty('color', 'transparent', 'important');
+                mask.style.setProperty('-webkit-text-fill-color', 'transparent', 'important');
+                mask.style.setProperty('-webkit-text-stroke-width', '0', 'important');
                 masks.appendChild(mask);
             }
             // Each layer gets a box of its own: the one html-to-image draws,
-            // and the one to look at or edit in the browser's inspector.
-            var boxes = {};
+            // and the one to look at in the inspector. The box is put at the
+            // page's top left corner for the shot, alone on the page (html-to-
+            // image draws an element as it stands among the page's others: a
+            // box below them comes out of the canvas, empty), and taken out
+            // afterwards.
             var layerBox = function (layer, name) {
                 var box = document.createElement('div');
                 box.setAttribute('data-layer-box', name);
-                box.style.cssText = importantCss(
-                    'all:initial;display:block;position:relative;left:0;top:0;' +
+                // The position on the page is html-to-image's business (it
+                // takes the element where it stands); these are the size and
+                // the blank background only.
+                box.style.cssText = 'all:initial;display:block;' +
                     'width:' + natW + 'px;height:' + natH + 'px;' +
-                    'background-color:transparent;'
-                );
+                    'background-color:transparent;';
                 box.appendChild(layer);
-                boxes[name] = box;
                 return box;
             };
             var textsBox = layerBox(texts, 'texts');
             var masksBox = layerBox(masks, 'masks');
-            container.appendChild(textsBox);
-            container.appendChild(masksBox);
 
             // The masks first, then the texts, each taken on its own: a text
             // that lies beside an opaque block is dropped by html-to-image,
             // and a layer of absolutely positioned boxes alone measures empty.
             var shot = function (box) {
+                (document.body || document.documentElement).appendChild(box);
                 return htmlToImage.toCanvas(box, {
                     width: natW,
                     height: natH,
@@ -477,6 +453,9 @@
                     canvasHeight: natH,
                     skipFonts: true,
                     pixelRatio: 1
+                }).then(function (canvas) {
+                    if (box.parentNode) box.parentNode.removeChild(box);
+                    return canvas;
                 });
             };
             return shot(masksBox).then(function (maskCanvas) {
@@ -486,9 +465,10 @@
                     out.height = natH;
                     var ctx = out.getContext('2d');
                     ctx.drawImage(img, 0, 0, natW, natH);
+                    // Both boxes were drawn at the page's top left corner,
+                    // as large as the image: they go over it as they are.
                     ctx.drawImage(maskCanvas, 0, 0, natW, natH);
                     ctx.drawImage(textCanvas, 0, 0, natW, natH);
-                    // The test page keeps the layers on the page to look at.
                     if (!window.__keepLayers) wrapper.remove();
                     return out.toDataURL('image/webp', 0.8);
                 });
