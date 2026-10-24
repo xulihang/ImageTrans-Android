@@ -356,6 +356,23 @@
             wrapper.appendChild(container);
             (document.body || document.documentElement).appendChild(wrapper);
 
+            // Two layers, drawn one after the other: the text backgrounds
+            // (masks, no text) and the texts (no background). A box that
+            // covers another one's old text then never covers its new text.
+            var masks = document.createElement('div');
+            masks.style.cssText = importantCss(
+                'all:initial;position:absolute;display:block;left:0;top:0;' +
+                'width:' + natW + 'px;height:' + natH + 'px;overflow:hidden;'
+            );
+            var textLayer = document.createElement('div');
+            textLayer.style.cssText = importantCss(
+                'all:initial;position:absolute;display:block;left:0;top:0;' +
+                'width:' + natW + 'px;height:' + natH + 'px;overflow:hidden;'
+            );
+
+            // What each box needs after it is laid out: its size (the
+            // element grows around a larger font) and its text.
+            var placed = [];
             for (var i = 0; i < boxes.length; i++) {
                 var box = boxes[i];
                 var geo = box.geometry || {};
@@ -369,6 +386,9 @@
                 var c = clampBox(bx, by, bw, bh, natW, natH);
                 if (c.w <= 0 || c.h <= 0) continue;
 
+                // The text (see-through; its background goes to a mask) and
+                // the mask's colour.
+                var maskColor = '#fff';
                 var el = document.createElement('div');
                 var elCSS = importantCss(
                     textBaseCSS +
@@ -376,18 +396,18 @@
                     'width:' + c.w + 'px;height:' + c.h + 'px;' +
                     options.renderTextCSS
                 );
-                if (options.textRepairMode === 'none') {
-                    elCSS += ';background-color:transparent!important;';
-                } else if (options.textRepairMode === 'background') {
+                elCSS += ';background-color:transparent!important;';
+                if (options.textRepairMode === 'background') {
                     var detected = detectBackgroundColor(img, box);
-                    if (detected) elCSS += ';background-color:' + detected + '!important;';
+                    if (detected) maskColor = detected;
                 }
                 el.style.cssText = elCSS;
                 if (!userCssHasDirection) {
                     el.style.setProperty('direction', getRenderedTextDirection(box, targetText, options), 'important');
                 }
                 el.textContent = targetText;
-                container.appendChild(el);
+                textLayer.appendChild(el);
+                placed.push({ el: el, x: c.x, y: c.y, w: c.w, h: c.h, color: maskColor });
 
                 var sized = fitBoxFontSize(el, userFontSize, options.minFontSize,
                         options.fontScale);
@@ -404,28 +424,56 @@
                     if (ny + textH > natH) ny = Math.max(0, natH - textH);
                     if (nx !== c.x) el.style.setProperty('left', nx + 'px', 'important');
                     if (ny !== c.y) el.style.setProperty('top', ny + 'px', 'important');
+                    placed[placed.length - 1].w = textW;
+                    placed[placed.length - 1].h = textH;
+                    placed[placed.length - 1].x = nx;
+                    placed[placed.length - 1].y = ny;
                 }
             }
 
-            return htmlToImage.toCanvas(container, {
-                width: natW,
-                height: natH,
-                canvasWidth: natW,
-                canvasHeight: natH,
-                skipFonts: true,
-                pixelRatio: 1
-            }).then(function (overlayCanvas) {
-                var out = document.createElement('canvas');
-                out.width = natW;
-                out.height = natH;
-                var ctx = out.getContext('2d');
-                ctx.drawImage(img, 0, 0, natW, natH);
-                ctx.drawImage(overlayCanvas, 0, 0, natW, natH);
-                wrapper.remove();
-                return out.toDataURL('image/webp', 0.8);
-            }).catch(function (err) {
-                wrapper.remove();
-                throw err;
+            // The masks, in the boxes' order (a later box's mask covers an
+            // earlier one's), for the whole area each box's text takes up.
+            for (var m = 0; m < placed.length; m++) {
+                var p = placed[m];
+                if (options.textRepairMode === 'none') continue;
+                var m2 = document.createElement('div');
+                m2.style.cssText = importantCss(
+                    'all:initial;position:absolute;display:block;box-sizing:border-box;' +
+                    'margin:0;padding:0;background-color:' + p.color + ';' +
+                    'left:' + p.x + 'px;top:' + p.y + 'px;' +
+                    'width:' + p.w + 'px;height:' + p.h + 'px;'
+                );
+                masks.appendChild(m2);
+            }
+
+            var piece = function () {
+                return htmlToImage.toCanvas(container, {
+                    width: natW,
+                    height: natH,
+                    canvasWidth: natW,
+                    canvasHeight: natH,
+                    skipFonts: true,
+                    pixelRatio: 1
+                }).then(function (canvas) {
+                    return canvas;
+                });
+            };
+            container.removeChild(textLayer);
+            container.appendChild(masks);
+            return piece().then(function (maskCanvas) {
+                container.removeChild(masks);
+                container.appendChild(textLayer);
+                return piece().then(function (textCanvas) {
+                    var out = document.createElement('canvas');
+                    out.width = natW;
+                    out.height = natH;
+                    var ctx = out.getContext('2d');
+                    ctx.drawImage(img, 0, 0, natW, natH);
+                    ctx.drawImage(maskCanvas, 0, 0, natW, natH);
+                    ctx.drawImage(textCanvas, 0, 0, natW, natH);
+                    wrapper.remove();
+                    return out.toDataURL('image/webp', 0.8);
+                });
             });
         });
     }
